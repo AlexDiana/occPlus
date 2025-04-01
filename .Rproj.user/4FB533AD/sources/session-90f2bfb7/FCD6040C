@@ -1,0 +1,27 @@
+{
+    "id": "FCD6040C",
+    "path": "~/occPlus/dev/runmodel.R",
+    "project_path": "dev/runmodel.R",
+    "type": "r_source",
+    "hash": "0",
+    "contents": "",
+    "dirty": false,
+    "created": 1743427037432.0,
+    "source_on_save": false,
+    "relative_order": 1,
+    "properties": {
+        "tempName": "Untitled1",
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "298,0",
+        "scrollLine": "8"
+    },
+    "folds": "18|16|171|0|\n32|42|34|0|\n36|37|38|0|\n41|1|68|0|\n98|16|156|0|\n172|25|295|0|\n405|60|433|0|\n494|23|527|0|\n528|25|561|0|\n562|23|595|0|\n596|21|706|0|\n707|25|838|0|\n839|25|902|0|\n903|31|941|0|\n942|23|1008|0|\n1009|25|1046|0|\n1047|27|1163|0|\n1164|28|1243|0|\n1244|27|1325|0|\n1326|25|1374|0|\n1375|27|1423|0|\n",
+    "lastKnownWriteTime": 1743516436,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1743516829327,
+    "read_only": false,
+    "read_only_alternatives": []
+}

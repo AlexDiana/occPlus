@@ -1,0 +1,56 @@
+---
+title: "vignette"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{vignette}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup, include = FALSE, }
+library(occPlus)
+```
+
+The model can be run using the `runOccPlus` function.
+
+The arguments of the function are:
+
+- data: which we explain below;
+- d: number of factors;
+- occCovariates: vector of the name of the covariates for the occupancy probabilities. 
+- ordCovariates: vector of the name of the covariates for the ordination. 
+- detCovariates: vector of the name of the covariates for the detection probabilities. 
+
+
+The names of the covariates in `occCovariates`, `ordCovariates` and `detCovariates`
+should match the column name in data$info.
+
+The data object is a list of two elements: `info` and `OTU`. 
+
+`data$info` is a data.frame with $N$ rows, where $N$ is the total
+number of replicates analyzed and columns:
+
+- `Site`: name (or index) of the site in which this replicate was collected;
+- `Sample`: name (or index) of the sample from which this replicate was analyzed;
+- `Primer`: name (or index) of the primer used in this replicate;
+
+
+```{r}
+head(data$info)
+```
+
+`data$OTU` is a matrix of dimension $N \times S$, where $S$ is the number of 
+species, where each element is the number of reads of the species in that replicate.
+If data are missing, these can be coded as `NA`.
+
+
+```{r}
+head(data$OTU)
+```

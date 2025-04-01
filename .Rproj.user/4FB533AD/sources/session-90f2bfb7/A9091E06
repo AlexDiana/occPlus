@@ -1,0 +1,26 @@
+{
+    "id": "A9091E06",
+    "path": "~/occPlus/R/runOccPlus.R",
+    "project_path": "R/runOccPlus.R",
+    "type": "r_source",
+    "hash": "0",
+    "contents": "",
+    "dirty": false,
+    "created": 1743426567895.0,
+    "source_on_save": false,
+    "relative_order": 3,
+    "properties": {
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "29,25",
+        "scrollLine": "24"
+    },
+    "folds": "45|3|48|2|\n51|3|66|2|\n69|3|95|2|\n98|3|113|2|\n118|3|130|2|\n133|3|164|2|\n167|3|240|2|\n243|3|247|2|\n250|3|265|2|\n",
+    "lastKnownWriteTime": 1743516843,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1743516843564,
+    "read_only": false,
+    "read_only_alternatives": []
+}
