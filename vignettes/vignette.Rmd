@@ -50,7 +50,6 @@ head(data$info)
 species, where each element is the number of reads of the species in that replicate.
 If data are missing, these can be coded as `NA`.
 
-
 ```{r}
 head(data$OTU)
 ```
