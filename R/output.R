@@ -588,14 +588,18 @@ plotReadIntensity <- function(fitmodel){
 
   niter <- length(mu1_output)
 
-  x_grid <- seq(1, fitmodel$infos$maxexplogy1, by = 5)
+  # x_grid <- seq(1, fitmodel$infos$maxexplogy1, by = 5)
+  x_grid <- exp(seq(log(1), log(fitmodel$infos$maxexplogy1), length.out = 1000))
+
+  # seq(1, fitmodel$infos$maxexplogy1, by = 5)
+
   x <- log(x_grid + 1)
 
   densities_plot_pos <- matrix(NA, length(x_grid), niter)
   densities_plot_neg <- matrix(NA, length(x_grid), niter)
 
   for (iter in 1:niter) {
-
+ # print(iter)
     mu1 <- mu1_output[iter]
     sigma1 <- sigma1_output[iter]
     sigma0 <- sigma0_output[iter]
@@ -643,8 +647,8 @@ plotReadIntensity <- function(fitmodel){
   df_combined <- bind_rows(df0, df1) %>%
     mutate(iter = as.numeric(gsub("V", "", iter)))  # Clean iteration labels
 
-  x_grid_breaks <- c(0, 10, 20,
-                     x_grid[seq(1, length(x_grid), by = 20)] - 1)
+  x_grid_breaks <- round( c(0, 10, 20,
+                     x_grid[seq(1, length(x_grid), by = 20)] - 1))
 
   ggplot(df_combined, aes(x = x, y = density, group = interaction(iter, Type), color = Type)) +
     geom_line(alpha = 0.3, aes(color = Type)) +
