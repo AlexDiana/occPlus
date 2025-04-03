@@ -43,6 +43,9 @@ plotSpeciesRates <- function(data_plot,
 #'
 #' @return A ggplot object
 #'
+#' @export
+#' @import dplyr
+#' @import ggplot2
 #'
 plotOccupancyCovariates <- function(fitmodel,
                                     covName = NULL,
@@ -101,9 +104,9 @@ plotOccupancyCovariates <- function(fitmodel,
 }
 
 
-#' plotOccupancyCovariates
+#' plotDetectionCovariates
 #'
-#' Occupancy covariate coefficients.
+#' Detection covariate coefficients.
 #'
 #' @details
 #' Plots the 95% credible interval of the occupancy covariates coefficients
@@ -114,6 +117,9 @@ plotOccupancyCovariates <- function(fitmodel,
 #'
 #' @return A ggplot object
 #'
+#' @export
+#' @import dplyr
+#' @import ggplot2
 #'
 plotDetectionCovariates <- function(fitmodel,
                                     covName = NULL,
@@ -184,6 +190,9 @@ plotDetectionCovariates <- function(fitmodel,
 #'
 #' @return A ggplot object
 #'
+#' @export
+#' @import dplyr
+#' @import ggplot2
 #'
 plotOrdinationCovariates <- function(fitmodel,
                                     covName = NULL,
@@ -256,10 +265,8 @@ plotOrdinationCovariates <- function(fitmodel,
 #' }
 #'
 #' @export
-#' @importFrom pkg function_to_import
-#' @seealso \code{\link{related_function}}
-#' @references
-#' Optional: Citation or URL for related work.
+#' @import dplyr
+#' @import ggplot2
 #'
 plotOccupancyRates <- function(fitmodel,
                                idx_species = NULL){
@@ -331,10 +338,8 @@ plotOccupancyRates <- function(fitmodel,
 #' }
 #'
 #' @export
-#' @importFrom pkg function_to_import
-#' @seealso \code{\link{related_function}}
-#' @references
-#' Optional: Citation or URL for related work.
+#' @import dplyr
+#' @import ggplot2
 #'
 plotCollectionRates <- function(fitmodel,
                                 idx_species = NULL){
@@ -402,6 +407,10 @@ plotCollectionRates <- function(fitmodel,
 #' \dontrun{
 #' plotDetectionRates(fitmodel, idx_species = 1:5)
 #' }
+#'
+#' @export
+#' @import dplyr
+#' @import ggplot2
 #'
 plotDetectionRates <- function(fitmodel,
                                idx_species = NULL){
@@ -480,6 +489,10 @@ plotDetectionRates <- function(fitmodel,
 #' plotFPDetectionRates(fitmodel, idx_species = 1:5)
 #' }
 #'
+#' @export
+#' @import dplyr
+#' @import ggplot2
+#'
 plotFPDetectionRates <- function(fitmodel,
                                  idx_species = NULL){
 
@@ -555,6 +568,10 @@ plotFPDetectionRates <- function(fitmodel,
 #' \dontrun{
 #' plotReadIntensity(fitmodel)
 #' }
+#'
+#' @export
+#' @import dplyr
+#' @import ggplot2
 #'
 plotReadIntensity <- function(fitmodel){
 

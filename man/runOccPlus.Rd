@@ -9,11 +9,18 @@ runOccPlus(
   d,
   occCovariates = c(),
   ordCovariates = c(),
-  detCovariates = c()
+  detCovariates = c(),
+  numSamples = 1000
 )
 }
 \arguments{
-\item{data}{A list with two elements: info.}
+\item{data}{A list with two elements:
+\describe{
+  \item{info}{A data.frame of N rows (where N is the total number of samples
+  analyzed). Further information in the vignette.}
+  \item{OTU}{A matrix of dimension (N x S), where S is the number of species,
+  with the number of reads of each species in each sample.}
+}}
 
 \item{d}{Number of factors.}
 
@@ -38,13 +45,11 @@ Fit the model described in Diana et al..
 \examples{
 \dontrun{
 # Example usage
-result <- my_function(param1 = 1, param2 = "text")
+fitmodel  <- runOccPlus(data,
+d = 2,
+occCovariates = c("X_psi.1","X_psi.2"),
+ordCovariates = c("X_ord.1","X_ord.2"),
+detCovariates = c("X_theta"))
 }
 
-}
-\references{
-Optional: Citation or URL for related work.
-}
-\seealso{
-\code{\link{related_function}}
 }

@@ -32,6 +32,10 @@
 #' detCovariates = c("X_theta"))
 #' }
 #'
+#' @export
+#' @import dplyr
+#' @import rstan
+#'
 runOccPlus <- function(data,
                           d,
                           occCovariates = c(),
@@ -45,15 +49,16 @@ runOccPlus <- function(data,
   # sort the data
   {
     data_info <- data_info %>%
-      arrange(Site, Sample, Primer)
+      dplyr::arrange(Site, Sample, Primer)
   }
 
   # samples per site
   {
-    M_df <- data_info %>% group_by(Site, Sample) %>%
+    M_df <- data_info %>%
+      dplyr::group_by(Site, Sample) %>%
       slice(1) %>%
-      group_by(Site) %>%
-      summarise(M = n())
+      dplyr::group_by(Site) %>%
+      dplyr::summarise(M = n())
 
     M <- M_df$M
     names(M) <- M_df$Site
@@ -70,20 +75,22 @@ runOccPlus <- function(data,
   {
     # number of markers
 
-    L_df <- data_info %>% group_by(Site, Sample, Primer) %>%
-      slice(1) %>%
-      group_by(Site, Sample) %>%
-      summarise(L = n())
+    L_df <- data_info %>%
+      dplyr::group_by(Site, Sample, Primer) %>%
+      dplyr::slice(1) %>%
+      dplyr::group_by(Site, Sample) %>%
+      dplyr::summarise(L = n())
 
     L <- L_df$L
     names(L) <- L_df$Sample
 
     # number of observations
     {
-      L_all <- data_info %>% group_by(Site, Sample, Primer) %>%
-        slice(1) %>%
-        group_by(Site, Sample) %>%
-        summarise(L_m = n())
+      L_all <- data_info %>%
+        dplyr::group_by(Site, Sample, Primer) %>%
+        dplyr::slice(1) %>%
+        dplyr::group_by(Site, Sample) %>%
+        dplyr::summarise(L_m = n())
       L_all <- L_all$L_m
 
       sumL <- c(0, cumsum(L_all)[-length(L_all)])
@@ -98,11 +105,11 @@ runOccPlus <- function(data,
   # pcr per marker
   {
     data_K <- data_info %>%
-      group_by(Site, Sample, Primer) %>%
-      summarise(K = n(),
-                across(contains("Species"),function(x){sum(x > 0)})
+      dplyr::group_by(Site, Sample, Primer) %>%
+      dplyr::summarise(K = n(),
+                       dplyr::across(contains("Species"),function(x){sum(x > 0)})
       ) %>%
-      ungroup()#%>%
+      dplyr::ungroup()#%>%
     # ungroup() %>%
     # mutate(across(contains("Species"), function(x){sum(x > 0)}))
 
@@ -133,8 +140,9 @@ runOccPlus <- function(data,
   # create delta
   {
     {
-      M_marker_df <- data_info %>% group_by(Site, Sample) %>%
-        summarise(M = n())
+      M_marker_df <- data_info %>%
+        dplyr::group_by(Site, Sample) %>%
+        dplyr::summarise(M = n())
 
       M_marker <- M_marker_df$M
       # names(M) <- M_df$Site
@@ -176,18 +184,18 @@ runOccPlus <- function(data,
     if(length(ordCovariates) > 0){
 
       X_ord <- data_info %>%
-        group_by(Site) %>%
-        summarise(across(all_of(ordCovariates),
+        dplyr::group_by(Site) %>%
+        dplyr::summarise(across(all_of(ordCovariates),
                          function(x) {x[1]}))
 
       sitesNames <- X_ord$Site
 
       X_ord <- X_ord %>%
-        select(-Site) %>%
-        mutate_if(is.numeric, scale) %>%
-        mutate(across(where(~ !is.numeric(.x)), as.factor)) %>%
-        mutate(across(where(is.numeric), ~ ifelse(is.na(.), 0, .))) %>%
-        model.matrix(~., .)
+        dplyr::select(-Site) %>%
+        dplyr::mutate_if(is.numeric, scale) %>%
+        dplyr::mutate(dplyr::across(tidyselect::where(~ !is.numeric(.x)), as.factor)) %>%
+        dplyr::mutate(dplyr::across(tidyselect::where(is.numeric), ~ ifelse(is.na(.), 0, .))) %>%
+        stats::model.matrix(~., .)
 
       X_ord <- X_ord[,-1,drop=F]
 
@@ -200,12 +208,12 @@ runOccPlus <- function(data,
     if(length(occCovariates) > 0){
 
       X_psi <- data_info %>%
-        group_by(Site) %>%
-        summarise(across(all_of(occCovariates),
+        dplyr::group_by(Site) %>%
+        dplyr::summarise(dplyr::across(all_of(occCovariates),
                          function(x) {x[1]})) %>%
-        select(-Site) %>%
-        mutate_if(is.numeric, scale) %>%
-        mutate(across(where(~ !is.numeric(.x)), as.factor)) %>%
+        dplyr::select(-Site) %>%
+        dplyr::mutate_if(is.numeric, scale) %>%
+        dplyr::mutate(dplyr::across(dplyr::where(~ !is.numeric(.x)), as.factor)) %>%
         model.matrix(~., .)
 
       X_psi <- X_psi[,-1,drop=F]
@@ -219,12 +227,12 @@ runOccPlus <- function(data,
     if(length(detCovariates) > 0){
 
       X_theta <- data_info %>%
-        group_by(Sample) %>%
-        summarise(across(all_of(detCovariates),
+        dplyr::group_by(Sample) %>%
+        dplyr::summarise(dplyr::across(dplyr::all_of(detCovariates),
                          function(x) {x[1]})) %>%
-        select(-Sample) %>%
-        mutate_if(is.numeric, scale) %>%
-        mutate(across(where(~ !is.numeric(.x)), as.factor)) %>%
+        dplyr::select(-Sample) %>%
+        dplyr::mutate_if(is.numeric, scale) %>%
+        dplyr::mutate(dplyr::across(dplyr::where(~ !is.numeric(.x)), as.factor)) %>%
         model.matrix(~., .)
 
     } else {
@@ -313,12 +321,18 @@ runOccPlus <- function(data,
 
   print("Loading STAN")
 
-  model <- rstan::stan_model(file = system.file("stan/code.stan", package = "occPlus"))
+  model0 <- rstan::stan_model(file = system.file("stan/code.stan",
+                                                package = "occPlus"))
 
-  vb_fit <- rstan::vb(model, data = edna_dat,
+  model <- rstan::stan_model(file = system.file("stan/code_optimised.stan",
+                                                package = "occPlus"))
+
+  vb_fit <-
+    # rstan::vb(model, data = edna_dat,
+    rstan::vb(model, data = edna_dat,
                algorithm = "meanfield",
                pars = c("beta_psi","beta_ord","beta_theta",
-                        "mu1","sigma0", "sigma1","log_psi","beta0_psi",
+                        "mu1","sigma0", "sigma1","beta0_psi",
                         "U", "LL","E","p", "pi0","q","theta0"
                ),
                init = init_fun,
@@ -340,7 +354,7 @@ runOccPlus <- function(data,
     "maxexplogy1" = max(exp(logy1), na.rm = T)
   )
 
-  list(
+  fitmodel <- list(
       "vb_fit" = vb_fit,
       "matrix_of_draws" = matrix_of_draws,
       "infos" = infos,

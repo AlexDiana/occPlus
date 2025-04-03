@@ -40,8 +40,8 @@ r_f1y <- function(n, lambda1, size1){
 
 # settings
 {
-  n <- 20
-  S <- 5
+  n <- 200
+  S <- 20
   M <- rep(2, n)
   N <- sum(M)
   L <- rep(2, N)
@@ -53,14 +53,14 @@ r_f1y <- function(n, lambda1, size1){
   sumL <- c(0, cumsum(L)[-N])
   sumK <- c(0, cumsum(K)[-N2])
 
-  rep(rep(rep(1:n, M), L), K)
+  # rep(rep(rep(1:n, M), L), K)
 
-  ncov_psi <- 2
-  ncov_theta <- 2
-  ncov_ord <- 2
+  ncov_psi <- 1
+  ncov_theta <- 1
+  ncov_ord <- 0
 
   X_psi <- matrix(rnorm(n * ncov_psi), n, ncov_psi)
-  X_theta <- cbind(1, matrix(rnorm(N * (ncov_theta - 1)), N, ncov_theta - 1))
+  X_theta <- cbind(0, matrix(rnorm(N * (ncov_theta - 1)), N, ncov_theta - 1))
   X_ord <- matrix(rnorm(n * ncov_ord), n, ncov_ord)
 
   # na samples
@@ -298,9 +298,9 @@ logy1 <- log(y + 1)
 
 fitmodel  <- runOccPlus(data,
                         d = 2,
-                        occCovariates = c("X_psi.1","X_psi.2"),
-                        ordCovariates = c("X_ord.1","X_ord.2"),
-                        detCovariates = c("X_theta"))
+                        occCovariates = c("X_psi"),
+                        ordCovariates = c(),
+                        detCovariates = c())
 
 # OUTPUT USING FUNCTIONS ---------
 
@@ -450,7 +450,7 @@ plotParam <- function(samples_subset, trueParams_mat, lims){
 
 # beta_theta0
 {
-  plotParam(beta_theta_output, beta_theta_true, c(-2,2))
+  plotParam(beta_theta_output, beta_theta_true, c(-3,3))
 }
 
 # beta_ord

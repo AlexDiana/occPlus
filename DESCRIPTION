@@ -16,7 +16,11 @@ Encoding: UTF-8
 Imports: 
  rstan (>= 2.26.0),
     ggplot2 (>= 3.4.0),
-    tidyverse
+    dplyr,
+    ggplot2,
+    tidyr,
+    tidyselect,
+    stats
 LazyData: true
 RoxygenNote: 7.3.2
 Suggests: 

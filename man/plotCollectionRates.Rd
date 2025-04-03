@@ -26,9 +26,3 @@ plotSpeciesRates(fitmodel, idx_species = 1:5)
 }
 
 }
-\references{
-Optional: Citation or URL for related work.
-}
-\seealso{
-\code{\link{related_function}}
-}
