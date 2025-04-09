@@ -46,6 +46,13 @@ runOccPlus <- function(data,
   data_info <- as.data.frame(data$info)
   OTU <- data$OTU
 
+  # data checks
+  {
+    if(!all(c(occCovariates, ordCovariates, detCovariates) %in% colnames(data$info))){
+        stop("Covariate names provided not in data$info")
+    }
+  }
+
   # sort the data
   {
     data_info <- data_info %>%
@@ -311,6 +318,7 @@ runOccPlus <- function(data,
                    b_theta0 = prior_btheta0)
 
   init_fun <- function(...) list(
+    beta_theta = matrix(0, ncov_theta, S),
     theta0 = rep(0.05, S),
     p = matrix(.95, L, S),
     q = matrix(.05, L, S),
@@ -324,16 +332,16 @@ runOccPlus <- function(data,
   model0 <- rstan::stan_model(file = system.file("stan/code.stan",
                                                 package = "occPlus"))
 
-  model <- rstan::stan_model(file = system.file("stan/code_optimised.stan",
-                                                package = "occPlus"))
+  # model <- rstan::stan_model(file = system.file("stan/code_optimised.stan",
+                                                # package = "occPlus"))
 
   vb_fit <-
+    rstan::vb(model0, data = edna_dat,
     # rstan::vb(model, data = edna_dat,
-    rstan::vb(model, data = edna_dat,
                algorithm = "meanfield",
                pars = c("beta_psi","beta_ord","beta_theta",
                         "mu1","sigma0", "sigma1","beta0_psi",
-                        "U", "LL","E","p", "pi0","q","theta0"
+                        "U", "LL","E","p", "pi0","q","theta0","log_lik"
                ),
                init = init_fun,
                elbo_samples = 500,

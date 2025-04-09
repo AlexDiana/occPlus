@@ -20,7 +20,10 @@ Imports:
     ggplot2,
     tidyr,
     tidyselect,
-    stats
+    stats,
+    ggcorrplot
+Remotes:
+    kassambara/ggcorrplot
 LazyData: true
 RoxygenNote: 7.3.2
 Suggests: 
