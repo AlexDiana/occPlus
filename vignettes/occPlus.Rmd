@@ -1,0 +1,191 @@
+---
+title: "occPlus"
+output: 
+  rmarkdown::html_vignette:
+    fig.width: 7
+    fig.height: 4.5
+    warning: false
+    message: false
+vignette: >
+  %\VignetteIndexEntry{occPlus}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  warnings = FALSE,
+  fig.width = 7,
+  fig.height = 4.5,
+  comment = "#>"
+)
+
+options(warning = -1)
+```
+
+```{r setup, include = FALSE}
+library(occPlus)
+```
+
+The model can be run using the `runOccPlus` function.
+
+The arguments of the function are:
+
+- data: which we explain below;
+- d: number of factors;
+- occCovariates: vector of the name of the covariates for the occupancy probabilities. 
+- ordCovariates: vector of the name of the covariates for the ordination. 
+- detCovariates: vector of the name of the covariates for the detection probabilities. 
+
+## Data preparation
+
+The data object is a list of two elements: `info` and `OTU`. 
+
+`data$info` is a data.frame with $N$ rows, where $N$ is the total
+number of replicates analyzed and columns:
+
+- `Site`: name (or index) of the site in which this replicate was collected;
+- `Sample`: name (or index) of the sample from which this replicate was analyzed;
+- `Primer`: name (or index) of the primer used in this replicate;
+
+
+```{r}
+head(data$info)
+```
+
+`data$OTU` is a matrix of dimension $N \times S$, where $S$ is the number of 
+species, where each element is the number of reads of the species in that replicate.
+If data are missing, these can be coded as `NA`.
+
+```{r}
+head(data$OTU)
+```
+
+## Model fitting
+
+Next, we can run the model by typing 
+
+```{r, eval = FALSE}
+fitmodel  <- runOccPlus(data,
+                        d = 2,
+                        occCovariates = c("X_psi.1","X_psi.2"),
+                        ordCovariates = c("X_ord.1","X_ord.2"),
+                        detCovariates = c("X_theta"))
+
+```
+
+
+The names of the covariates in `occCovariates`, `ordCovariates` and `detCovariates`
+should match the column name in data$info.
+
+## Model selection
+
+Model selection for the different factors $d$ can be done using the `loo` package.
+
+```{r, eval = FALSE}
+library(loo)
+
+fitmodel2  <- runOccPlus(data,
+                        d = 3,
+                        occCovariates = c("X_psi.1","X_psi.2"),
+                        ordCovariates = c("X_ord.1","X_ord.2"),
+                        detCovariates = c("X_theta"))
+
+log_lik1 <- extract_log_lik(fitmodel$vb_fit)
+log_lik2 <- extract_log_lik(fitmodel2$vb_fit)
+
+loo1 <- loo(log_lik1)
+loo1 <- loo(log_lik2)
+
+comparison <- loo_compare(loo1, loo2)
+print(comparison)
+```
+
+The model with elpd_diff equal to 0 is the one to be preferred
+
+## Output
+
+There are several outputs we can obtain:
+
+### Covariates coefficients
+
+We provide three functions for plotting occupancy, ordination and detection
+covariate coefficients:
+
+```{r}
+plotOccupancyCovariates(fitmodel, idx_species = 1:10, covName = "X_psi.1")
+```
+
+```{r}
+plotOrdinationCovariates(fitmodel, covName = "X_ord.1")
+```
+
+```{r}
+plotDetectionCovariates(fitmodel, idx_species = 1:10, covName = "X_theta")
+```
+
+### Baseline rates
+
+We can plot baseline occupancy rates via
+
+```{r}
+plotOccupancyRates(fitmodel, idx_species = 1:20)
+```
+
+```{r}
+plotCollectionRates(fitmodel, idx_species = 1:20)
+```
+
+
+```{r}
+plotDetectionRates(fitmodel, idx_species = 1:20)
+```
+
+And false positives rates at the first stage (field stage):
+
+```{r}
+plotStage1FPRates(fitmodel, idx_species = 1:20)
+```
+
+And at the second stage (lab stage):
+
+```{r}
+plotStage2FPRates(fitmodel, idx_species = 1:20)
+```
+
+### Occupancy rates
+
+To compute occupancy probabilities at each site and for each species, we type
+
+```{r, eval = F}
+computeOccupancyProbs(fitmodel)
+```
+
+### Read intensity
+
+`occPlus` estimates a distribution of reads for true and false positives. We can
+plot the two distributions via:
+
+```{r, fig.width=7, fig.height=4.5, warnings = FALSE}
+plotReadIntensity(fitmodel)
+```
+
+### Covariance matrix
+
+We can plot the posterior median of the residual correlation matrix as
+
+```{r}
+plotCovarianceMatrix(fitmodel)
+```
+
+
+We can show only the positively and negatively significant elements (positive in
+red and negative in blue)
+
+```{r}
+plotSigElementsCovMatrix(fitmodel)
+```
+
+We note that this is the \textit{residual} covariance matrix, \textbf{after} 
+accounting for occupancy covariates but accounting for ordination covariates.

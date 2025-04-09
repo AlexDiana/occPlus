@@ -913,6 +913,54 @@ plotSigElementsCovMatrix <- function(fitmodel,
 
 }
 
+#' computeOccupancyProbs
+#'
+#' Computes the quantiles of the occupancy probability
+#'
+#' @details
+#' Compute the credible interval of the occupancy probability
+#'
+#' @param fitmodel Output from the function runOccPlus
+#'
+#' @return An array with the quantiles
+#'
+#' @examples
+#' \dontrun{
+#' computeOccupancyProbs(fitmodel)
+#' }
+#'
+#' @export
+#' @import dplyr
+#' @import ggplot2
+#'
+computeOccupancyProbs <- function(fitmodel,
+                                  confidence = .95){
+
+  matrix_of_draws <- fitmodel$matrix_of_draws
+
+  conflevels <- c((1 - confidence)/2, .5, (1 + confidence)/2)
+
+  S <- fitmodel$infos$S
+  speciesNames <- fitmodel$infos$speciesNames
+  n <- length(fitmodel$infos$siteNames)
+
+  logit_psi_samples <- matrix_of_draws[,grepl("logit_psi\\[", colnames(matrix_of_draws))]
+
+  niter <- nrow(logit_psi_subset)
+
+  logit_psi_samples_array <- array(logit_psi_samples, dim = c(niter, n, S))
+
+  psi_quantiles <- apply(logit_psi_samples_array, c(2,3), function(x){
+    quantile(x, probs = conflevels)
+  })
+
+  dimnames(psi_quantiles)[[2]] <- fitmodel$infos$siteNames
+  dimnames(psi_quantiles)[[3]] <- fitmodel$infos$speciesNames
+
+  psi_quantiles
+
+}
+
 # to write
 plotFactorScores <- function(fitmodel,
                              idx_factor = c(1,2)){

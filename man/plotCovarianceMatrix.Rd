@@ -4,7 +4,7 @@
 \alias{plotCovarianceMatrix}
 \title{plotCovarianceMatrix}
 \usage{
-plotCovarianceMatrix(fitmodel, plotLabel = T, idx_species = NULL)
+plotCovarianceMatrix(fitmodel, idx_species = NULL)
 }
 \arguments{
 \item{fitmodel}{Output from the function runOccPlus}

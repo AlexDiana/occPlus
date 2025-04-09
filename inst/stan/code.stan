@@ -100,6 +100,7 @@ transformed parameters {
   matrix[N, S] log1m_theta = log1m_inv_logit(logit_theta);
 
 }
+
 model {
 
   matrix[N3, S] f0y; // likelihood of a given PCR

@@ -4,7 +4,7 @@
 \alias{plotSigElementsCovMatrix}
 \title{plotSigElementsCovMatrix}
 \usage{
-plotSigElementsCovMatrix(fitmodel, plotLabel = T, idx_species = NULL)
+plotSigElementsCovMatrix(fitmodel, idx_species = NULL)
 }
 \arguments{
 \item{fitmodel}{Output from the function runOccPlus}

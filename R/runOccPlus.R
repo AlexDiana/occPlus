@@ -331,6 +331,7 @@ runOccPlus <- function(data,
 
   model0 <- rstan::stan_model(file = system.file("stan/code.stan",
                                                 package = "occPlus"))
+  # model0 <- rstan::stan_model(file = "code.stan")
 
   # model <- rstan::stan_model(file = system.file("stan/code_optimised.stan",
                                                 # package = "occPlus"))
@@ -341,7 +342,8 @@ runOccPlus <- function(data,
                algorithm = "meanfield",
                pars = c("beta_psi","beta_ord","beta_theta",
                         "mu1","sigma0", "sigma1","beta0_psi",
-                        "U", "LL","E","p", "pi0","q","theta0","log_lik"
+                        "U", "LL","E","p", "pi0","q","theta0",
+                        "logit_psi", "log_lik"
                ),
                init = init_fun,
                elbo_samples = 500,
@@ -362,7 +364,7 @@ runOccPlus <- function(data,
     "maxexplogy1" = max(exp(logy1), na.rm = T)
   )
 
-  fitmodel <- list(
+  list(
       "vb_fit" = vb_fit,
       "matrix_of_draws" = matrix_of_draws,
       "infos" = infos,
