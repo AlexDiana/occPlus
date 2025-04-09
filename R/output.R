@@ -552,7 +552,7 @@ plotStage1FPRates <- function(fitmodel,
                ymax = `97.5%`)) + geom_errorbar() +
     xlab("Species") +
     # ylim(c(0,1)) +
-    ggtitle("False positives rates") +
+    ggtitle("Stage 1 FP rates") +
     theme_bw() +
     # ylim(c(0,1)) +
     ylab("") +
@@ -568,7 +568,7 @@ plotStage1FPRates <- function(fitmodel,
 
 }
 
-#' plotFPStage2DetectionRates
+#' plotStage2FPRates
 #'
 #' False positives rates at the lab stage for each species.
 #'
@@ -582,14 +582,14 @@ plotStage1FPRates <- function(fitmodel,
 #'
 #' @examples
 #' \dontrun{
-#' plotFPStage2DetectionRates(fitmodel, idx_species = 1:5)
+#' plotStage2FPRates(fitmodel, idx_species = 1:5)
 #' }
 #'
 #' @export
 #' @import dplyr
 #' @import ggplot2
 #'
-plotFPStage2DetectionRates <- function(fitmodel,
+plotStage2FPRates <- function(fitmodel,
                                  idx_species = NULL){
 
   matrix_of_draws <- fitmodel$matrix_of_draws
@@ -633,7 +633,7 @@ plotFPStage2DetectionRates <- function(fitmodel,
                color = factor(Primer))) + geom_errorbar() +
     xlab("Species") +
     # ylim(c(0,1)) +
-    ggtitle("Stage 2 false positives rates") +
+    ggtitle("Stage 2 FP rates") +
     theme_bw() +
     # ylim(c(0,1)) +
     ylab("q") +
@@ -821,7 +821,6 @@ generateCovarianceMatrixOutput <- function(fitmodel,
 #' @importFrom ggcorrplot ggcorrplot
 #'
 plotCovarianceMatrix <- function(fitmodel,
-                                 plotLabel = T,
                                  idx_species = NULL){
 
   Lambda_output <- generateCovarianceMatrixOutput(fitmodel, idx_species)
@@ -861,10 +860,11 @@ plotCovarianceMatrix <- function(fitmodel,
 #' @importFrom ggcorrplot ggcorrplot
 #'
 plotSigElementsCovMatrix <- function(fitmodel,
-                                     plotLabel = T,
-                                 idx_species = NULL){
+                                     idx_species = NULL){
 
   Lambda_output <- generateCovarianceMatrixOutput(fitmodel, idx_species)
+
+  S <- fitmodel$infos$S
 
   Lambda_quantiles <- apply(Lambda_output, c(2,3),
                             function(x){quantile(x, probs = c(0.025, 0.5, 0.975))})
@@ -946,12 +946,12 @@ computeOccupancyProbs <- function(fitmodel,
 
   logit_psi_samples <- matrix_of_draws[,grepl("logit_psi\\[", colnames(matrix_of_draws))]
 
-  niter <- nrow(logit_psi_subset)
+  niter <- nrow(logit_psi_samples)
 
   logit_psi_samples_array <- array(logit_psi_samples, dim = c(niter, n, S))
 
   psi_quantiles <- apply(logit_psi_samples_array, c(2,3), function(x){
-    quantile(x, probs = conflevels)
+    quantile(logistic(x), probs = conflevels)
   })
 
   dimnames(psi_quantiles)[[2]] <- fitmodel$infos$siteNames
