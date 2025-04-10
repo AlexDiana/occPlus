@@ -329,12 +329,12 @@ plotOccupancyRates <- function(fitmodel,
     # ylim(c(0,1)) +
     ylab("") +
     theme(
-      axis.text = element_text(angle = 90,
+      axis.text = element_text(angle = 0,
                                size = 8),
       axis.title = element_text(size = 12, face = "bold"),
       plot.title = element_text(hjust = .5,
                                 size = 15)
-    )
+    ) + coord_flip()
 
   plot_occupancyrates
 
@@ -403,11 +403,11 @@ plotCollectionRates <- function(fitmodel,
     theme_bw() +
     ylim(c(0,1)) +
     theme(
-      axis.text = element_text(angle = 90,
+      axis.text = element_text(angle = 0,
                                size = 8),
       plot.title = element_text(hjust = .5,
                                 size = 15)
-    )
+    ) + coord_flip()
 
   plot_collectionrates
 
@@ -483,12 +483,12 @@ plotDetectionRates <- function(fitmodel,
     # ylim(c(0,1)) +
     ylab("p") +
     theme(
-      axis.text = element_text(angle = 90,
+      axis.text = element_text(angle = 0,
                                size = 8),
       axis.title = element_text(size = 12, face = "bold"),
       plot.title = element_text(hjust = .5,
                                 size = 15)
-    )
+    ) + coord_flip()
 
   detectionRates
 
@@ -557,12 +557,12 @@ plotStage1FPRates <- function(fitmodel,
     # ylim(c(0,1)) +
     ylab("") +
     theme(
-      axis.text = element_text(angle = 90,
+      axis.text = element_text(angle = 0,
                                size = 8),
       axis.title = element_text(size = 12, face = "bold"),
       plot.title = element_text(hjust = .5,
                                 size = 15)
-    )
+    ) + coord_flip()
 
   detectionRates
 
@@ -638,12 +638,12 @@ plotStage2FPRates <- function(fitmodel,
     # ylim(c(0,1)) +
     ylab("q") +
     theme(
-      axis.text = element_text(angle = 90,
+      axis.text = element_text(angle = 0,
                                size = 8),
       axis.title = element_text(size = 12, face = "bold"),
       plot.title = element_text(hjust = .5,
                                 size = 15)
-    )
+    ) + coord_flip()
 
   detectionRates
 
@@ -680,8 +680,6 @@ plotReadIntensity <- function(fitmodel){
   sigma1_output <-
     matrix_of_draws[,grepl("sigma1", colnames(matrix_of_draws))]
 
-  iter <- 1
-
   niter <- length(mu1_output)
 
   # x_grid <- seq(1, fitmodel$infos$maxexplogy1, by = 5)
@@ -695,62 +693,89 @@ plotReadIntensity <- function(fitmodel){
   densities_plot_neg <- matrix(NA, length(x_grid), niter)
 
   for (iter in 1:niter) {
- # print(iter)
     mu1 <- mu1_output[iter]
     sigma1 <- sigma1_output[iter]
     sigma0 <- sigma0_output[iter]
 
     densities_plot_pos[,iter] <- dnorm(x, mean = mu1, sd = sigma1)
     densities_plot_neg[,iter] <- dnorm(x, mean = 0, sd = sigma0)
-
-    # Create data frame with both densities
-    # df <- data.frame(
-    #   x = x,
-    #   Density0 = ,
-    #   Density1 = dnorm(x, mean = mu1, sd = sigma1)
-    # )
-
-    # Plot using ggplot2
-    # ggplot(df) +
-    #   geom_line(aes(x = x, y = Density0, color = "N(0, σ₀²)"), linewidth = 1) +
-    #   geom_line(aes(x = x, y = Density1, color = "N(μ₁, σ₁²)"), linewidth = 1) +
-    #   scale_color_manual(values = c("N(0, σ₀²)" = "blue", "N(μ₁, σ₁²)" = "red"),
-    #                      name = "Distribution") +
-    #   labs(title = "Comparison of Two Normal Distributions",
-    #        x = "Value",
-    #        y = "Density") +
-    #   theme_minimal() +
-    #   scale_x_continuous(
-    #     name = "x",
-    #     breaks = x,  # Custom breaks (e.g., e⁻², e⁻¹, e⁰, e¹, ...)
-    #     labels = function(x) sprintf("%.2f", exp(x - 1))  # Format labels
-    #   )
-
-
   }
 
-  df0 <- as_tibble(densities_plot_neg) %>%
-    mutate(x = x_grid) %>%
-    pivot_longer(cols = -x, names_to = "iter", values_to = "density") %>%
-    mutate(Type = "False positives")
+  densities_plot_pos_quantiles <-
+    apply(densities_plot_pos, 1,
+          function(x) {quantile(x, probs = c(0.025, 0.1, 0.5, 0.9, 0.975))}) %>% t %>%
+    as.data.frame %>%
+    mutate(x = x_grid,
+           Type = "True Positive")
 
-  df1 <- as_tibble(densities_plot_pos) %>%
-    mutate(x = x_grid) %>%
-    pivot_longer(cols = -x, names_to = "iter", values_to = "density") %>%
-    mutate(Type = "True positives")
+  densities_plot_neg_quantiles <-
+    apply(densities_plot_neg, 1,
+          function(x) {quantile(x, probs = c(0.025, 0.1, 0.5, 0.9, 0.975))}) %>% t %>%
+    as.data.frame %>%
+    mutate(x = x_grid,
+           Type = "False Positives")
 
-  # Combine into one data frame
-  df_combined <- bind_rows(df0, df1) %>%
-    mutate(iter = as.numeric(gsub("V", "", iter)))  # Clean iteration labels
+  densities_plot_quantiles <-
+    rbind(densities_plot_pos_quantiles,
+          densities_plot_neg_quantiles)
+
+  # ggplot() +
+  #   geom_ribbon(data = densities_plot_pos_quantiles,
+  #               aes(x = x_grid,
+  #                   ymax = `97.5%`,
+  #                   ymin = `2.5%`)) +
+  #   geom_line(data = densities_plot_pos_quantiles,
+  #             aes(x = x_grid,
+  #                 y = `50%`))
+  #
+  # df0 <- as_tibble(densities_plot_neg) %>%
+  #   mutate(x = x_grid) %>%
+  #   pivot_longer(cols = -x, names_to = "iter", values_to = "density") %>%
+  #   mutate(Type = "False positives")
+  #
+  # df1 <- as_tibble(densities_plot_pos) %>%
+  #   mutate(x = x_grid) %>%
+  #   pivot_longer(cols = -x, names_to = "iter", values_to = "density") %>%
+  #   mutate(Type = "True positives")
+  #
+  # # Combine into one data frame
+  # df_combined <- bind_rows(df0, df1) %>%
+  #   mutate(iter = as.numeric(gsub("V", "", iter)))  # Clean iteration labels
 
   x_grid_breaks <- round( c(0, 10, 20,
                      x_grid[seq(1, length(x_grid), by = 10)] - 1))
 
-  ggplot(df_combined, aes(x = x, y = density, group = interaction(iter, Type), color = Type)) +
-    geom_line(alpha = 0.3, aes(color = Type)) +
-    scale_color_manual(values = c("False positives" = "blue", "True positives" = "red")) +
-    labs(title = "Reads distributions",
-         x = "x", y = "Density") +
+  # ggplot(df_combined, aes(x = x, y = density, group = interaction(iter, Type), color = Type)) +
+  #   geom_line(alpha = 0.1, aes(color = Type)) +
+  #   scale_color_manual(values = c("False positives" = "blue", "True positives" = "red")) +
+  #   labs(title = "Reads distributions",
+  #        x = "x", y = "Density") +
+  #   theme_minimal() +
+  #   scale_x_continuous(
+  #     name = "Number of reads",
+  #     breaks = x_grid_breaks,  # Custom breaks (e.g., e⁻², e⁻¹, e⁰, e¹, ...)
+  #     # labels = function(x) sprintf("%.2f", exp(x) - 1)  # Format labels
+  #     trans = "log"
+  #   ) +
+  #   theme(axis.text.x = element_text(angle = 90),
+  #         plot.title = element_text(hjust = 0.5,
+  #                                   size = 16,
+  #                                   face = "bold"))
+
+
+  ggplot() +
+    geom_ribbon(data = densities_plot_quantiles,
+                aes(x = x,
+                    ymax = `97.5%`,
+                    ymin = `2.5%`,
+                    fill = Type),
+                alpha = .5) +
+    geom_ribbon(data = densities_plot_quantiles,
+                aes(x = x,
+                    ymax = `90%`,
+                    ymin = `10%`,
+                    fill = Type),
+                alpha = .75) +
     theme_minimal() +
     scale_x_continuous(
       name = "Number of reads",
@@ -828,7 +853,7 @@ plotCovarianceMatrix <- function(fitmodel,
   Lambda_quantiles <- apply(Lambda_output, c(2,3),
                             function(x){quantile(x, probs = c(0.025, 0.5, 0.975))})
 
-  ggcorrplot(Lambda_quantiles[2,,], method = "square", type = "lower",
+  ggcorrplot::ggcorrplot(Lambda_quantiles[2,,], method = "square", type = "lower",
              lab = F, lab_size = 3,
              colors = c("blue", "white", "red"),
              title = "Covariance Matrix (as Correlation)") +
