@@ -64,6 +64,12 @@ plotOccupancyCovariates <- function(fitmodel,
   occCovNames <- colnames(fitmodel$X_psi)
   idxcov <- which(occCovNames == covName)
 
+  if(length(idxcov) == 0){
+    stop("Covariate name not found. If you are using a categorical covariates,
+         the name might have changed to code the level. Use
+         colnames(fitmodel$X_occ) to find the new names")
+  }
+
   if(is.null(idx_species)){
     idx_species <- 1:S
   }
@@ -138,6 +144,13 @@ plotDetectionCovariates <- function(fitmodel,
   occCovNames <- colnames(fitmodel$X_theta)
   idxcov <- which(occCovNames == covName)
 
+
+  if(length(idxcov) == 0){
+    stop("Covariate name not found. If you are using a categorical covariates,
+         the name might have changed to code the level. Use
+         colnames(fitmodel$X_theta) to find the new names")
+  }
+
   if(is.null(idx_species)){
     idx_species <- 1:S
   }
@@ -210,6 +223,12 @@ plotOrdinationCovariates <- function(fitmodel,
   speciesNames <- fitmodel$infos$speciesNames
   ordCovNames <- colnames(fitmodel$X_ord)
   idxcov <- which(ordCovNames == covName)
+
+  if(length(idxcov) == 0){
+    stop("Covariate name not found. If you are using a categorical covariates,
+         the name might have changed to code the level. Use
+         colnames(fitmodel$X_ord) to find the new names")
+  }
 
   if(is.null(idx_factors)){
     idx_factors <- 1:d
@@ -790,7 +809,7 @@ plotReadIntensity <- function(fitmodel){
 
 }
 
-generateCovarianceMatrixOutput <- function(fitmodel,
+generateCorrelationMatrixOutput <- function(fitmodel,
                                    idx_species = NULL){
 
   matrix_of_draws <- fitmodel$matrix_of_draws
@@ -825,9 +844,9 @@ generateCovarianceMatrixOutput <- function(fitmodel,
 
 
 
-#' plotCovarianceMatrix
+#' plotCorrelationMatrix
 #'
-#' Plot the covariance matrix
+#' Plot the correlation matrix
 #'
 #' @details
 #' Plots the 95% credible interval of density of true positives and false positives
@@ -838,17 +857,17 @@ generateCovarianceMatrixOutput <- function(fitmodel,
 #'
 #' @examples
 #' \dontrun{
-#' plotCovarianceMatrix(fitmodel)
+#' plotCorrelationMatrix(fitmodel)
 #' }
 #'
 #' @export
 #' @import dplyr
 #' @importFrom ggcorrplot ggcorrplot
 #'
-plotCovarianceMatrix <- function(fitmodel,
+plotCorrelationMatrix <- function(fitmodel,
                                  idx_species = NULL){
 
-  Lambda_output <- generateCovarianceMatrixOutput(fitmodel, idx_species)
+  Lambda_output <- generateCorrelationMatrixOutput(fitmodel, idx_species)
 
   Lambda_quantiles <- apply(Lambda_output, c(2,3),
                             function(x){quantile(x, probs = c(0.025, 0.5, 0.975))})
@@ -864,9 +883,9 @@ plotCovarianceMatrix <- function(fitmodel,
 
 }
 
-#' plotSigElementsCovMatrix
+#' plotSigElementsCorMatrix
 #'
-#' Plot the significant element of the covariance matrix
+#' Plot the significant element of the Correlation matrix
 #'
 #' @details
 #' Plots the 95% credible interval of density of true positives and false positives
@@ -877,17 +896,17 @@ plotCovarianceMatrix <- function(fitmodel,
 #'
 #' @examples
 #' \dontrun{
-#' plotSigElementsCovMatrix(fitmodel)
+#' plotSigElementsCorMatrix(fitmodel)
 #' }
 #'
 #' @export
 #' @import dplyr
 #' @importFrom ggcorrplot ggcorrplot
 #'
-plotSigElementsCovMatrix <- function(fitmodel,
+plotSigElementsCorMatrix <- function(fitmodel,
                                      idx_species = NULL){
 
-  Lambda_output <- generateCovarianceMatrixOutput(fitmodel, idx_species)
+  Lambda_output <- generateCorrelationMatrixOutput(fitmodel, idx_species)
 
   S <- fitmodel$infos$S
 

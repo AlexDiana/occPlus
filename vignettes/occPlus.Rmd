@@ -176,7 +176,7 @@ plotReadIntensity(fitmodel)
 We can plot the posterior median of the residual correlation matrix as
 
 ```{r}
-plotCovarianceMatrix(fitmodel)
+plotCorrelationMatrix(fitmodel)
 ```
 
 
@@ -184,7 +184,7 @@ We can show only the positively and negatively significant elements (positive in
 red and negative in blue)
 
 ```{r}
-plotSigElementsCovMatrix(fitmodel)
+plotSigElementsCorMatrix(fitmodel)
 ```
 
 We note that this is the \textit{residual} covariance matrix, \textbf{after} 
