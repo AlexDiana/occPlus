@@ -451,6 +451,7 @@ plotCollectionRates <- function(fitmodel,
 #'
 #' @export
 #' @import dplyr
+#' @import stringr
 #' @import ggplot2
 #'
 plotDetectionRates <- function(fitmodel,
@@ -478,7 +479,7 @@ plotDetectionRates <- function(fitmodel,
     as.data.frame
 
   texts <- rownames(data_plot)
-  idx_speciesprimer <- str_match(texts, "\\[(\\d+),(\\d+)\\]")
+  idx_speciesprimer <- stringr::str_match(texts, "\\[(\\d+),(\\d+)\\]")
 
   data_plot <- data_plot %>%
     mutate(Species = as.numeric(idx_speciesprimer[,3]),
@@ -606,6 +607,7 @@ plotStage1FPRates <- function(fitmodel,
 #'
 #' @export
 #' @import dplyr
+#' @import stringr
 #' @import ggplot2
 #'
 plotStage2FPRates <- function(fitmodel,
@@ -633,7 +635,7 @@ plotStage2FPRates <- function(fitmodel,
     as.data.frame
 
   texts <- rownames(data_plot)
-  idx_speciesprimer <- str_match(texts, "\\[(\\d+),(\\d+)\\]")
+  idx_speciesprimer <- stringr::str_match(texts, "\\[(\\d+),(\\d+)\\]")
 
   data_plot <- data_plot %>%
     mutate(Species = as.numeric(idx_speciesprimer[,3]),
