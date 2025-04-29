@@ -1,11 +1,11 @@
 Package: occPlus
 Type: Package
-Title: What the Package Does (Title Case)
+Title: Fitting occupancy models for eDNA reads data
 Version: 0.1.0
 Authors@R: c(
     person(
-      "Jane", "Doe",
-      email = "jane@example.com",
+      "Alex", "Diana",
+      email = "ad23269@essex.ac.uk",
       role = c("aut", "cre")
     )
   )
