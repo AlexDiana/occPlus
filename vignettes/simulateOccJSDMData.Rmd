@@ -101,11 +101,30 @@ list_jsdmParams <- list(
   )
 
 list_params <- list(
-  p = matrix(runif(P * S, 0.6, 0.95), P, S),   # detection prob given amplicon present
-  q = matrix(runif(P * S, 0.01, 0.05), P, S),  # false-positive amplification rate
-  theta0 = runif(S, 0.02, 0.1),                # baseline collection prob given absent
-  theta_baseline = runif(S, 0.3, 0.7)          # baseline collection prob given present
-  )
+  p = matrix(runif(P * S, 0.3, 0.6), P, S),   
+  # p is the Stage 2 (PCR/lab): true-positive detection rate per PCR 
+  # replicate, given the species was collected into the sample (w = 1). 
+  # Set at the range ~0.3-0.6 so that a single PCR replicate
+  # often misses a truly-collected species -- this makes
+  # the number of species detected increase visibly with K (replicates
+  # per sample), rather than saturating at K = 1.
+  q = matrix(runif(P * S, 0.01, 0.05), P, S),  
+  # q is the Stage 2 (PCR/lab): false-positive rate per PCR replicate, given 
+  # the species was *not* collected (w = 0). Here it is set low to simulate
+  # few false positives.
+  theta0 = runif(S, 0.02, 0.1),                
+  # theta0 is the Stage 1 (field collection): false-positive collection rate 
+  # given the species is truly absent (z = 0), e.g. contamination. 
+  # Kept low to simulate low contamination.
+  theta_baseline = runif(S, 0.15, 0.4)          
+  # theta_baseline is the Stage 1 (field collection): baseline collection 
+  # probability given the species is truly present (z = 1). Set at the
+  # range ~0.15-0.4 to simulate the scenario where present species are often 
+  # missed by any single field sample.
+  ) 
+
+  # Together, low p and low theta_baseline mean that true detections are low
+  # in both stages 1 and 2. 
 ```
 
 ## Simulating a dataset for occJSDM()
@@ -147,7 +166,9 @@ head(data$traits); dim(data$traits) # species x traits
 ### Simulating without spatial autocorrelation
 
 ```{r}
-list_jsdmParams_nospat <- modifyList(list_jsdmParams, list(useSpatField = FALSE))
+list_jsdmParams_nospat <- modifyList(list_jsdmParams, 
+                                     list(useSpatField = FALSE)
+                                     )
 
 set.seed(sim_seed)
 sim_nospat <- simulateOccJSDMData(
