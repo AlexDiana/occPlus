@@ -26,6 +26,7 @@ simulates data in the format it expects. See Ji et al. (2025)
 
 Authors:
 \itemize{
+  \item Alex Diana \email{Alex.diana92@yahoo.it}
   \item Douglas W. Yu \email{dougwyu@mac.com}
 }
 
