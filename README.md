@@ -1,6 +1,6 @@
 # occJSDM
 
-An R package for fitting an occupancy joint species distribution model
+An R package for fitting an occupancy and joint species distribution model
 (occJSDM), optionally accounting for environmental and detection covariates, 
 species traits, spatial autocorrelation, and for eDNA-style data, a two-stage observation process (false-negative and false-positive detection errors in the 
 field and in the lab).
