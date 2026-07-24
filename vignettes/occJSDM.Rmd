@@ -30,6 +30,7 @@ options(warning = -1)
 
 ```{r setup, include = FALSE}
 library(occJSDM)
+# devtools::load_all() to internally load commands
 # devtools::document() # run manually after editing roxygen comments
 # devtools::check() # run manually before commits/releases, builds package, runs examples/tests/vignettes, checks CRAN-style compliance
 ```
@@ -272,9 +273,9 @@ convDiagfiltered <- convDiag |>
   dplyr::arrange(dplyr::desc(rhat))
 ```
 
-A few coefficients for three species (`OTU_8`, `OTU_9`, `OTU_10`) fall
-just outside these thresholds. None is a cause for concern on its own
-(`Rhat` is still $\le 1.03$ and `ess` is still in the low hundreds), but
+A few coefficients for a few species fall just outside these thresholds.
+None is a cause for concern on its own (for all but two estimates,
+`Rhat` is still $\le 1.03$, and `ess` is still in the low hundreds), but
 if this list included much larger deviations, it would be worth
 increasing `niter` and/or `nthin` before trusting the affected
 coefficients.
@@ -611,24 +612,30 @@ varpart <- returnVariancePartitioning(fitmodel)
 ### Cumulative species detections as a function of PCR replicates
 
 To help allocate effort, we can plot the expected number of species
-detected as a function of the number of PCR replicates per sample $K$,
-given all species are truly present in the sample.
-
-
-For Doug: We have now just one function for both M and K. You can switch 
-between M and K on the x-axis
+detected as a function of the number of environmental samples $M$ and
+the number of PCR replicates per sample $K$, given all species are truly
+present in the sample.
 
 ```{r}
 plotCumulativeSpeciesDetections(fitmodel, M = 1, K = 6, primer = 0, alpha = .95) 
 ```
+
+Given one environmental sample per site ($M=1$), using $K \geq4$ PCR
+replicates per sample should increase the number of detected species
+
 ```{r}
 plotCumulativeSpeciesDetections(fitmodel, M = 3, K = 6, primer = 0, alpha = .95, byK = T) 
 ```
+
+Increasing the number of environmental samples from $M=1$ to
+$M=2 \text{ or } 3$ increases the number of detected species, especially
+when $K≥3$ PCR replicates are used.
 
 ```{r}
 plotCumulativeSpeciesDetections(fitmodel, M = 3, K = 6, primer = 0, alpha = .95, byK = F) 
 ```
 
+`byK=F` puts the number of environmental samples $M$ on the x-axis.
 
 ### Model selection
 
@@ -646,7 +653,6 @@ fitmodel2 <- runOccJSDM(data = data,
                        occCovariates = c("X_psi.EnvCov.1", "X_psi.EnvCov.2"),
                        collCovariates = c("X_theta.1", "X_theta.2"),
                        spatCovariates = c("Xs.1", "Xs.2"), 
-                       traitsMatrix = data$traits,
                        MCMCparams = list(nchain = 2,
                                          nburn = 5000,
                                          niter = 5000,
@@ -654,8 +660,8 @@ fitmodel2 <- runOccJSDM(data = data,
                        summarisedLatentPresences = T
                        )
 
-extractWAIC(fitmodel)  # n_factors=2, WAIC=31967.49
-extractWAIC(fitmodel2) # n_factors=3, WAIC=31912.9
+extractWAIC(fitmodel)  # n_factors=2, WAIC=29920.78
+extractWAIC(fitmodel2) # n_factors=3, WAIC=29896.9:  lower value
 # n_factors=3 is better
 ```
 
