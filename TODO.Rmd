@@ -12,7 +12,6 @@ editor_options:
 
 1.  Alex to dos
 
-        
     1.  Allow for different primers per sample
 
     2.  fix `simulateOccJSDMData(model = "occupancy")`
@@ -67,9 +66,9 @@ editor_options:
 
     1.  Overleaf document for the occJSDM math, which we will add as a
         markdown vignette
-        
+
     2.  Switch to integrated WAIC (instead of the current conditional
-        WAIC, which overfits as it happens also in HMSC).    
+        WAIC, which overfits as it happens also in HMSC).
 
     3.  GAMs for JSDM
 
