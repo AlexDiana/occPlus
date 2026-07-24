@@ -373,17 +373,21 @@ returnConvergenceDiagnostics <- function(fitmodel) {
 
 #' Compute diagnostics
 #'
+#' @details
+#' Prints MCMC convergence diagnostics (R-hat and effective sample size) to
+#' the console for each block of parameters in a fitted model's
+#' `results_output` (e.g. `beta0_psi`, `beta_psi`, `beta_theta`, `p`, `q`,
+#' `theta0`), skipping latent-state components (`z_output`, `w_output`,
+#' `theta_output`, `idx_ls_output`, `varPart_output`) and any block that is
+#' entirely fixed/constant. Emits a warning for any parameter block whose
+#' max R-hat exceeds 1.1 or minimum ESS falls below 50. Called automatically
+#' at the end of \code{\link{runOccJSDM}}.
 #'
-#' @param param_output A numeric array with 2, 3, or 4 dimensions
-#'   (`[dim1, dim2, niter, nchain]`, or a 2- or 3-dimensional array missing
-#'   one or both of the leading index dimensions).
-#' @param param_name A label for the parameter, used for the y-axis title.
-#' @param dimnames1 Optional labels for the first index dimension (e.g.
-#'   covariate names). Defaults to `1:dim1`.
-#' @param dimnames2 Optional labels for the second index dimension (e.g.
-#'   species names). Defaults to `1:dim2`.
+#' @param results_output The `results_output` element of a fitted model, as
+#'   returned by \code{\link{runOccJSDM}} (`fitModel$results_output`).
 #'
-#' @return A `ggplot` object.
+#' @return `NULL`, invisibly. Called for its side effect of printing
+#'   diagnostics to the console.
 #' @export
 computeDiagnostics <- function(results_output){
 
@@ -489,6 +493,8 @@ computeDiagnostics <- function(results_output){
   }
 
   message("\n==================================================")
+
+  invisible(NULL)
 
 }
 
