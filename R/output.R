@@ -2146,7 +2146,7 @@ plotCumulativeSpeciesDetections <- function(fitModel, M, K, primer = 0, alpha = 
   beta_theta_output <- fitModel$results_output$beta_theta_output
   p_output <- fitModel$results_output$p_output
 
-  speciesDetected <- computeSpeciesDetected_MK(beta_theta_output, p_output,
+  speciesDetected <- computeSpeciesDetected(beta_theta_output, p_output,
                                                M, K, primer, alpha)
 
   df <- expand.grid(M = 1:M, K = 1:K)

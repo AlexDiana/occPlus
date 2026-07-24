@@ -4,16 +4,27 @@
 \alias{plotCumulativeSpeciesDetections}
 \title{plotCumulativeSpeciesDetections}
 \usage{
-plotCumulativeSpeciesDetections(fitModel, K, primer = 0, alpha = 0.95)
+plotCumulativeSpeciesDetections(
+  fitModel,
+  M,
+  K,
+  primer = 0,
+  alpha = 0.95,
+  byK = T
+)
 }
 \arguments{
 \item{fitModel}{Output from the function runOccJSDM}
+
+\item{M}{Maximum number of environmental samples to consider}
 
 \item{K}{Maximum number of technical replicates (PCRs) to consider}
 
 \item{primer}{Index of the primer to use; 0 (default) pools across all primers}
 
 \item{alpha}{Confidence level of the credible interval, default to .95}
+
+\item{byK}{Should K (technical replicates) be on the x-axis (instead of M)?}
 }
 \value{
 A plot with the credible interval of cumulative detections
@@ -27,7 +38,7 @@ number of PCR, conditional on species presence in the sample
 }
 \examples{
 \dontrun{
-plotCumulativeSpeciesDetections(fitModel, K = 5)
+plotCumulativeSpeciesDetections(fitModel, M = 3, K = 5)
 }
 
 }
