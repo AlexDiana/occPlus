@@ -64,7 +64,7 @@ Not ported: `compare_to_true()`/`plot_estimated_vs_true()` from GLGS-eDNA, since
 `vignettes/occJSDM.Rmd`'s **"Model diagnostics" section** (added and committed this session, `882cffe`) demonstrates `returnConvergenceDiagnostics()` (with a table explaining each coefficient block and its `idx1`/`idx2`/`label1`/`label2` columns: `beta0_psi` species intercepts, `beta_psi` occupancy covariate slopes, `beta_theta` Stage 1/field-collection covariate effects including an auto-added `(Intercept)` column, `p`/`q` Stage 2/lab-PCR true-detection vs. false-positive rates per primer, `theta0` per-species Stage 1 false-positive collection rate) and a chunk flagging parameters exceeding `Rhat > 1.01` or `ess < 400`. A separate **"Traceplots for a single covariate" subsection** (moved by Doug in a follow-up commit, `e817bd1`, from right after "Model diagnostics" to the end of the vignette, after the "Latent presence table" section and before "Prediction at new sites") provides a reusable `extractCovariateSlice(param_output, covNames, covName)` helper (matches a covariate/primer name, slices with `drop = FALSE` to keep the array 4-D) plus a lookup table mapping each covariate/parameter type to its column-names source and coefficient array in `results_output`:
 
 | Covariate/parameter | Column names | Coefficient array |
-|------------------------|------------------------|------------------------|
+|----|----|----|
 | `X_psi.*` (occupancy covariates) | `colnames(fitmodel$X_psi)` | `results_output$jsdm_output$B_output` (`beta_psi`) |
 | species intercept | -- (species-only) | `results_output$jsdm_output$B0_output` (`beta0_psi`) |
 | `X_theta.*` (collection covariates) | `colnames(fitmodel$X_theta)` | `results_output$beta_theta_output` (`beta_theta`) |
@@ -307,7 +307,7 @@ test_that("runOccJSDM errors informatively on malformed input", {
 Tests in this file load a pre-fitted fixture to avoid re-running MCMC. The fixture covers all output function code paths (two-stage model, traits, no spatial field). The \~34 exported functions in `output.R` are grouped below by what they need from the fixture:
 
 | Group | Functions | Key assertions |
-|------------------------|------------------------|------------------------|
+|----|----|----|
 | Occupancy covariates | `returnOccupancyCovariates`, `plotOccupancyCovariates`, `returnOccupancyGradient`, `plotOccupancyGradient` | Returns data.frame/ggplot; nrow == n_species |
 | Detection/collection | `returnCollectionCovariates`, `plotCollectionCovariates`, `returnOccupancyRates`, `plotOccupancyRates`, `plotCollectionRates` | Returns data.frame; nrow matches species count |
 | Stage 2 rates | `plotFPTPStage2Rates`, `plotDetectionRates`, `plotStage1FPRates`, `plotStage2FPRates` | Returns ggplot; `primerName` arg actually subsets (regression for known bug) |
