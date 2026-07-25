@@ -511,7 +511,7 @@ computePsiCoef <- function(
     X, Ks, Xs_centers, Tr,
     B0, G, A, C, Bt,
     Gs, As, Cs, Bst,
-    H, L){
+    P, U, L){
 
   ps <- ncol(Bst)
 
@@ -531,9 +531,9 @@ computePsiCoef <- function(
     XsBs_prod <- matrix(0, nrow(XB_prod), ncol(XB_prod))
   }
 
-  HL <- H %*% L
+  PUL <- P %*% H %*% L
 
-  eta <- B0_mat + XB_prod + XsBs_prod + HL
+  eta <- B0_mat + XB_prod + XsBs_prod + PUL
 
   list("eta" = eta,
        "XB" = B0_mat + XB_prod,
