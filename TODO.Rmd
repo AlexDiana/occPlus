@@ -550,6 +550,31 @@ editor_options:
     1.  **reproduce all Ecoletts results as a test of the package and
         decide whether to include in repo**
 
+    2.  **extensive testing on simulated datasets.** Use
+        `simulateOccJSDMData()` across the model types
+        (`"binary"`/`"occupancy"`/`"two_stage"`, with and without
+        traits/spatial autocorrelation/latent factors) to check that
+        `runOccJSDM()` recovers the true generating parameters --
+        coefficients, residual correlation structure, variance
+        partitioning -- within credible intervals at a nominal coverage
+        rate, across a range of `n`/`S`/`M`/`K` and effect sizes. Decide
+        whether this becomes the `testthat` suite referenced under
+        "Testing Strategy Implementation" in `AGENTS.md` (currently only
+        `test-placeholder.R` exists) or a separate reproducibility
+        vignette/script, or both. Two things from the July 25 2026 bug
+        audit to keep in mind while designing this: (a) it would double
+        as the regression test for TODO.Rmd group A items 1-2 (feeding
+        `runOccJSDM()` a row-shuffled copy of a simulated dataset and
+        checking the fit matches the sorted one) and item 11
+        (`useSpatField = TRUE` currently simulates data with *no*
+        spatial signal, so any coverage check of the spatial term will
+        silently pass against a null case until that bug is fixed); and
+        (b) some of those bugs (A.4 WAIC, A.5 `sigma_b` having no
+        effect, A.7-9 spatial/GP parameters not updating) will bias
+        recovery in ways this testing is specifically designed to
+        catch, so fixing group A first will make the results more
+        interpretable.
+
 2.  Alex to dos
 
     1.  Switch to integrated WAIC (instead of the current conditional
