@@ -15,15 +15,25 @@ editor_options:
     1.  Allow for different primers per sample
 
     **Bugs found in a static audit of `R/` and `src/`, 25 July 2026.**
-    Line numbers refer to the tree at commit `738464c`. Everything below
-    was found by reading the code, not by running the model, so each
-    should be reproduced before it is fixed. Grouped by severity.
+    Every line number below was re-verified against the tree *after*
+    Alex's `0abb104` ("Fixed bug in simulated data") was merged in
+    `0da2e6a`, so they are current as of `e33fc0b`. Note that `0abb104`
+    inserted `sample_rnb()` at `R/jsdmfun.R:581`, shifting everything
+    below it in that file by +36 lines relative to `738464c`.
+    Everything below was found by reading the code, not by running the
+    model, so each should be reproduced before it is fixed. Grouped by
+    severity.
+
+    Already fixed by `0abb104`, and so *not* listed below: the
+    `simulateOccJSDMData(model = "occupancy")` `idx_z_k` bug -- that
+    branch now correctly uses `idx_z_w` (`R/simulateData.R:197-199`),
+    while the `two_stage` branch rightly keeps `idx_z_k`.
 
     **A. Inference-affecting bugs (wrong numbers, silently)**
 
-    1.  **`data$info` is re-sorted but `data$OTU` is not.**
-        `y <- OTU` at `R/runOccJSDM.R:476`, then `data_info` is
-        re-ordered by `dplyr::arrange(Site, Sample, Primer)` at
+    1.  **`data$info` is re-sorted but `data$OTU` is not.** `y <- OTU`
+        at `R/runOccJSDM.R:476`, then `data_info` is re-ordered by
+        `dplyr::arrange(Site, Sample, Primer)` at
         `R/runOccJSDM.R:553-558`. Every downstream quantity (`M`, `K`,
         `sumM`, `sumK`, the `idx_*` maps, `X_psi`, `X_theta`) is built
         from the *sorted* `data_info`, but `y` keeps the caller's row
@@ -77,32 +87,31 @@ editor_options:
         `1:(niter * nchain)` across all chains.
 
     5.  **`sampleBuniv()` drops the residual precision (operator
-        precedence).** `src/jsdm.cpp:579`:
-        `tX * X * (1 / sigma*sigma)` parses as `(1/sigma) * sigma`,
-        i.e. exactly `1`, so the likelihood is weighted with precision 1
-        rather than `1/sigma^2`; the mean term `tX * y` is not scaled
-        either. `sampleBuniv()` is the sampler for the trait-response
-        coefficients `G`/`C` (`sample_GC()`) and the unobserved traits
-        `A` (`sample_A()`), so `sigma_b` currently has no effect on any
-        of them. Fix: `1.0 / (sigma * sigma)`, applied consistently to
-        both terms.
+        precedence).** `src/jsdm.cpp:579`: `tX * X * (1 / sigma*sigma)`
+        parses as `(1/sigma) * sigma`, i.e. exactly `1`, so the
+        likelihood is weighted with precision 1 rather than `1/sigma^2`;
+        the mean term `tX * y` is not scaled either. `sampleBuniv()` is
+        the sampler for the trait-response coefficients `G`/`C`
+        (`sample_GC()`) and the unobserved traits `A` (`sample_A()`), so
+        `sigma_b` currently has no effect on any of them. Fix:
+        `1.0 / (sigma * sigma)`, applied consistently to both terms.
 
-    6.  **Non-thread-safe RNG inside the OpenMP loops.**
-        `src/Makevars` enables OpenMP, and both
-        `samplePGvariables()` (`src/jsdm.cpp:398`) and
-        `sample_betatheta_cpp_parallel()` (`src/functions.cpp:600`) are
-        `#pragma omp parallel for`. The work they dispatch calls R's
-        RNG: `randinvg()` uses `R::rnorm` and `mvrnormArmaQuick()` uses
-        `arma::randn`, which RcppArmadillo routes to R's RNG. R's RNG
-        state is global and not thread-safe, so wherever OpenMP is
-        actually active -- Linux and Windows/Rtools, but *not* stock
-        macOS clang, which is presumably why this has not shown up
-        locally -- these loops race. The thread-safe path looks
-        half-finished: `mvrnormArmaQuick_TS()` exists, but
-        `sample_beta_nocov_cpp_TS()` (`src/functions.cpp:301-309`)
-        calls the *non*-TS `sample_beta_cpp()`, so it is never reached.
-        Note `samplePGvariables()` is the hottest kernel in the sampler,
-        so this is worth fixing properly (thread-local RNG throughout)
+    6.  **Non-thread-safe RNG inside the OpenMP loops.** `src/Makevars`
+        enables OpenMP, and both `samplePGvariables()`
+        (`src/jsdm.cpp:398`) and `sample_betatheta_cpp_parallel()`
+        (`src/functions.cpp:600`) are `#pragma omp parallel for`. The
+        work they dispatch calls R's RNG: `randinvg()` uses `R::rnorm`
+        and `mvrnormArmaQuick()` uses `arma::randn`, which RcppArmadillo
+        routes to R's RNG. R's RNG state is global and not thread-safe,
+        so wherever OpenMP is actually active -- Linux and
+        Windows/Rtools, but *not* stock macOS clang, which is presumably
+        why this has not shown up locally -- these loops race. The
+        thread-safe path looks half-finished: `mvrnormArmaQuick_TS()`
+        exists, but `sample_beta_nocov_cpp_TS()`
+        (`src/functions.cpp:301-309`) calls the *non*-TS
+        `sample_beta_cpp()`, so it is never reached. Note
+        `samplePGvariables()` is the hottest kernel in the sampler, so
+        this is worth fixing properly (thread-local RNG throughout)
         rather than by disabling OpenMP.
 
     7.  **`Bs <- list_params$B` in `update_jSDMcoef()`.**
@@ -126,8 +135,8 @@ editor_options:
         in `update_jSDMcoef()` is wrapped in `if(F){...}`
         (`R/jsdmfun.R:1063`), so `idx_ls` stays at its hard-coded
         starting value of 3 for the entire run -- `l_s` is fixed at
-        `l_s_grid[3]` (about 0.074 on the standardised coordinate
-        scale) and `idx_ls_output` is a constant. Either re-enable it
+        `l_s_grid[3]` (about 0.074 on the standardised coordinate scale)
+        and `idx_ls_output` is a constant. Either re-enable it
         (`sample_ls()` also needs fixing: it references a global `S`,
         and is called with `Bs` where the signature expects `SE`) or
         document that the spatial range is fixed and expose it as an
@@ -147,9 +156,9 @@ editor_options:
         `useSpatField = TRUE` the returned data therefore contain no
         spatial autocorrelation at all, while `trueParams$eta` and
         `trueParams$varPart` report as though they do. This makes the
-        `useSpatField` sections of
-        `vignettes/simulateOccJSDMData.Rmd` misleading and would defeat
-        any test that tries to recover a simulated spatial signal.
+        `useSpatField` sections of `vignettes/simulateOccJSDMData.Rmd`
+        misleading and would defeat any test that tries to recover a
+        simulated spatial signal.
 
     12. **`transformCovariatesMatrix()` never applies the stored factor
         levels.** `R/runOccJSDM.R:38` does
@@ -168,7 +177,7 @@ editor_options:
         `@param listPriors`, but the only consumers
         (`sample_betapsiLL()`, `sample_LL()`, `sample_betapsis()` in
         `R/mcmcfun.R`) are no longer called -- the live path is
-        `update_jSDMcoef()` -> `sample_BBsL()`, which hard-codes the
+        `update_jSDMcoef()` -\> `sample_BBsL()`, which hard-codes the
         occupancy prior. Either wire them through or drop them from the
         docs. (Also, `ifelse()` is the wrong idiom for these scalar
         defaults: it silently truncates a vector-valued prior to its
@@ -176,16 +185,15 @@ editor_options:
 
     14. **`sigma_h` is never sampled.** Initialised to 1
         (`R/runOccJSDM.R:1009`) and passed through `update_jSDMcoef()`
-        unchanged, so `sigmah_output` is constant.
-        `predictNewSites()` uses it as the factor-score SD when
-        simulating `U` at new sites (`src/jsdm.cpp:487`), so
-        predictions silently assume unit factor variance.
+        unchanged, so `sigmah_output` is constant. `predictNewSites()`
+        uses it as the factor-score SD when simulating `U` at new sites
+        (`src/jsdm.cpp:487`), so predictions silently assume unit factor
+        variance.
 
-    15. **`tau_output` is returned entirely `NA`.**
-        `tau_output_chain` is allocated (`R/runOccJSDM.R:934`) and
-        copied out (`:1236`), but never written inside the sampling
-        loop -- the save block at `:1157-1176` stores every other JSDM
-        parameter except `tau`.
+    15. **`tau_output` is returned entirely `NA`.** `tau_output_chain`
+        is allocated (`R/runOccJSDM.R:934`) and copied out (`:1236`),
+        but never written inside the sampling loop -- the save block at
+        `:1157-1176` stores every other JSDM parameter except `tau`.
 
     **B. Crashes, unreachable code paths, and API bugs**
 
@@ -194,11 +202,11 @@ editor_options:
         `R/runOccJSDM.R:1152` is unconditional, but `w_output_mean` is
         only created in the `summarisedLatentPresences = TRUE` branch
         (`:861`), so the first stored iteration fails with
-        `object 'w_output_mean' not found`. Relatedly,
-        `w_output_chain` (`:913`) and `theta_output_chain` (`:905`) are
-        allocated and never written, and `results_output$w_output` is
-        set unconditionally from `w_output_mean` (`:1317`), so the full
-        `w` samples would be discarded even once the crash is fixed.
+        `object 'w_output_mean' not found`. Relatedly, `w_output_chain`
+        (`:913`) and `theta_output_chain` (`:905`) are allocated and
+        never written, and `results_output$w_output` is set
+        unconditionally from `w_output_mean` (`:1317`), so the full `w`
+        samples would be discarded even once the crash is fixed.
 
     2.  **`thinOutput()` cannot run at all.** `R/output.R:21` reads
         `niter` from `results_output$beta_ord_output`, an array that no
@@ -206,8 +214,8 @@ editor_options:
         `thin` argument is also ignored (`by = 5` is hard-coded), and
         the non-`z_output` branch thins any 2-D element *by row* --
         which would silently drop sites from the `psi_output` /
-        `w_output` / `theta_output` posterior-mean matrices -- while
-        the scalar `WAIC` falls through to
+        `w_output` / `theta_output` posterior-mean matrices -- while the
+        scalar `WAIC` falls through to
         `print("Dimension not recognised")` and becomes `NULL`. Worth
         fixing properly, since post-hoc thinning is the intended route
         to shrinking the 62 MB `data/sampleresults.rda`.
@@ -235,15 +243,15 @@ editor_options:
 
     5.  **`predictNewSites()` does not honour its documented no-op
         behaviour.** The docs say `useEnvCov` / `useSpatial` are
-        "ignored ... if no [covariates / spatial field] were
-        estimated", but `R/output.R:1457` and `:1470` branch on the flag
-        alone. With the defaults (`TRUE`), a JSDM fit with no occupancy
-        covariates calls `transformCovariatesMatrix(X_psi, NULL, ...)`,
-        and a fit with no spatial field calls
-        `createSpatialPredMatrix()` with an empty `X_tilde`. `X_psi` and
-        `X_s` also lack defaults, so `predictNewSites(fit, X_psi = X)`
-        fails on the missing `X_s` promise even when
-        `useSpatial = FALSE`; give both `NULL` defaults.
+        "ignored ... if no [covariates / spatial field] were estimated",
+        but `R/output.R:1457` and `:1470` branch on the flag alone. With
+        the defaults (`TRUE`), a JSDM fit with no occupancy covariates
+        calls `transformCovariatesMatrix(X_psi, NULL, ...)`, and a fit
+        with no spatial field calls `createSpatialPredMatrix()` with an
+        empty `X_tilde`. `X_psi` and `X_s` also lack defaults, so
+        `predictNewSites(fit, X_psi = X)` fails on the missing `X_s`
+        promise even when `useSpatial = FALSE`; give both `NULL`
+        defaults.
 
     6.  **`returnLatentPresences()` is two-stage only.**
         `R/output.R:1709` and `:1715-1719` index
@@ -251,8 +259,8 @@ editor_options:
         `list_idx$idx_z_k` / `idx_w_k` / `idx_p_k`, all of which are
         absent or `NULL` for one-stage occupancy and JSDM-only fits.
         Either support those models or `stop()` with a clear message, as
-        `plotDetectionRates()` and
-        `plotCumulativeSpeciesDetections()` already do.
+        `plotDetectionRates()` and `plotCumulativeSpeciesDetections()`
+        already do.
 
     7.  **`set.seed(1)` inside `computeSpeciesDetected()`.**
         `R/output.R:2222` resets the user's global RNG stream as a side
@@ -269,15 +277,14 @@ editor_options:
 
     9.  **Species-ordering bug shared by four plotting functions.**
         `plotOccupancyRates()` (`R/output.R:513-516`),
-        `plotCollectionRates()` (`:701`),
-        `plotFPTPStage2Rates()` (`:789`) and
-        `plotStage1FPRates()` (`:949-952`) each compute `order()` on the
-        *filtered* `data_plot` and then use the result to index the
-        *unfiltered* `speciesNames`. For any `idx_species` other than a
-        prefix `1:k`, the factor levels name the wrong species and the
-        bars silently disappear. `plotCollectionRates()` also accepts
-        `idx_species` and never uses it -- the filter is commented out
-        at `:698`.
+        `plotCollectionRates()` (`:701`), `plotFPTPStage2Rates()`
+        (`:789`) and `plotStage1FPRates()` (`:949-952`) each compute
+        `order()` on the *filtered* `data_plot` and then use the result
+        to index the *unfiltered* `speciesNames`. For any `idx_species`
+        other than a prefix `1:k`, the factor levels name the wrong
+        species and the bars silently disappear. `plotCollectionRates()`
+        also accepts `idx_species` and never uses it -- the filter is
+        commented out at `:698`.
 
     10. **`plotFPTPStage2Rates()` still ignores `primerName`.**
         `R/output.R:767` and `:775` use `apply(p_output, 2, ...)`, which
@@ -288,30 +295,33 @@ editor_options:
         tracked as a to-do.)
 
     11. **Assorted smaller items.**
+
         (a) `createDataIdx()` is called with `maxP`
-        (`R/runOccJSDM.R:638`) for `model = "occupancy"` too, where
-        `maxP` was never assigned -- it survives only because R's lazy
-        evaluation never forces the promise; pass `NULL` explicitly.
+            (`R/runOccJSDM.R:638`) for `model = "occupancy"` too, where
+            `maxP` was never assigned -- it survives only because R's
+            lazy evaluation never forces the promise; pass `NULL`
+            explicitly.
         (b) `c_imk <- as.numeric(y > 0)` (`:963`) drops the matrix
-        dimensions, harmless only because `c_imk` is overwritten at
-        `:1104` before first use.
+            dimensions, harmless only because `c_imk` is overwritten at
+            `:1104` before first use.
         (c) `d <- get_param(listParams, "n_factors")` defaults to 0, and
-        the cap at `:716` uses `ncol(OTU)`, which is `NULL` for a
-        single-species vector `OTU` -- `if (d > NULL)` errors.
+            the cap at `:716` uses `ncol(OTU)`, which is `NULL` for a
+            single-species vector `OTU` -- `if (d > NULL)` errors.
         (d) `reparamFactorModel(A_output, C_output)` (`:1273`) assumes
-        `qr.Q()` is square; when `ncov_psi < gt` it is not, and
-        `diag(diag(R_current), nrow = d)` recycles.
+            `qr.Q()` is square; when `ncov_psi < gt` it is not, and
+            `diag(diag(R_current), nrow = d)` recycles.
         (e) The spatial-covariate numeric check at `:540` runs *before*
-        the "names present in `data$info`" check at `:544`, so a
-        mistyped spatial covariate name gives
-        `undefined columns selected` rather than the intended message.
+            the "names present in `data$info`" check at `:544`, so a
+            mistyped spatial covariate name gives
+            `undefined columns selected` rather than the intended
+            message.
         (f) `simulateOccJSDMData()`'s `@details` still says "For
-        two-stage eDNA data specifically, use `simulateOccJSDMData()`"
-        -- a self-reference left over from the merge of
-        `simulateOccJSDMDataGeneral()`.
+            two-stage eDNA data specifically, use
+            `simulateOccJSDMData()`" -- a self-reference left over from
+            the merge of `simulateOccJSDMDataGeneral()`.
         (g) `computeSpeciesDetected()`'s roxygen still documents the
-        removed Beta-approximation signature (`ab_p`, `K`, `primer`,
-        `alpha`) instead of its actual arguments.
+            removed Beta-approximation signature (`ab_p`, `K`, `primer`,
+            `alpha`) instead of its actual arguments.
 
     **C. Dead and broken internal code**
 
@@ -345,8 +355,33 @@ editor_options:
         `plotCovariateTrend()` (`R/jsdmfun.R:1552`) calls
         `pivot_longer()` and `createSplinesObjects()` (`:245`) calls
         `ns()`, but neither `tidyr` nor `splines` is imported in
-        `NAMESPACE`. (`createSplinesObjects()` also ignores its own
-        `df` argument and hard-codes `df = 5`.)
+        `NAMESPACE`. (`createSplinesObjects()` also ignores its own `df`
+        argument and hard-codes `df = 5`.) `rnbinom()`
+        (`R/jsdmfun.R:451`) and `dnbinom()` (`:594-595`) are likewise
+        not imported from `stats`.
+
+    5.  **`sample_rnb()` cannot run as written** (new in `0abb104`,
+        `R/jsdmfun.R:581-614`). Groundwork for the count-data item under
+        *MEE paper*, not yet called from anywhere, but it has a
+        scoping bug that will bite the moment it is wired up:
+        `r_current <- rnb[s]` (`:590`) reads `rnb` inside the `sapply()`
+        at `:588` whose result is *being assigned to* `rnb`, so at that
+        point
+        `rnb` does not exist in the function frame and lookup falls
+        through to the namespace and fails with
+        `object 'rnb' not found`. The current size vector needs to come
+        in as an argument, e.g.
+        `sample_rnb(z, eta, rnb, tune_sd = ...)`. Two more things to
+        settle while there: `tune_sd = 5` is a random-walk SD on the
+        *log* scale, so proposals land a factor of `exp(+/-10)` away and
+        acceptance will be near zero (something in the 0.1-1 range is
+        the usual starting point); and the prior terms are stubbed to
+        `0` with the intended `dgamma()` commented out, referencing
+        `prior_shape`/`prior_rate`, which are not defined anywhere. The
+        Metropolis step itself looks right -- the
+        `log(r_star) - log(r_current)` Jacobian is the correct
+        correction for a log-scale random walk under a flat prior on
+        `r`.
 
     **D. Performance of `runOccJSDM()`**
 
@@ -363,34 +398,32 @@ editor_options:
         problem in bug A.6 entirely (each process has its own RNG
         state). Portability constraints, though:
 
-        -   **`parallel::mclapply()` is not an option.** It is
-            fork-based, and R ships a Windows stub whose body is
-            `if (cores > 1L) stop("'mc.cores' > 1 is not supported on
-            Windows")` -- a hard error, not a fallback. That would
-            break the package on Alex's machine and on CRAN's Windows
-            check. Even on Linux/macOS, forking a session with a live
-            threaded-BLAS or OpenMP pool (OpenBLAS on most Linux
-            distros, Accelerate on macOS) is a well-known deadlock
-            source -- and doubly so if A.6 is fixed by *keeping*
-            OpenMP.
-        -   **`parallel::makeCluster()` (PSOCK) + `parLapply()` works
-            on all three platforms**, and
-            `parallel::clusterSetRNGStream()` gives reproducible,
-            independent L'Ecuyer streams per chain, which is strictly
-            better than the current situation. The cost is that
-            workers are fresh R sessions
-            (`clusterEvalQ(cl, library(occJSDM))`, plus serialising
-            the data out and the per-chain arrays back) -- negligible
-            against a multi-minute MCMC, though the return trip is not
-            free given how large `Bs_output`/`U_output` are (see D.9).
-        -   **Make it opt-in**: a `cores = 1L` argument, serial by
-            default, so existing behaviour is unchanged and CRAN's
-            two-core limit for examples/tests/vignettes is respected.
+        - **`parallel::mclapply()` is not an option.** It is fork-based,
+          and R ships a Windows stub whose body is
+          `if (cores > 1L) stop("'mc.cores' > 1 is not supported on Windows")`
+          -- a hard error, not a fallback. That would break the package
+          on Alex's machine and on CRAN's Windows check. Even on
+          Linux/macOS, forking a session with a live threaded-BLAS or
+          OpenMP pool (OpenBLAS on most Linux distros, Accelerate on
+          macOS) is a well-known deadlock source -- and doubly so if A.6
+          is fixed by *keeping* OpenMP.
+        - **`parallel::makeCluster()` (PSOCK) + `parLapply()` works on
+          all three platforms**, and `parallel::clusterSetRNGStream()`
+          gives reproducible, independent L'Ecuyer streams per chain,
+          which is strictly better than the current situation. The cost
+          is that workers are fresh R sessions
+          (`clusterEvalQ(cl, library(occJSDM))`, plus serialising the
+          data out and the per-chain arrays back) -- negligible against
+          a multi-minute MCMC, though the return trip is not free given
+          how large `Bs_output`/`U_output` are (see D.9).
+        - **Make it opt-in**: a `cores = 1L` argument, serial by
+          default, so existing behaviour is unchanged and CRAN's
+          two-core limit for examples/tests/vignettes is respected.
 
-        Structurally this needs the chain body extracted into a
-        function returning its own `*_output_chain` arrays -- mechanical,
-        since the loop already writes only to per-chain objects. The one
-        piece of genuinely shared state is the WAIC accumulator, which
+        Structurally this needs the chain body extracted into a function
+        returning its own `*_output_chain` arrays -- mechanical, since
+        the loop already writes only to per-chain objects. The one piece
+        of genuinely shared state is the WAIC accumulator, which
         currently streams across chains sequentially; parallelising
         forces one accumulator per chain plus a merge, which is exactly
         what the fix for bug A.4 requires anyway (`mean_lik` is a plain
@@ -404,43 +437,42 @@ editor_options:
         user's session state and affects every other package that reads
         `mc.cores` -- CRAN policy is explicitly against this. It should
         be replaced by the `cores` argument in D.1. (Also
-        `parallel::detectCores()` can return `NA`, which
-        `min(2L, NA)` happily propagates.)
+        `parallel::detectCores()` can return `NA`, which `min(2L, NA)`
+        happily propagates.)
 
-    2.  **Stop computing variance partitioning every iteration.**
+    3.  **Stop computing variance partitioning every iteration.**
         `computeVariancePartitioning_stdevs()` is called from inside
         `update_jSDMcoef()` (`R/jsdmfun.R:1083`) on every single
         iteration, including all of burn-in, and each call does seven
         `SD()` evaluations, each of which is
         `apply(logistic(eta), 2, sd)` over an `n x S` matrix. It is only
-        ever consumed at stored iterations
-        (`R/runOccJSDM.R:1174`). Move it out of `update_jSDMcoef()` and
-        compute it in `runOccJSDM()` only when
-        `iter > nburn & (iter - nburn) %% nthin == 0`: a 50% reduction
-        in these calls at the vignette's settings, 95% at
+        ever consumed at stored iterations (`R/runOccJSDM.R:1174`). Move
+        it out of `update_jSDMcoef()` and compute it in `runOccJSDM()`
+        only when `iter > nburn & (iter - nburn) %% nthin == 0`: a 50%
+        reduction in these calls at the vignette's settings, 95% at
         `nthin = 10`. While there, replace `apply(X, 2, sd)` with a
         vectorised column-SD.
 
-    3.  **`computePsiCoef()` is called three times per iteration.**
+    4.  **`computePsiCoef()` is called three times per iteration.**
         `R/jsdmfun.R:984`, `:1052` and `:1074`. Each call recomputes
         `t(computeBtcoef(...))`, `X %*% B` (`n x p` by `p x S`),
         `KsBproduct()` and `H %*% L`. The second call exists only to
         refresh `XB`/`SE` before `sample_U_cpp()`, but neither depends
-        on `U`, so they are unchanged from the first call; and the
-        third differs from the second only in the updated `U`. Call it
-        once at the top, reuse `XB`/`SE`, then recompute just
-        `UL <- U %*% L` and `eta <- XB + SE + UL` at the end -- roughly
-        a two-thirds saving on this block.
+        on `U`, so they are unchanged from the first call; and the third
+        differs from the second only in the updated `U`. Call it once at
+        the top, reuse `XB`/`SE`, then recompute just `UL <- U %*% L`
+        and `eta <- XB + SE + UL` at the end -- roughly a two-thirds
+        saving on this block.
 
-    4.  **Hoist loop-invariant work out of the per-species loop in
+    5.  **Hoist loop-invariant work out of the per-species loop in
         `sample_BBsL()`.** `XU <- cbind(1, X, U)`, `B_current` and
-        `invB_current` (`R/jsdmfun.R:709-713`) are identical for all
-        `S` species but are rebuilt inside the loop, allocating `S`
-        copies of an `n x (1 + p + d)` matrix per iteration. Only the
+        `invB_current` (`R/jsdmfun.R:709-713`) are identical for all `S`
+        species but are rebuilt inside the loop, allocating `S` copies
+        of an `n x (1 + p + d)` matrix per iteration. Only the
         `sigma_b^2` diagonal depends on anything that varies, and
         `sigma_b` is fixed within a call.
 
-    5.  **Precompute the constant parts of the `c_imk` update.**
+    6.  **Precompute the constant parts of the `c_imk` update.**
         `R/runOccJSDM.R:1104` recomputes `y > 0` (an `N3 x S` logical)
         every iteration although `y` never changes; and
         `w_all <- w[idx_w_k, , drop = FALSE]` (`:1100`) materialises a
@@ -448,7 +480,7 @@ editor_options:
         loop, and consider folding the `w_all` gather into
         `sample_pq_cpp()` so the copy never reaches R.
 
-    6.  **Make the WAIC accumulation optional, and cheaper.** The three
+    7.  **Make the WAIC accumulation optional, and cheaper.** The three
         `computeModelLoglik*_cpp()` calls evaluate `R::dbinom` over
         `n*S + N*S + N3*S` elements at every stored iteration. For
         binary data `dbinom(y, 1, p, log = TRUE)` is just
@@ -459,36 +491,34 @@ editor_options:
         `computeWAIC = TRUE/FALSE` argument for users who are not doing
         model comparison.
 
-    7.  **Vectorise the starting-value loops.**
-        `R/runOccJSDM.R:946-961` and `:974-981` are triple-nested R
-        loops over `S x n x M` to initialise `w` and `z`. Negligible on
-        the vignette dataset, slow for realistic `S`. Both reduce to
-        grouped "any positive" reductions:
-        `w` from `rowsum(y > 0, idx_w_k) > 0`, `z` from
+    8.  **Vectorise the starting-value loops.** `R/runOccJSDM.R:946-961`
+        and `:974-981` are triple-nested R loops over `S x n x M` to
+        initialise `w` and `z`. Negligible on the vignette dataset, slow
+        for realistic `S`. Both reduce to grouped "any positive"
+        reductions: `w` from `rowsum(y > 0, idx_w_k) > 0`, `z` from
         `rowsum(w, idx_z_w) > 0`.
 
-    8.  **Do not allocate posterior arrays that are never filled.**
-        With `summarisedLatentPresences = FALSE`, `w_output`
+    9.  **Do not allocate posterior arrays that are never filled.** With
+        `summarisedLatentPresences = FALSE`, `w_output`
         (`N x S x niter x nchain`) is allocated and never written, as
         are `w_output_chain` and `theta_output_chain` (see B.1). More
         generally, `Bs_output` (`ps x S x niter x nchain`) and
         `U_output` (`n x d x niter x nchain`) are the two largest
-        components of the 62 MB `sampleresults.rda`; a `keep =`
-        argument selecting which blocks to retain, or storing the
-        latent-factor blocks pre-thinned, would address both the
-        runtime allocation and the CRAN size blocker.
+        components of the 62 MB `sampleresults.rda`; a `keep =` argument
+        selecting which blocks to retain, or storing the latent-factor
+        blocks pre-thinned, would address both the runtime allocation
+        and the CRAN size blocker.
 
-    9.  **Reduce the repeated `arma::inv()` calls in the samplers.**
+    10. **Reduce the repeated `arma::inv()` calls in the samplers.**
         `sample_beta_cpp()` (`src/functions.cpp:249-253`), `sampleB()`
         and `sampleBuniv()` (`src/jsdm.cpp:579-583`, `:600-604`) each
-        call `arma::inv(B)` twice plus
-        `arma::inv(arma::trimatl(L))`, executed `S` or `n` times per
-        iteration. In every caller `B` is diagonal, so this is a dense
-        general inverse of a diagonal matrix. `sampleB_SoR()`
-        (`src/jsdm.cpp:817-839`) already shows the right pattern: take
-        the precision directly as an argument, and draw via a
-        triangular solve against a standard normal instead of forming
-        the inverse Cholesky factor explicitly.
+        call `arma::inv(B)` twice plus `arma::inv(arma::trimatl(L))`,
+        executed `S` or `n` times per iteration. In every caller `B` is
+        diagonal, so this is a dense general inverse of a diagonal
+        matrix. `sampleB_SoR()` (`src/jsdm.cpp:817-839`) already shows
+        the right pattern: take the precision directly as an argument,
+        and draw via a triangular solve against a standard normal
+        instead of forming the inverse Cholesky factor explicitly.
 
 2.  Doug to dos
 
@@ -523,7 +553,6 @@ editor_options:
         decide whether to include in repo**
 
 2.  Alex to dos
-
 
     1.  Switch to integrated WAIC (instead of the current conditional
         WAIC, which overfits as it happens also in HMSC).
