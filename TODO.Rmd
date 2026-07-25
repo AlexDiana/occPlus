@@ -14,6 +14,439 @@ editor_options:
 
     1.  Allow for different primers per sample
 
+    **Bugs found in a static audit of `R/` and `src/`, 25 July 2026.**
+    Line numbers refer to the tree at commit `738464c`. Everything below
+    was found by reading the code, not by running the model, so each
+    should be reproduced before it is fixed. Grouped by severity.
+
+    **A. Inference-affecting bugs (wrong numbers, silently)**
+
+    1.  **`data$info` is re-sorted but `data$OTU` is not.**
+        `y <- OTU` at `R/runOccJSDM.R:476`, then `data_info` is
+        re-ordered by `dplyr::arrange(Site, Sample, Primer)` at
+        `R/runOccJSDM.R:553-558`. Every downstream quantity (`M`, `K`,
+        `sumM`, `sumK`, the `idx_*` maps, `X_psi`, `X_theta`) is built
+        from the *sorted* `data_info`, but `y` keeps the caller's row
+        order, so any input not already sorted by Site/Sample/Primer
+        silently attaches each row of reads to the wrong site/sample.
+        Data from `simulateOccJSDMData()` arrives already sorted, which
+        is why the vignettes never hit this. Fix: compute the
+        permutation once (`ord <- order(Site, Sample, Primer)`) and
+        apply it to `y`/`OTU` as well -- or refuse to sort and error if
+        the input is unsorted.
+
+    2.  **Collection covariates are grouped by `Sample` alone.**
+        `process_covariates(data_info, collCovariates, "Sample", N, ...)`
+        at `R/runOccJSDM.R:673` does `group_by(Sample) %>% summarise()`,
+        giving one row per *distinct* `Sample` value, sorted by
+        `Sample`. But `X_theta` is indexed by the `sumM[i] + m`
+        (Site-then-Sample) ordering. If `Sample` ids are only unique
+        within a site (e.g. each site numbered `1:M`), rows collapse and
+        `X_theta` has fewer than `N` rows; if they are globally unique
+        but not ordered consistently with `Site`, the rows are permuted
+        against `theta`. Fix: group by `c("Site", "Sample")`, matching
+        the `M_df` construction at `R/runOccJSDM.R:564-569`.
+
+    3.  **`sample_pq_cpp()`'s catch-all `else` inflates the Stage 2 FP
+        counts.** `src/functions.cpp:652-668`. The R reference version
+        (`sample_pq()`, `R/mcmcfun.R:160-189`) counts the four cases
+        independently, each gated on `primerIdx == l`. The C++ version's
+        final `else` catches every replicate that fails the first three
+        tests -- including all replicates belonging to *other* primers
+        -- and adds them to `w0_primerl_cases_0`, the "w = 0, no false
+        positive" count. With `P = 1` the four cases happen to be
+        exhaustive, so it is accidentally correct; with `P > 1` the Beta
+        posterior for `q` picks up roughly `(P-1) * N3` spurious
+        pseudo-counts per primer and every Stage 2 false-positive rate
+        is biased toward zero. Fix: count the four cases independently,
+        as in the R version.
+
+    4.  **WAIC running means divide by the raw iteration counter.**
+        `update_waic_summary(logliks, list_waic, iter)` is called with
+        `iter`, the loop counter *including burn-in*
+        (`R/runOccJSDM.R:1181`, `:1186`, `:1193`), and uses it as the
+        Welford sample count (`R/mcmcfun.R:570`, `:576`), while
+        `compute_waic()` divides `M2` by `niter * nchain`. Three
+        separate errors follow: the first stored draw is weighted
+        `1/(nburn+1)` instead of `1/1`; with `nthin > 1` the counter
+        advances `nthin` times faster than draws accumulate; and `iter`
+        restarts at 1 for chain 2 while the accumulator carries over.
+        The reported `WAIC` -- and so the model comparison in
+        `vignettes/occJSDM.Rmd` -- is wrong. Fix: keep a separate
+        counter incremented once per *stored* draw, running
+        `1:(niter * nchain)` across all chains.
+
+    5.  **`sampleBuniv()` drops the residual precision (operator
+        precedence).** `src/jsdm.cpp:579`:
+        `tX * X * (1 / sigma*sigma)` parses as `(1/sigma) * sigma`,
+        i.e. exactly `1`, so the likelihood is weighted with precision 1
+        rather than `1/sigma^2`; the mean term `tX * y` is not scaled
+        either. `sampleBuniv()` is the sampler for the trait-response
+        coefficients `G`/`C` (`sample_GC()`) and the unobserved traits
+        `A` (`sample_A()`), so `sigma_b` currently has no effect on any
+        of them. Fix: `1.0 / (sigma * sigma)`, applied consistently to
+        both terms.
+
+    6.  **Non-thread-safe RNG inside the OpenMP loops.**
+        `src/Makevars` enables OpenMP, and both
+        `samplePGvariables()` (`src/jsdm.cpp:398`) and
+        `sample_betatheta_cpp_parallel()` (`src/functions.cpp:600`) are
+        `#pragma omp parallel for`. The work they dispatch calls R's
+        RNG: `randinvg()` uses `R::rnorm` and `mvrnormArmaQuick()` uses
+        `arma::randn`, which RcppArmadillo routes to R's RNG. R's RNG
+        state is global and not thread-safe, so wherever OpenMP is
+        actually active -- Linux and Windows/Rtools, but *not* stock
+        macOS clang, which is presumably why this has not shown up
+        locally -- these loops race. The thread-safe path looks
+        half-finished: `mvrnormArmaQuick_TS()` exists, but
+        `sample_beta_nocov_cpp_TS()` (`src/functions.cpp:301-309`)
+        calls the *non*-TS `sample_beta_cpp()`, so it is never reached.
+        Note `samplePGvariables()` is the hottest kernel in the sampler,
+        so this is worth fixing properly (thread-local RNG throughout)
+        rather than by disabling OpenMP.
+
+    7.  **`Bs <- list_params$B` in `update_jSDMcoef()`.**
+        `R/jsdmfun.R:940` -- should be `list_params$Bs`. Consequence:
+        `ps <- ncol(Bs)` at `R/jsdmfun.R:971` evaluates to `S` rather
+        than the number of spatial support points, so every
+        `if (ps > 0)` spatial branch runs unconditionally, even for
+        models with no spatial field. The inner guards keep most of them
+        no-ops, but `sigma_bs` is redrawn from its prior every iteration
+        in non-spatial models.
+
+    8.  **`sigma_bs` is sampled but never used.** `sample_BBsL()` takes
+        `sigma_bs` as an argument and never references it; the spatial
+        block of the prior covariance is left at `diag(1)`
+        (`R/jsdmfun.R:711-713`, cf. the `sigma_b^2` line immediately
+        above it). So the spatial coefficients' prior variance is
+        hard-coded to 1, and `sigmabs_output` reports a posterior for a
+        parameter that does not enter the model.
+
+    9.  **The GP length-scale is never updated.** The `sample_ls()` call
+        in `update_jSDMcoef()` is wrapped in `if(F){...}`
+        (`R/jsdmfun.R:1063`), so `idx_ls` stays at its hard-coded
+        starting value of 3 for the entire run -- `l_s` is fixed at
+        `l_s_grid[3]` (about 0.074 on the standardised coordinate
+        scale) and `idx_ls_output` is a constant. Either re-enable it
+        (`sample_ls()` also needs fixing: it references a global `S`,
+        and is called with `Bs` where the signature expects `SE`) or
+        document that the spatial range is fixed and expose it as an
+        argument.
+
+    10. **`useBiotic` is ignored in `computeNewOutputs()`.**
+        `src/jsdm.cpp:501` tests `useEnvCov` a second time where it
+        should test `useBiotic`, so the latent-factor term is included
+        exactly when the environmental term is.
+        `predictNewSites(useEnvCov = FALSE, useBiotic = TRUE)` silently
+        drops the factor term, and `useEnvCov = TRUE, useBiotic = FALSE`
+        silently keeps it.
+
+    11. **`simulateData()` adds the spatial field *after* the responses
+        are drawn.** `R/jsdmfun.R:429-455` draw `z` from `eta`; only
+        then, at `:457-461`, is `eta <- eta + spatField` applied. With
+        `useSpatField = TRUE` the returned data therefore contain no
+        spatial autocorrelation at all, while `trueParams$eta` and
+        `trueParams$varPart` report as though they do. This makes the
+        `useSpatField` sections of
+        `vignettes/simulateOccJSDMData.Rmd` misleading and would defeat
+        any test that tries to recover a simulated spatial signal.
+
+    12. **`transformCovariatesMatrix()` never applies the stored factor
+        levels.** `R/runOccJSDM.R:38` does
+        `levels(df[,col]) <- cat_levels[[col]]`, but `df[,col]` on a
+        tibble/data.frame is a one-column *data frame*, so `levels<-`
+        attaches a stray attribute instead of re-levelling the column
+        (it needs `df[[col]]`). Model fitting is unaffected (the column
+        is already a factor), but re-levelling new data is the entire
+        purpose of this code path: new data missing a level, or with
+        levels in a different order, yields a design matrix whose
+        columns do not match the fitted coefficients. Affects
+        `predictNewSites()` and `createSpatialPredMatrix()`.
+
+    13. **`listPriors$prior_beta_psi` / `prior_beta_psi_sd` have no
+        effect.** Read at `R/runOccJSDM.R:738-739` and documented under
+        `@param listPriors`, but the only consumers
+        (`sample_betapsiLL()`, `sample_LL()`, `sample_betapsis()` in
+        `R/mcmcfun.R`) are no longer called -- the live path is
+        `update_jSDMcoef()` -> `sample_BBsL()`, which hard-codes the
+        occupancy prior. Either wire them through or drop them from the
+        docs. (Also, `ifelse()` is the wrong idiom for these scalar
+        defaults: it silently truncates a vector-valued prior to its
+        first element. `get_param()` is already available.)
+
+    14. **`sigma_h` is never sampled.** Initialised to 1
+        (`R/runOccJSDM.R:1009`) and passed through `update_jSDMcoef()`
+        unchanged, so `sigmah_output` is constant.
+        `predictNewSites()` uses it as the factor-score SD when
+        simulating `U` at new sites (`src/jsdm.cpp:487`), so
+        predictions silently assume unit factor variance.
+
+    15. **`tau_output` is returned entirely `NA`.**
+        `tau_output_chain` is allocated (`R/runOccJSDM.R:934`) and
+        copied out (`:1236`), but never written inside the sampling
+        loop -- the save block at `:1157-1176` stores every other JSDM
+        parameter except `tau`.
+
+    **B. Crashes, unreachable code paths, and API bugs**
+
+    1.  **`summarisedLatentPresences = FALSE` errors on two-stage
+        models.** The `w_output_mean` accumulation at
+        `R/runOccJSDM.R:1152` is unconditional, but `w_output_mean` is
+        only created in the `summarisedLatentPresences = TRUE` branch
+        (`:861`), so the first stored iteration fails with
+        `object 'w_output_mean' not found`. Relatedly,
+        `w_output_chain` (`:913`) and `theta_output_chain` (`:905`) are
+        allocated and never written, and `results_output$w_output` is
+        set unconditionally from `w_output_mean` (`:1317`), so the full
+        `w` samples would be discarded even once the crash is fixed.
+
+    2.  **`thinOutput()` cannot run at all.** `R/output.R:21` reads
+        `niter` from `results_output$beta_ord_output`, an array that no
+        longer exists, so `seq(1, NULL, by = 5)` errors immediately. The
+        `thin` argument is also ignored (`by = 5` is hard-coded), and
+        the non-`z_output` branch thins any 2-D element *by row* --
+        which would silently drop sites from the `psi_output` /
+        `w_output` / `theta_output` posterior-mean matrices -- while
+        the scalar `WAIC` falls through to
+        `print("Dimension not recognised")` and becomes `NULL`. Worth
+        fixing properly, since post-hoc thinning is the intended route
+        to shrinking the 62 MB `data/sampleresults.rda`.
+
+    3.  **`spatCovariates` is assumed to be exactly two columns, and
+        never checked.** The GP kernel `k2_cpp()`
+        (`src/jsdm.cpp:372-375`) and the support-point distance in
+        `computeSpatialSummaries()` both read only the first two
+        coordinates. Three or more spatial covariates are silently
+        ignored past the second; a single one reads `x1[1]` off the end
+        of the row (undefined behaviour -- Armadillo does not
+        bounds-check in release builds). Add an explicit
+        `length(spatCovariates) == 2` check in `runOccJSDM()`.
+
+    4.  **`computeDiagnostics()` runs on `psi_output`.**
+        `R/diagnostics.R:403-404` skips `z_output` / `w_output` /
+        `theta_output` / `idx_ls_output` / `varPart_output`, but not
+        `psi_output`. Under the default
+        `summarisedLatentPresences = TRUE`, `psi_output` is an `n x S`
+        matrix of posterior means, which
+        `array(arr, dim = c(1, niter, nchain))` (`:422`) silently
+        recycles or truncates into meaningless "psi" R-hat and ESS
+        values printed at the end of every fit. Add `psi_output` to the
+        skip list.
+
+    5.  **`predictNewSites()` does not honour its documented no-op
+        behaviour.** The docs say `useEnvCov` / `useSpatial` are
+        "ignored ... if no [covariates / spatial field] were
+        estimated", but `R/output.R:1457` and `:1470` branch on the flag
+        alone. With the defaults (`TRUE`), a JSDM fit with no occupancy
+        covariates calls `transformCovariatesMatrix(X_psi, NULL, ...)`,
+        and a fit with no spatial field calls
+        `createSpatialPredMatrix()` with an empty `X_tilde`. `X_psi` and
+        `X_s` also lack defaults, so `predictNewSites(fit, X_psi = X)`
+        fails on the missing `X_s` promise even when
+        `useSpatial = FALSE`; give both `NULL` defaults.
+
+    6.  **`returnLatentPresences()` is two-stage only.**
+        `R/output.R:1709` and `:1715-1719` index
+        `data_info[, c("Site","Sample","Primer")]` and
+        `list_idx$idx_z_k` / `idx_w_k` / `idx_p_k`, all of which are
+        absent or `NULL` for one-stage occupancy and JSDM-only fits.
+        Either support those models or `stop()` with a clear message, as
+        `plotDetectionRates()` and
+        `plotCumulativeSpeciesDetections()` already do.
+
+    7.  **`set.seed(1)` inside `computeSpeciesDetected()`.**
+        `R/output.R:2222` resets the user's global RNG stream as a side
+        effect of drawing a plot. Save and restore `.Random.seed`
+        instead (or use `withr::with_seed()`).
+
+    8.  **`computeSpeciesDetected()` uses the first 200 draws, not a
+        posterior sample.** `R/output.R:2206-2207` flatten the chains
+        and then index `b = 1:200`, which is iterations 1-200 of chain 1
+        only -- the most autocorrelated draws in the run, ignoring chain
+        2 entirely. It is also unguarded: fewer than 200 stored draws is
+        a subscript error. Fix: draw `B` indices at random from
+        `seq_len(niter * nchain)`.
+
+    9.  **Species-ordering bug shared by four plotting functions.**
+        `plotOccupancyRates()` (`R/output.R:513-516`),
+        `plotCollectionRates()` (`:701`),
+        `plotFPTPStage2Rates()` (`:789`) and
+        `plotStage1FPRates()` (`:949-952`) each compute `order()` on the
+        *filtered* `data_plot` and then use the result to index the
+        *unfiltered* `speciesNames`. For any `idx_species` other than a
+        prefix `1:k`, the factor levels name the wrong species and the
+        bars silently disappear. `plotCollectionRates()` also accepts
+        `idx_species` and never uses it -- the filter is commented out
+        at `:698`.
+
+    10. **`plotFPTPStage2Rates()` still ignores `primerName`.**
+        `R/output.R:767` and `:775` use `apply(p_output, 2, ...)`, which
+        pools over primer, iteration and chain, so the plot is identical
+        whatever `primerName` is passed. The
+        `idx_speciesprimer <- str_match(...)` line at `:784` is dead
+        code. (Previously noted in `AGENTS.md`; recorded here so it is
+        tracked as a to-do.)
+
+    11. **Assorted smaller items.**
+        (a) `createDataIdx()` is called with `maxP`
+        (`R/runOccJSDM.R:638`) for `model = "occupancy"` too, where
+        `maxP` was never assigned -- it survives only because R's lazy
+        evaluation never forces the promise; pass `NULL` explicitly.
+        (b) `c_imk <- as.numeric(y > 0)` (`:963`) drops the matrix
+        dimensions, harmless only because `c_imk` is overwritten at
+        `:1104` before first use.
+        (c) `d <- get_param(listParams, "n_factors")` defaults to 0, and
+        the cap at `:716` uses `ncol(OTU)`, which is `NULL` for a
+        single-species vector `OTU` -- `if (d > NULL)` errors.
+        (d) `reparamFactorModel(A_output, C_output)` (`:1273`) assumes
+        `qr.Q()` is square; when `ncov_psi < gt` it is not, and
+        `diag(diag(R_current), nrow = d)` recycles.
+        (e) The spatial-covariate numeric check at `:540` runs *before*
+        the "names present in `data$info`" check at `:544`, so a
+        mistyped spatial covariate name gives
+        `undefined columns selected` rather than the intended message.
+        (f) `simulateOccJSDMData()`'s `@details` still says "For
+        two-stage eDNA data specifically, use `simulateOccJSDMData()`"
+        -- a self-reference left over from the merge of
+        `simulateOccJSDMDataGeneral()`.
+        (g) `computeSpeciesDetected()`'s roxygen still documents the
+        removed Beta-approximation signature (`ab_p`, `K`, `primer`,
+        `alpha`) instead of its actual arguments.
+
+    **C. Dead and broken internal code**
+
+    None of this is reachable from an exported function, but it will
+    draw `R CMD check` "no visible binding" notes and is a trap for
+    anyone reading the source. Suggest moving the genuinely dead
+    functions to `deprecated/` and wiring up the two missing imports.
+
+    1.  `R/mcmcfun.R`: `sample_z()`, `sample_w()` and `sample_cimk()`
+        reference undeclared globals (`M`, `sumM`, `n`, `z`, `w`, `y`);
+        `loglik_sigma1()` (`:547`) is an unfinished stub whose entire
+        body is `p[primerIdx[]]`. All are superseded by the `_cpp`
+        versions.
+
+    2.  `R/jsdmfun.R`: `sample_BCsL()` references undefined `U` / `gt` /
+        `gts`; `sample_U()`, `sample_Br()` and `sample_BL_fixed()`
+        reference globals `S` / `U` / `n`; `computePredictiveProbs()`
+        references `fitModel`, `psi_output`, `X_ord` and
+        `beta_ord_output`, none of which exist; `partition_r2()` calls
+        `pseudo_R2()` with one argument (it takes two);
+        `returnSpatialEffectMean()` and `plotSpatialEffect()` reference
+        a global `Xs_centers` and a nonexistent `returnSpatialEffect()`.
+
+    3.  `R/output.R`: `plotReadIntensity()` reads
+        `results_output$mu1_output` / `mu0_output` / `sigma1_output` /
+        `sigma0_output` and `infos$maxexplogy1`, none of which
+        `runOccJSDM()` produces any more; `plotOccupancyStates()`
+        references undefined `data_info` / `OTU`.
+
+    4.  **Missing imports for code that *is* live**:
+        `plotCovariateTrend()` (`R/jsdmfun.R:1552`) calls
+        `pivot_longer()` and `createSplinesObjects()` (`:245`) calls
+        `ns()`, but neither `tidyr` nor `splines` is imported in
+        `NAMESPACE`. (`createSplinesObjects()` also ignores its own
+        `df` argument and hard-codes `df = 5`.)
+
+    **D. Performance of `runOccJSDM()`**
+
+    Ordered by expected speedup per unit of effort. Nothing here has
+    been profiled -- worth running `profvis::profvis()` on a vignette-
+    sized fit first to confirm where the time actually goes.
+
+    1.  **Parallelise over chains.** The `for (chain in 1:nchain)` loop
+        (`R/runOccJSDM.R:895`) is serial and embarrassingly parallel;
+        each chain touches only its own `*_output_chain` arrays. Moving
+        it to `parallel::mclapply()` (or `future.apply`) gives close to
+        an `nchain`-fold speedup for free. Note this interacts with bug
+        A.6 -- separate *processes* sidestep the RNG thread-safety
+        problem entirely, and are the safer option. The WAIC
+        accumulators are the one piece of shared state and would need
+        to be returned per chain and combined afterwards (which the fix
+        for A.4 makes natural anyway).
+
+    2.  **Stop computing variance partitioning every iteration.**
+        `computeVariancePartitioning_stdevs()` is called from inside
+        `update_jSDMcoef()` (`R/jsdmfun.R:1083`) on every single
+        iteration, including all of burn-in, and each call does seven
+        `SD()` evaluations, each of which is
+        `apply(logistic(eta), 2, sd)` over an `n x S` matrix. It is only
+        ever consumed at stored iterations
+        (`R/runOccJSDM.R:1174`). Move it out of `update_jSDMcoef()` and
+        compute it in `runOccJSDM()` only when
+        `iter > nburn & (iter - nburn) %% nthin == 0`: a 50% reduction
+        in these calls at the vignette's settings, 95% at
+        `nthin = 10`. While there, replace `apply(X, 2, sd)` with a
+        vectorised column-SD.
+
+    3.  **`computePsiCoef()` is called three times per iteration.**
+        `R/jsdmfun.R:984`, `:1052` and `:1074`. Each call recomputes
+        `t(computeBtcoef(...))`, `X %*% B` (`n x p` by `p x S`),
+        `KsBproduct()` and `H %*% L`. The second call exists only to
+        refresh `XB`/`SE` before `sample_U_cpp()`, but neither depends
+        on `U`, so they are unchanged from the first call; and the
+        third differs from the second only in the updated `U`. Call it
+        once at the top, reuse `XB`/`SE`, then recompute just
+        `UL <- U %*% L` and `eta <- XB + SE + UL` at the end -- roughly
+        a two-thirds saving on this block.
+
+    4.  **Hoist loop-invariant work out of the per-species loop in
+        `sample_BBsL()`.** `XU <- cbind(1, X, U)`, `B_current` and
+        `invB_current` (`R/jsdmfun.R:709-713`) are identical for all
+        `S` species but are rebuilt inside the loop, allocating `S`
+        copies of an `n x (1 + p + d)` matrix per iteration. Only the
+        `sigma_b^2` diagonal depends on anything that varies, and
+        `sigma_b` is fixed within a call.
+
+    5.  **Precompute the constant parts of the `c_imk` update.**
+        `R/runOccJSDM.R:1104` recomputes `y > 0` (an `N3 x S` logical)
+        every iteration although `y` never changes; and
+        `w_all <- w[idx_w_k, , drop = FALSE]` (`:1100`) materialises a
+        second `N3 x S` copy. Hoist `y_pos <- (y > 0)` above the chain
+        loop, and consider folding the `w_all` gather into
+        `sample_pq_cpp()` so the copy never reaches R.
+
+    6.  **Make the WAIC accumulation optional, and cheaper.** The three
+        `computeModelLoglik*_cpp()` calls evaluate `R::dbinom` over
+        `n*S + N*S + N3*S` elements at every stored iteration. For
+        binary data `dbinom(y, 1, p, log = TRUE)` is just
+        `y*log(p) + (1-y)*log(1-p)`, several times faster than the
+        general call, and `log(p)` / `log(1-p)` can be tabulated once
+        per iteration (`sample_w_cim_cipp()` already does exactly this
+        at `src/functions.cpp:458-469`). Also add a
+        `computeWAIC = TRUE/FALSE` argument for users who are not doing
+        model comparison.
+
+    7.  **Vectorise the starting-value loops.**
+        `R/runOccJSDM.R:946-961` and `:974-981` are triple-nested R
+        loops over `S x n x M` to initialise `w` and `z`. Negligible on
+        the vignette dataset, slow for realistic `S`. Both reduce to
+        grouped "any positive" reductions:
+        `w` from `rowsum(y > 0, idx_w_k) > 0`, `z` from
+        `rowsum(w, idx_z_w) > 0`.
+
+    8.  **Do not allocate posterior arrays that are never filled.**
+        With `summarisedLatentPresences = FALSE`, `w_output`
+        (`N x S x niter x nchain`) is allocated and never written, as
+        are `w_output_chain` and `theta_output_chain` (see B.1). More
+        generally, `Bs_output` (`ps x S x niter x nchain`) and
+        `U_output` (`n x d x niter x nchain`) are the two largest
+        components of the 62 MB `sampleresults.rda`; a `keep =`
+        argument selecting which blocks to retain, or storing the
+        latent-factor blocks pre-thinned, would address both the
+        runtime allocation and the CRAN size blocker.
+
+    9.  **Reduce the repeated `arma::inv()` calls in the samplers.**
+        `sample_beta_cpp()` (`src/functions.cpp:249-253`), `sampleB()`
+        and `sampleBuniv()` (`src/jsdm.cpp:579-583`, `:600-604`) each
+        call `arma::inv(B)` twice plus
+        `arma::inv(arma::trimatl(L))`, executed `S` or `n` times per
+        iteration. In every caller `B` is diagonal, so this is a dense
+        general inverse of a diagonal matrix. `sampleB_SoR()`
+        (`src/jsdm.cpp:817-839`) already shows the right pattern: take
+        the precision directly as an argument, and draw via a
+        triangular solve against a standard normal instead of forming
+        the inverse Cholesky factor explicitly.
 
 2.  Doug to dos
 
