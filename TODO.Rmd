@@ -12,9 +12,7 @@ editor_options:
 
 1.  Alex to dos
 
-    1.  Allow for different primers per sample
-
-    2.  fix `simulateOccJSDMData(model = "occupancy")`
+    1.  fix `simulateOccJSDMData(model = "occupancy")`
         (`R/simulateData.R`): its `data_info` construction binds
         `Site = idx_z_k`, `X_psi = X_psi[idx_z_k,]`,
         `Xs = Xs[idx_z_k,]`, but `idx_z_k` is only populated by
@@ -64,26 +62,28 @@ editor_options:
 
 2.  Alex to dos
 
-    1.  Overleaf document for the occJSDM math, which we will add as a
+    1.  Allow for different primers per sample
+
+    2.  Overleaf document for the occJSDM math, which we will add as a
         markdown vignette
 
-    2.  Switch to integrated WAIC (instead of the current conditional
+    3.  Switch to integrated WAIC (instead of the current conditional
         WAIC, which overfits as it happens also in HMSC).
 
-    3.  GAMs for JSDM
+    4.  GAMs for JSDM
 
-    4.  ability to analyse count data
+    5.  ability to analyse count data
 
-    5.  scenario for source-sink inference (sites where env covariate
+    6.  scenario for source-sink inference (sites where env covariate
         coeffcients are negative but spatial covariate coefficients are
         positive), using an explicit source-sink simulation
 
-    6.  remove effect of space on environmental covariates. remove the
+    7.  remove effect of space on environmental covariates. remove the
         effect of unobserved environmental on observed environmental
         covariates and space. thus, adding factors (unobserved env
         covariates) doesn't change the effect of observed env covariates
 
-    7.  **site** variance partitioning to complement the **species**
+    8.  **site** variance partitioning to complement the **species**
         variation partitioning (see Leibold et al., Cai et al.).
         Consider calling it **variation** partitioning.
 
