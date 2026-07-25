@@ -14,21 +14,6 @@ editor_options:
 
     1.  Allow for different primers per sample
 
-    2.  fix `simulateOccJSDMData(model = "occupancy")`
-        (`R/simulateData.R`): its `data_info` construction binds
-        `Site = idx_z_k`, `X_psi = X_psi[idx_z_k,]`,
-        `Xs = Xs[idx_z_k,]`, but `idx_z_k` is only populated by
-        `createDataIdx()` when `twostage = TRUE` -- for
-        `model == "occupancy"` (`twostage = FALSE`), `idx_z_k` is
-        `NULL`, so this errors with
-        `arguments imply differing number of rows: 0, N`. Confirmed
-        live. Fix: use `idx_z_w` (the per-sample site index, populated
-        regardless of `twostage`) instead of `idx_z_k` for the
-        `"occupancy"` branch. Workaround used this session: simulate via
-        `model = "two_stage"` with trivial `P = 1`, `K = rep(1, N)`
-        instead, which routes through the working `idx_z_k`-populated
-        code path and produces an equivalent classical single-PCR-rep
-        occupancy dataset.
 
 2.  Doug to dos
 
