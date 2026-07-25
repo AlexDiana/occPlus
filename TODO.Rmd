@@ -19,10 +19,9 @@ editor_options:
     Alex's `0abb104` ("Fixed bug in simulated data") was merged in
     `0da2e6a`, so they are current as of `e33fc0b`. Note that `0abb104`
     inserted `sample_rnb()` at `R/jsdmfun.R:581`, shifting everything
-    below it in that file by +36 lines relative to `738464c`.
-    Everything below was found by reading the code, not by running the
-    model, so each should be reproduced before it is fixed. Grouped by
-    severity.
+    below it in that file by +36 lines relative to `738464c`. Everything
+    below was found by reading the code, not by running the model, so
+    each should be reproduced before it is fixed. Grouped by severity.
 
     Already fixed by `0abb104`, and so *not* listed below: the
     `simulateOccJSDMData(model = "occupancy")` `idx_z_k` bug -- that
@@ -362,13 +361,12 @@ editor_options:
 
     5.  **`sample_rnb()` cannot run as written** (new in `0abb104`,
         `R/jsdmfun.R:581-614`). Groundwork for the count-data item under
-        *MEE paper*, not yet called from anywhere, but it has a
-        scoping bug that will bite the moment it is wired up:
+        *MEE paper*, not yet called from anywhere, but it has a scoping
+        bug that will bite the moment it is wired up:
         `r_current <- rnb[s]` (`:590`) reads `rnb` inside the `sapply()`
         at `:588` whose result is *being assigned to* `rnb`, so at that
-        point
-        `rnb` does not exist in the function frame and lookup falls
-        through to the namespace and fails with
+        point `rnb` does not exist in the function frame and lookup
+        falls through to the namespace and fails with
         `object 'rnb' not found`. The current size vector needs to come
         in as an argument, e.g.
         `sample_rnb(z, eta, rnb, tune_sd = ...)`. Two more things to
