@@ -354,16 +354,58 @@ editor_options:
     been profiled -- worth running `profvis::profvis()` on a vignette-
     sized fit first to confirm where the time actually goes.
 
-    1.  **Parallelise over chains.** The `for (chain in 1:nchain)` loop
+    1.  **Parallelise over chains -- but use a PSOCK cluster, not
+        `mclapply()`.** The `for (chain in 1:nchain)` loop
         (`R/runOccJSDM.R:895`) is serial and embarrassingly parallel;
-        each chain touches only its own `*_output_chain` arrays. Moving
-        it to `parallel::mclapply()` (or `future.apply`) gives close to
-        an `nchain`-fold speedup for free. Note this interacts with bug
-        A.6 -- separate *processes* sidestep the RNG thread-safety
-        problem entirely, and are the safer option. The WAIC
-        accumulators are the one piece of shared state and would need
-        to be returned per chain and combined afterwards (which the fix
-        for A.4 makes natural anyway).
+        each chain touches only its own `*_output_chain` arrays, so
+        running the chains in separate *processes* gives close to an
+        `nchain`-fold speedup and sidesteps the RNG thread-safety
+        problem in bug A.6 entirely (each process has its own RNG
+        state). Portability constraints, though:
+
+        -   **`parallel::mclapply()` is not an option.** It is
+            fork-based, and R ships a Windows stub whose body is
+            `if (cores > 1L) stop("'mc.cores' > 1 is not supported on
+            Windows")` -- a hard error, not a fallback. That would
+            break the package on Alex's machine and on CRAN's Windows
+            check. Even on Linux/macOS, forking a session with a live
+            threaded-BLAS or OpenMP pool (OpenBLAS on most Linux
+            distros, Accelerate on macOS) is a well-known deadlock
+            source -- and doubly so if A.6 is fixed by *keeping*
+            OpenMP.
+        -   **`parallel::makeCluster()` (PSOCK) + `parLapply()` works
+            on all three platforms**, and
+            `parallel::clusterSetRNGStream()` gives reproducible,
+            independent L'Ecuyer streams per chain, which is strictly
+            better than the current situation. The cost is that
+            workers are fresh R sessions
+            (`clusterEvalQ(cl, library(occJSDM))`, plus serialising
+            the data out and the per-chain arrays back) -- negligible
+            against a multi-minute MCMC, though the return trip is not
+            free given how large `Bs_output`/`U_output` are (see D.9).
+        -   **Make it opt-in**: a `cores = 1L` argument, serial by
+            default, so existing behaviour is unchanged and CRAN's
+            two-core limit for examples/tests/vignettes is respected.
+
+        Structurally this needs the chain body extracted into a
+        function returning its own `*_output_chain` arrays -- mechanical,
+        since the loop already writes only to per-chain objects. The one
+        piece of genuinely shared state is the WAIC accumulator, which
+        currently streams across chains sequentially; parallelising
+        forces one accumulator per chain plus a merge, which is exactly
+        what the fix for bug A.4 requires anyway (`mean_lik` is a plain
+        mean; `M2` merges with the standard parallel-variance formula).
+        The `z_output_mean` / `psi_output_mean` / `w_output_mean` /
+        `theta_output_mean` running means merge by simple addition of
+        the per-chain partials.
+
+    2.  **Drop the `options(mc.cores = ...)` call in `.onLoad()`.**
+        `R/zzz.R` sets a global option at load time, which changes the
+        user's session state and affects every other package that reads
+        `mc.cores` -- CRAN policy is explicitly against this. It should
+        be replaced by the `cores` argument in D.1. (Also
+        `parallel::detectCores()` can return `NA`, which
+        `min(2L, NA)` happily propagates.)
 
     2.  **Stop computing variance partitioning every iteration.**
         `computeVariancePartitioning_stdevs()` is called from inside
