@@ -64,26 +64,24 @@ editor_options:
 
 2.  Alex to dos
 
-    1.  Overleaf document for the occJSDM math, which we will add as a
-        markdown vignette
 
-    2.  Switch to integrated WAIC (instead of the current conditional
+    1.  Switch to integrated WAIC (instead of the current conditional
         WAIC, which overfits as it happens also in HMSC).
 
-    3.  GAMs for JSDM
+    2.  GAMs for JSDM
 
-    4.  ability to analyse count data
+    3.  ability to analyse count data
 
-    5.  scenario for source-sink inference (sites where env covariate
+    4.  scenario for source-sink inference (sites where env covariate
         coeffcients are negative but spatial covariate coefficients are
         positive), using an explicit source-sink simulation
 
-    6.  remove effect of space on environmental covariates. remove the
+    5.  remove effect of space on environmental covariates. remove the
         effect of unobserved environmental on observed environmental
         covariates and space. thus, adding factors (unobserved env
         covariates) doesn't change the effect of observed env covariates
 
-    7.  **site** variance partitioning to complement the **species**
+    6.  **site** variance partitioning to complement the **species**
         variation partitioning (see Leibold et al., Cai et al.).
         Consider calling it **variation** partitioning.
 

@@ -194,9 +194,9 @@ simulateOccJSDMData <- function(list_datasettings,
     )
   } else if(model %in% c("occupancy")){
     data_info <- data.frame(
-      Site = idx_z_k,
-      X_psi = X_psi[idx_z_k,],
-      Xs = Xs[idx_z_k,],
+      Site = idx_z_w,
+      X_psi = X_psi[idx_z_w,],
+      Xs = Xs[idx_z_w,],
       X_theta = X_theta[,-1]
     )
   } else if (model == "two_stage"){

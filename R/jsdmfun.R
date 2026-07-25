@@ -577,6 +577,42 @@ sample_tau <- function(z, eta, a_tau, b_tau){
   tau
 }
 
+# sample size parameter of responses
+sample_rnb <- function(z, eta, tune_sd = 5){
+
+  n <- nrow(z)
+  S <- ncol(z)
+
+  mu <- exp(eta)
+
+  rnb <- sapply(1:S, function(s){
+
+    r_current <- rnb[s]
+
+    r_star <- exp(rnorm(1, mean = log(r_current), sd = tune_sd))
+
+    ll_star <- sum(dnbinom(z[,s], size = r_star, mu = mu[,s], log = TRUE))
+    ll_current <- sum(dnbinom(z[,s], size = r_current, mu = mu[,s], log = TRUE))
+
+    lp_star <- 0#dgamma(r_star, shape = prior_shape, rate = prior_rate, log = TRUE)
+    lp_current <- 0#dgamma(r_current, shape = prior_shape, rate = prior_rate, log = TRUE)
+
+    jacobian <- log(r_star) - log(r_current)
+
+    log_alpha <- (ll_star - ll_current) + (lp_star - lp_current) + jacobian
+
+    # 6. Accept or reject
+    if (log(runif(1)) < log_alpha) {
+      return(r_star)
+    } else {
+      return(r_current)
+    }
+
+  })
+
+  rnb
+}
+
 # sample the fixed effects and the factor loadings
 sample_BCsL <- function(k, X, H, G, Tr,
                       A, C, sigma_b,
