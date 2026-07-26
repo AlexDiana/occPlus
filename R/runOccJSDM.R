@@ -469,6 +469,21 @@ runOccJSDM <- function(data,
       data_info$Sample <- 1:nrow(data_info)
     }
 
+    data_info <- data_info %>%
+      mutate(rownum = row_number())
+
+    if(model == "occupancy"){
+      data_info <- data_info %>%
+        dplyr::arrange(Site, Sample)
+    } else if(model == "two_stage"){
+      data_info <- data_info %>%
+        dplyr::arrange(Site, Sample, Primer)
+
+    }
+
+    OTU <- OTU[data_info$rownum, , drop = FALSE]
+
+    data_info <- data_info %>% select(-rownum)
   }
 
   # read OTU data
@@ -537,6 +552,8 @@ runOccJSDM <- function(data,
     if(is.null(collCovariates)) collCovariates <- c()
     if(is.null(spatCovariates)) spatCovariates <- c()
 
+    if(!(length(spatCovariates) %in% c(0,2))) stop("Two columns needed for the spatial covariates")
+
     if(!all(sapply(data_info[,spatCovariates], is.numeric))) {
       stop("Non numeric columns in spatial covariates")
     }
@@ -549,14 +566,6 @@ runOccJSDM <- function(data,
 
   # clean the data
   {
-    if(model == "occupancy"){
-      data_info <- data_info %>%
-        dplyr::arrange(Site, Sample)
-    } else if(model == "two_stage"){
-      data_info <- data_info %>%
-        dplyr::arrange(Site, Sample, Primer)
-
-    }
 
     # samples per site
     {
@@ -793,8 +802,8 @@ runOccJSDM <- function(data,
       "X" = X_psi,
       "Tr" = Tr)
 
-    a_sigmab <- .01; b_sigmab <- .01
-    a_sigmabs <- .01; b_sigmabs <- .01
+    a_sigmab <- 10; b_sigmab <- 1
+    a_sigmabs <- 10; b_sigmabs <- 1
     a_tau <- 5; b_tau <- 5
     a_l_s <- 1; b_l_s <- 1
 
@@ -822,6 +831,8 @@ runOccJSDM <- function(data,
     if(model %in% "two_stage"){
       list_waic_y <- create_waic_quantities(N3 * S)
     }
+
+    currentWAICiter <- 1
 
   }
 
@@ -1062,7 +1073,6 @@ runOccJSDM <- function(data,
       }
 
       # sample z
-
       if(model %in% c("occupancy","two_stage")){
         z <- sample_z_cpp(w, psi, theta, theta0, M, sumM)
       }
@@ -1077,7 +1087,8 @@ runOccJSDM <- function(data,
           list_priors,
           list_Xs,
           list_SoRSummaries,
-          model = jsdmModel
+          model = jsdmModel,
+          computeVarPart = (iter > nburn & (iter - nburn) %% nthin == 0)
         )
         psi <- list_jSDMparams$psi
         eta <- list_jSDMparams$eta
@@ -1170,6 +1181,7 @@ runOccJSDM <- function(data,
             sigmabs_output_chain[currentIter] <- list_jSDMparams$sigma_bs
             sigmah_output_chain[currentIter] <- list_jSDMparams$sigma_h
             idx_ls_output_chain[currentIter] <- list_jSDMparams$idx_ls
+            if(model == "continuous") tau_output_chain[,currentIter] <- list_jSDMparams$tau
 
             varPart_output_chain[,,currentIter] <-
               as.matrix(list_jSDMparams$variancePartitioning)
@@ -1177,21 +1189,24 @@ runOccJSDM <- function(data,
 
           # update WIAC
           {
+
             loglik_jsdm <- computeModelLoglikJSDM_cpp(z, eta, jsdmModel, tau)
-            list_waic_jsdm <- update_waic_summary(loglik_jsdm, list_waic_jsdm, iter)
+            list_waic_jsdm <- update_waic_summary(loglik_jsdm, list_waic_jsdm, currentWAICiter)
 
             if(model %in% c("occupancy","two_stage")){
               logliks_firststage <- computeModelLoglikFirstStage_cpp(w, z, theta, theta0,
                                                                  list_idx$idx_z_w)
-              list_waic_w <- update_waic_summary(logliks_firststage, list_waic_w, iter)
+              list_waic_w <- update_waic_summary(logliks_firststage, list_waic_w, currentWAICiter)
             }
 
             if(model == "two_stage"){
               logliks_secondstage <- computeModelLoglikSecondStage_cpp(y, w, p, q,
                                                                    list_idx$idx_w_k,
                                                                    list_idx$idx_p_k)
-              list_waic_y <- update_waic_summary(logliks_secondstage, list_waic_y, iter)
+              list_waic_y <- update_waic_summary(logliks_secondstage, list_waic_y, currentWAICiter)
             }
+
+            currentWAICiter <- currentWAICiter + 1
 
           }
 
@@ -1242,6 +1257,7 @@ runOccJSDM <- function(data,
   # compute WAIC
   {
     numIters <- niter * nchain
+    if(numIters != (currentWAICiter-1)) stop("Current wAIC iter wrong")
     WAIC_jsdm <- compute_waic(list_waic_jsdm, numIters)
 
     if(model %in% c("occupancy","two_stage")){

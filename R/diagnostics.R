@@ -400,7 +400,7 @@ computeDiagnostics <- function(results_output){
 
   for (param_name in names(results_output_all)) {
 
-    if(!(param_name %in% c("z_output","w_output",
+    if(!(param_name %in% c("z_output","w_output","psi_output",
                            "theta_output","idx_ls_output","varPart_output"))){
 
       arr <- results_output_all[[param_name]]

@@ -22,6 +22,11 @@ inline double runif() {
   return dist(get_rng());
 }
 
+inline double rnorm() {
+  static thread_local std::normal_distribution<double> dist(0.0, 1.0);
+  return dist(get_rng());
+}
+
 // inline double exprnd(double rate) {
 //   std::exponential_distribution<double> dist(rate);
 //   return dist(get_rng());
@@ -85,7 +90,9 @@ static double truncgamma() {
 
 static double randinvg(double mu) {
   // sampling
-  double u = R::rnorm(0.0,1.0);
+
+  // double u = R::rnorm(0.0,1.0);
+  double u = rnorm();
   double V = u*u;
   double out = mu + 0.5*mu * ( mu*V - (double)std::sqrt(4.0*mu*V + mu*mu * V*V) );
 
@@ -303,7 +310,7 @@ static arma::vec sample_beta_nocov_cpp_TS(arma::vec beta, arma::mat& X, arma::ve
 
   arma::vec Omega = sample_Omega_cpp(X, beta, n);
 
-  beta = sample_beta_cpp(X, B, b, Omega, k);
+  beta = sample_beta_cpp_TS(X, B, b, Omega, k);
 
   return(beta);
 }
@@ -661,7 +668,7 @@ List sample_pq_cpp(NumericMatrix& c_imk,
             w1_primerl_cases_0 += 1;
           } else if(idx_p_k[i] == (l+1) & w(idx_ki, s) == 0 & c_imk(i,s) == 2){
             w0_primerl_cases_1 += 1;
-          } else {
+          } else if(idx_p_k[i] == (l+1) & w(idx_ki, s) == 0 & c_imk(i,s) == 0){
             w0_primerl_cases_0 += 1;
           }
 

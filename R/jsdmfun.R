@@ -419,6 +419,7 @@ simulateData <- function(
     Gs, As, Cs, Bst,
     U, L)
   eta <- list_eta$eta
+  if(useSpatField) eta <- eta + spatField
   XB <- list_eta$XB
   SE <- list_eta$SE
   UL <- list_eta$UL
@@ -456,7 +457,6 @@ simulateData <- function(
 
   varPart <- computeVariancePartitioning_stdevs(XB, SE, UL, model)
   if(useSpatField) {
-    eta <- eta + spatField
     varPart <- computeVariancePartitioning_stdevs(XB, SE + spatField, UL, model)
   }
 
@@ -511,7 +511,7 @@ computePsiCoef <- function(
     X, Ks, Xs_centers, Tr,
     B0, G, A, C, Bt,
     Gs, As, Cs, Bst,
-    P, U, L){
+    U, L){
 
   ps <- ncol(Bst)
 
@@ -531,14 +531,15 @@ computePsiCoef <- function(
     XsBs_prod <- matrix(0, nrow(XB_prod), ncol(XB_prod))
   }
 
-  PUL <- P %*% H %*% L
+  # PUL <- P %*% H %*% L
+  PUL <- U %*% L
 
   eta <- B0_mat + XB_prod + XsBs_prod + PUL
 
   list("eta" = eta,
        "XB" = B0_mat + XB_prod,
        "SE" = XsBs_prod,
-       "UL" = HL)
+       "UL" = PUL)
 
 }
 
@@ -698,6 +699,12 @@ sample_BBsL <- function(k, X, Tr, U,
 
   if(1 + p + ps + d > 0){
 
+    B_current <- diag(1, nrow = 1 + p + d + ps)
+    diag(B_current)[1 + seq_len(p)] <- sigma_b^2
+    diag(B_current)[1 + p + d + seq_len(ps)] <- sigma_bs^2
+
+    invB_current <- diag(1 / diag(B_current), nrow = 1 + p + d + ps)
+
     for (s in 1:S) {
 
       if(model == "continuous"){
@@ -709,10 +716,6 @@ sample_BBsL <- function(k, X, Tr, U,
       XU <- cbind(1, X, U)
 
       b_current <- c(0, M_B[,s], rep(0, d), rep(0, ps))
-      B_current <- diag(1, nrow = 1 + p + d + ps)
-      diag(B_current)[1 + seq_len(p)] <- sigma_b^2
-
-      invB_current <- diag(1 / diag(B_current), nrow = 1 + p + d + ps)
 
       BBsL <- sampleB_SoR(XU, invB_current, b_current, k_current,
                           Omega[,s], Xs_centers, Ks, ps)
@@ -869,6 +872,8 @@ sample_ls <- function(idx_ls, SE, list_SoRSummaries,
 
   if(!is.null(list_SoRSummaries)){
 
+    S <- ncol(SE)
+
     l_s_grid <- list_SoRSummaries$l_s_grid
     ldet_grid <- list_SoRSummaries$logDetKuu_grid
     Lm1_grid <- list_SoRSummaries$Lm1_grid
@@ -920,7 +925,8 @@ update_jSDMcoef <- function(list_data,
                             list_priors,
                             list_Xs,
                             list_SoRSummaries,
-                            model){
+                            model,
+                            computeVarPart){
 
   # read data
   {
@@ -937,7 +943,7 @@ update_jSDMcoef <- function(list_data,
     A <- list_params$A
     C <- list_params$C
     Bt <- list_params$Bt
-    Bs <- list_params$B
+    Bs <- list_params$Bs
     Gs <- list_params$Gs
     As <- list_params$As
     Cs <- list_params$Cs
@@ -1061,7 +1067,7 @@ update_jSDMcoef <- function(list_data,
   # sample spatial field scale
   if(ps > 0){
     if(F){
-      idx_ls <- sample_ls(idx_ls, Bs,
+      idx_ls <- sample_ls(idx_ls, SE,
                           list_SoRSummaries,
                           a_l_s, b_l_s, sigma_s = 1)
       l_s <- l_s_grid[idx_ls]
@@ -1080,7 +1086,11 @@ update_jSDMcoef <- function(list_data,
     XB <- list_psiCoef$XB
     SE <- list_psiCoef$SE
     UL <- list_psiCoef$UL
-    variancePartitioning <- computeVariancePartitioning_stdevs(XB, SE, UL, model)
+    if(computeVarPart) {
+      variancePartitioning <- computeVariancePartitioning_stdevs(XB, SE, UL, model)
+    } else {
+      variancePartitioning <- NULL
+    }
 
     if(model == "continuous"){
       eta <- eta
@@ -1392,14 +1402,23 @@ computeVariancePartitioning_R2 <- function(XB, SE, UL, y, model){
 
 }
 
+fast_sd <- function(X){
+  n <- nrow(X)
+  result <- sqrt(colSums((t(t(X) - colMeans(X)))^2) / (n - 1))
+  result
+}
+
 SD <- function(eta, model) {
 
   if(model == "continuous"){
-    apply(eta, 2, sd)
+    # apply(eta, 2, sd)
+    fast_sd(eta)
   } else if (model == "binary"){
-    apply(logistic(eta), 2, sd)
+    # apply(logistic(eta), 2, sd)
+    fast_sd(logistic(eta))
   } else if (model == "count"){
-    apply(exp(eta), 2, sd)
+    # apply(exp(eta), 2, sd)
+    fast_sd(exp(eta))
   } else {
     stop("Using unavailable model")
   }

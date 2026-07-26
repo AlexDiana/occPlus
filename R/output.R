@@ -18,8 +18,8 @@
 #'
 thinOutput <- function(fitModel, thin = 5){
 
-  niter <- dim(fitModel$results_output$beta_ord_output)[3]
-  idx_thinned <- seq(1, niter, by = 5)
+  niter <- dim(fitModel$results_output$jsdm_output$B0_output)[2]
+  idx_thinned <- seq(1, niter, by = thin)
 
   results_output <- fitModel$results_output
 
@@ -1697,33 +1697,38 @@ computeConditionalSamplePresenceProbs <- function(fitModel){
 #'
 returnLatentPresences <- function(fitModel, idx_species = 1){
 
-  z_mean <- computeConditionalOccupancyProbs(fitModel)
-  w_mean <- computeConditionalSamplePresenceProbs(fitModel)
-  psi_mean <- computePredictiveOccupancyProbs(fitModel)
-  theta_mean <- computeAverageCollectionProbs(fitModel)
+  if(fitModel$infos$model == "two_stage"){
+    z_mean <- computeConditionalOccupancyProbs(fitModel)
+    w_mean <- computeConditionalSamplePresenceProbs(fitModel)
+    psi_mean <- computePredictiveOccupancyProbs(fitModel)
+    theta_mean <- computeAverageCollectionProbs(fitModel)
 
-  p_mean <- apply(fitModel$results_output$p_output, c(1,2), mean)
+    p_mean <- apply(fitModel$results_output$p_output, c(1,2), mean)
 
-  siteNames <- fitModel$infos$siteNames
+    siteNames <- fitModel$infos$siteNames
 
-  df <- fitModel$infos$data_info[,c("Site","Sample","Primer")]
+    df <- fitModel$infos$data_info[,c("Site","Sample","Primer")]
 
-  list_idx <- fitModel$infos$list_idx
+    list_idx <- fitModel$infos$list_idx
 
-  df$OTU <- fitModel$infos$OTU[,idx_species]
+    df$OTU <- fitModel$infos$OTU[,idx_species]
 
-  df$CondOccProb <- z_mean[list_idx$idx_z_k,idx_species]
-  df$CondSampleProb <- w_mean[list_idx$idx_w_k,idx_species]
-  df$PredOccProb<- psi_mean[list_idx$idx_z_k,idx_species]
-  df$CollectionProb <- theta_mean[list_idx$idx_w_k,idx_species]
-  df$DetectionProb <- p_mean[list_idx$idx_p_k,idx_species]
+    df$CondOccProb <- z_mean[list_idx$idx_z_k,idx_species]
+    df$CondSampleProb <- w_mean[list_idx$idx_w_k,idx_species]
+    df$PredOccProb<- psi_mean[list_idx$idx_z_k,idx_species]
+    df$CollectionProb <- theta_mean[list_idx$idx_w_k,idx_species]
+    df$DetectionProb <- p_mean[list_idx$idx_p_k,idx_species]
 
-  data_info <- fitModel$infos$data_info
-  idx_columns <-  which(!(names(data_info) %in% c("Site", "Sample","Primer")))
-  data_info_covariates <- data_info[,idx_columns]
+    data_info <- fitModel$infos$data_info
+    idx_columns <-  which(!(names(data_info) %in% c("Site", "Sample","Primer")))
+    data_info_covariates <- data_info[,idx_columns]
 
-  df <- cbind(df, data_info_covariates)
-  df
+    df <- cbind(df, data_info_covariates)
+    df
+  } else {
+    stop("Only two stage model supported")
+  }
+
 }
 
 
@@ -2209,7 +2214,7 @@ computeSpeciesDetected <- function(beta_theta_output, p_output, M, K, primer, al
   S <- dim(beta_theta_output)[2]
   numPrimers <- dim(p_output)[2]
 
-  B <- 200
+  # B <- min(400, )
 
   if(primer == 0){
     idx_primer <- 1:numPrimers
@@ -2219,15 +2224,12 @@ computeSpeciesDetected <- function(beta_theta_output, p_output, M, K, primer, al
 
   P <- length(idx_primer)
 
-  set.seed(1) # to avoid getting different results everytime
-
   detectionsPerSamplePCR <- array(NA, dim = c(B, M, K))
 
   for (b in 1:B) {
 
     # detections for each species, sample and PCR
     detectionsPerSamplePCRSpecies <- array(0, dim = c(S, M, K))
-
 
     w <- sapply(1:M, function(m){
       sapply(1:S, function(s){

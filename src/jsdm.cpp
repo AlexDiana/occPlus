@@ -498,7 +498,7 @@ arma::cube computeNewOutputs(
         linpred = linpred + Ks * Bs;
       }
 
-      if(useEnvCov){
+      if(useBiotic){
         linpred = linpred + U * L;
       }
 
@@ -571,13 +571,15 @@ arma::vec sampleBuniv(arma::mat& X, arma::mat& B,
                       arma::vec& b, arma::vec& y,
                       double sigma){
 
+  arma::mat invB = arma::inv(B);
+
   // arma::mat cov_matrix = arma::inv(arma::trans(X) * Omega * X + arma::inv(B));
   arma::mat tX = arma::trans(X);
   // arma::mat cov_matrix = arma::inv(tXOmega * X + arma::inv(B));
   // arma::vec result = mvrnormArma(cov_matrix * (arma::trans(X) * k + arma::inv(B) * b), cov_matrix);
 
-  arma::mat L = arma::trans(arma::chol(tX * X * (1 / sigma*sigma) + arma::inv(B)));
-  arma::vec tmp = arma::solve(arma::trimatl(L), tX * y + arma::inv(B) * b);
+  arma::mat L = arma::trans(arma::chol(tX * X * (1 / (sigma*sigma)) + invB));
+  arma::vec tmp = arma::solve(arma::trimatl(L), tX * y / (sigma*sigma) + invB * b);
   arma::vec alpha = arma::solve(arma::trimatu(arma::trans(L)),tmp);
 
   arma::vec result = mvrnormArmaQuick(alpha, arma::trans(arma::inv(arma::trimatl(L))));
