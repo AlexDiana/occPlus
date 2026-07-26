@@ -7,3 +7,4 @@
 ^TODO\.Rmd$
 ^deprecated$
 ^dev$
+^data/.*_highp_highthetabaseline\.rda$
