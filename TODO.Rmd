@@ -30,7 +30,6 @@ editor_options:
 
     **A. Inference-affecting bugs (wrong numbers, silently)**
 
-
     2.  **Collection covariates are grouped by `Sample` alone.**
         `process_covariates(data_info, collCovariates, "Sample", N, ...)`
         at `R/runOccJSDM.R:673` does `group_by(Sample) %>% summarise()`,
@@ -43,7 +42,7 @@ editor_options:
         against `theta`. Fix: group by `c("Site", "Sample")`, matching
         the `M_df` construction at `R/runOccJSDM.R:564-569`.
 
-    9.  **The GP length-scale is never updated.** The `sample_ls()` call
+    3.  **The GP length-scale is never updated.** The `sample_ls()` call
         in `update_jSDMcoef()` is wrapped in `if(F){...}`
         (`R/jsdmfun.R:1063`), so `idx_ls` stays at its hard-coded
         starting value of 3 for the entire run -- `l_s` is fixed at
@@ -54,7 +53,7 @@ editor_options:
         document that the spatial range is fixed and expose it as an
         argument.
 
-    12. **`transformCovariatesMatrix()` never applies the stored factor
+    4.  **`transformCovariatesMatrix()` never applies the stored factor
         levels.** `R/runOccJSDM.R:38` does
         `levels(df[,col]) <- cat_levels[[col]]`, but `df[,col]` on a
         tibble/data.frame is a one-column *data frame*, so `levels<-`
@@ -66,7 +65,7 @@ editor_options:
         columns do not match the fitted coefficients. Affects
         `predictNewSites()` and `createSpatialPredMatrix()`.
 
-    13. **`listPriors$prior_beta_psi` / `prior_beta_psi_sd` have no
+    5.  **`listPriors$prior_beta_psi` / `prior_beta_psi_sd` have no
         effect.** Read at `R/runOccJSDM.R:738-739` and documented under
         `@param listPriors`, but the only consumers
         (`sample_betapsiLL()`, `sample_LL()`, `sample_betapsis()` in
@@ -77,13 +76,12 @@ editor_options:
         defaults: it silently truncates a vector-valued prior to its
         first element. `get_param()` is already available.)
 
-    14. **`sigma_h` is never sampled.** Initialised to 1
+    6.  **`sigma_h` is never sampled.** Initialised to 1
         (`R/runOccJSDM.R:1009`) and passed through `update_jSDMcoef()`
         unchanged, so `sigmah_output` is constant. `predictNewSites()`
         uses it as the factor-score SD when simulating `U` at new sites
         (`src/jsdm.cpp:487`), so predictions silently assume unit factor
         variance.
-
 
     **B. Crashes, unreachable code paths, and API bugs**
 
@@ -110,8 +108,7 @@ editor_options:
         fixing properly, since post-hoc thinning is the intended route
         to shrinking the 62 MB `data/sampleresults.rda`.
 
-
-    4.  **`computeDiagnostics()` runs on `psi_output`.**
+    3.  **`computeDiagnostics()` runs on `psi_output`.**
         `R/diagnostics.R:403-404` skips `z_output` / `w_output` /
         `theta_output` / `idx_ls_output` / `varPart_output`, but not
         `psi_output`. Under the default
@@ -122,7 +119,7 @@ editor_options:
         values printed at the end of every fit. Add `psi_output` to the
         skip list.
 
-    5.  **`predictNewSites()` does not honour its documented no-op
+    4.  **`predictNewSites()` does not honour its documented no-op
         behaviour.** The docs say `useEnvCov` / `useSpatial` are
         "ignored ... if no [covariates / spatial field] were estimated",
         but `R/output.R:1457` and `:1470` branch on the flag alone. With
@@ -134,13 +131,12 @@ editor_options:
         promise even when `useSpatial = FALSE`; give both `NULL`
         defaults.
 
-
-    7.  **`set.seed(1)` inside `computeSpeciesDetected()`.**
+    5.  **`set.seed(1)` inside `computeSpeciesDetected()`.**
         `R/output.R:2222` resets the user's global RNG stream as a side
         effect of drawing a plot. Save and restore `.Random.seed`
         instead (or use `withr::with_seed()`).
 
-    8.  **`computeSpeciesDetected()` uses the first 200 draws, not a
+    6.  **`computeSpeciesDetected()` uses the first 200 draws, not a
         posterior sample.** `R/output.R:2206-2207` flatten the chains
         and then index `b = 1:200`, which is iterations 1-200 of chain 1
         only -- the most autocorrelated draws in the run, ignoring chain
@@ -148,7 +144,7 @@ editor_options:
         a subscript error. Fix: draw `B` indices at random from
         `seq_len(niter * nchain)`.
 
-    9.  **Species-ordering bug shared by four plotting functions.**
+    7.  **Species-ordering bug shared by four plotting functions.**
         `plotOccupancyRates()` (`R/output.R:513-516`),
         `plotCollectionRates()` (`:701`), `plotFPTPStage2Rates()`
         (`:789`) and `plotStage1FPRates()` (`:949-952`) each compute
@@ -159,7 +155,7 @@ editor_options:
         also accepts `idx_species` and never uses it -- the filter is
         commented out at `:698`.
 
-    10. **`plotFPTPStage2Rates()` still ignores `primerName`.**
+    8.  **`plotFPTPStage2Rates()` still ignores `primerName`.**
         `R/output.R:767` and `:775` use `apply(p_output, 2, ...)`, which
         pools over primer, iteration and chain, so the plot is identical
         whatever `primerName` is passed. The
@@ -167,7 +163,7 @@ editor_options:
         code. (Previously noted in `AGENTS.md`; recorded here so it is
         tracked as a to-do.)
 
-    11. **Assorted smaller items.**
+    9.  **Assorted smaller items.**
 
         (a) `createDataIdx()` is called with `maxP`
             (`R/runOccJSDM.R:638`) for `model = "occupancy"` too, where
@@ -312,8 +308,7 @@ editor_options:
         `parallel::detectCores()` can return `NA`, which `min(2L, NA)`
         happily propagates.)
 
-
-    4.  **`computePsiCoef()` is called three times per iteration.**
+    3.  **`computePsiCoef()` is called three times per iteration.**
         `R/jsdmfun.R:984`, `:1052` and `:1074`. Each call recomputes
         `t(computeBtcoef(...))`, `X %*% B` (`n x p` by `p x S`),
         `KsBproduct()` and `H %*% L`. The second call exists only to
@@ -324,7 +319,7 @@ editor_options:
         and `eta <- XB + SE + UL` at the end -- roughly a two-thirds
         saving on this block.
 
-    6.  **Precompute the constant parts of the `c_imk` update.**
+    4.  **Precompute the constant parts of the `c_imk` update.**
         `R/runOccJSDM.R:1104` recomputes `y > 0` (an `N3 x S` logical)
         every iteration although `y` never changes; and
         `w_all <- w[idx_w_k, , drop = FALSE]` (`:1100`) materialises a
@@ -332,7 +327,7 @@ editor_options:
         loop, and consider folding the `w_all` gather into
         `sample_pq_cpp()` so the copy never reaches R.
 
-    7.  **Make the WAIC accumulation optional, and cheaper.** The three
+    5.  **Make the WAIC accumulation optional, and cheaper.** The three
         `computeModelLoglik*_cpp()` calls evaluate `R::dbinom` over
         `n*S + N*S + N3*S` elements at every stored iteration. For
         binary data `dbinom(y, 1, p, log = TRUE)` is just
@@ -343,14 +338,14 @@ editor_options:
         `computeWAIC = TRUE/FALSE` argument for users who are not doing
         model comparison.
 
-    8.  **Vectorise the starting-value loops.** `R/runOccJSDM.R:946-961`
+    6.  **Vectorise the starting-value loops.** `R/runOccJSDM.R:946-961`
         and `:974-981` are triple-nested R loops over `S x n x M` to
         initialise `w` and `z`. Negligible on the vignette dataset, slow
         for realistic `S`. Both reduce to grouped "any positive"
         reductions: `w` from `rowsum(y > 0, idx_w_k) > 0`, `z` from
         `rowsum(w, idx_z_w) > 0`.
 
-    9.  **Do not allocate posterior arrays that are never filled.** With
+    7.  **Do not allocate posterior arrays that are never filled.** With
         `summarisedLatentPresences = FALSE`, `w_output`
         (`N x S x niter x nchain`) is allocated and never written, as
         are `w_output_chain` and `theta_output_chain` (see B.1). More
@@ -361,7 +356,7 @@ editor_options:
         blocks pre-thinned, would address both the runtime allocation
         and the CRAN size blocker.
 
-    10. **Reduce the repeated `arma::inv()` calls in the samplers.**
+    8.  **Reduce the repeated `arma::inv()` calls in the samplers.**
         `sample_beta_cpp()` (`src/functions.cpp:249-253`), `sampleB()`
         and `sampleBuniv()` (`src/jsdm.cpp:579-583`, `:600-604`) each
         call `arma::inv(B)` twice plus `arma::inv(arma::trimatl(L))`,
@@ -423,11 +418,12 @@ editor_options:
         (`useSpatField = TRUE` currently simulates data with *no*
         spatial signal, so any coverage check of the spatial term will
         silently pass against a null case until that bug is fixed); and
+
         (b) some of those bugs (A.4 WAIC, A.5 `sigma_b` having no
-        effect, A.7-9 spatial/GP parameters not updating) will bias
-        recovery in ways this testing is specifically designed to
-        catch, so fixing group A first will make the results more
-        interpretable.
+            effect, A.7-9 spatial/GP parameters not updating) will bias
+            recovery in ways this testing is specifically designed to
+            catch, so fixing group A first will make the results more
+            interpretable.
 
 2.  Alex to dos
 
@@ -455,44 +451,72 @@ editor_options:
 
 1.  Listserv announcement (beta release), drafted July 20 2026:
 
-    > Subject: New R package (beta) — occJSDM, for eDNA occupancy/JSDM
-    > modeling
+    > Subject: New R package (beta) — occJSDM, a combined occupancy and
+    > joint species distribution model
     >
     > Hi all,
     >
-    > Announcing **occJSDM**, an R package for jointly modeling eDNA
-    > metabarcoding data across species
-    > (<https://github.com/AlexDiana/occJSDM>). Note this is **beta
-    > software**, under active development.
+    > Announcing **occJSDM**, an R package for combining occupancy and
+    > joint species distribution modelling
+    > (<https://github.com/AlexDiana/occJSDM>). The package is
+    > \`eDNA-aware' and thus applicable to metabarcoding data.
     >
-    > occJSDM extends the two-stage eDNA occupancy model of Ji et al.
-    > (2025, *Ecology Letters*, <doi:10.1111/ele.70302>) — which
-    > separates field capture from PCR/lab detection error, per species
-    > — by adding a joint species distribution model (JSDM) layer.
+    > Note this is **beta software**, under active development.
+    >
+    > occJSDM extends the occPlus two-stage eDNA occupancy model of Ji
+    > et al. (2025, *Ecology Letters*, <doi:10.1111/ele.70302>) — which
+    > separates field capture from lab detection, per species — by
+    > adding a joint species distribution model (JSDM) layer.
+    >
     > Highlights:
     >
-    > - Models both false negatives and false positives at each
-    >   detection stage (field capture and PCR/lab), per species.
-    > - Integrates occupancy modeling with a full-featured JSDM: species
-    >   fit jointly, with latent-factor residual correlations rather
-    >   than one at a time.
-    > - Supports species traits shaping occupancy responses, and
-    >   optional spatial autocorrelation (GP kernel) across sites.
+    > - Occupancy modelling: Accounts for both false-negative and
+    >   false-positive error at two stages (field and lab), per species.
+    >   Stage 1: estimates species eDNA collection probability in the
+    >   field, given true eDNA presence at the site, and contamination
+    >   probability, given eDNA absence at the site. Stage 2: estimates
+    >   species eDNA detection probability in the lab (i.e. successful
+    >   PCR and sequencing), given eDNA collection, and contamination
+    >   probability, given eDNA non-collection. In datasets where
+    >   multiple primers have been used, each species' detection
+    >   probability is estimated per primer (allowing one to compare
+    >   each primer's efficiency for each species), while species
+    >   occupancies are estimated using information across all primers.
+    >   Both environmental and detection covariates are supported.
+    > - JSDM: Integrates the occupancy model with a full-featured JSDM:
+    >   species fit jointly, with latent-factor residual correlations.
+    >   The JSDM optionally supports species traits shaping occupancy
+    >   responses (trait X env interaction, aka \`fourth-corner
+    >   analyses') and spatial autocorrelation (GP kernel) across sites.
+    > - occJSDM not only fits a full-featured two-stage occupancy model
+    >   (both field and PCR replicates required), but if given simpler
+    >   study designs, can collapse to a classical occupancy model
+    >   (field replicates only) or to a pure JSDM (no replicates).
     > - MCMC fitting with diagnostics, variance partitioning,
-    >   ordination, and residual correlation outputs built in.
+    >   ordination, and pairwise residual correlation outputs built in.
+    > - occJSDM leverages the taxonomic breadth of eDNA datasets by
+    >   using ordination (each site's position on the latent axes, and
+    >   each species' loadings on those axes) to predict species
+    >   occupancies. Thus, each species' predicted occupancy at a site
+    >   is informed by the estimated occupancies of the other species at
+    >   that site, thereby using co-occurrence structure. We also allow
+    >   species to borrow strength from other species sharing similar
+    >   traits, in contrast to the classical approach of having rare
+    >   species \`borrow strength' from abundant species, as is used in
+    >   multi-species occupancy models.
     >
-    > Vignettes included for simulation and model
-    > fitting/interpretation. Feedback (and bug reports) very welcome.
+    > Vignettes included for data simulation and model
+    > fitting/interpretation.
     >
-    > [Your name]
+    > Feedback, feature requests, and bug reports are very welcome.
 
 **Fixed bugs (commit b7b6aa2, 26 July 2026)**
 
 Alex fixed 8 bugs from the static audit (see group A items below).
 
-1.  ~~**`data$info` is re-sorted but `data$OTU` is not.**~~ **FIXED.** The
-    sort permutation is now applied to `y`/`OTU` along with `data_info`.
-    `R/runOccJSDM.R:476-558`.
+1.  ~~**`data$info` is re-sorted but `data$OTU` is not.**~~ **FIXED.**
+    The sort permutation is now applied to `y`/`OTU` along with
+    `data_info`. `R/runOccJSDM.R:476-558`.
 
 2.  ~~**`sample_pq_cpp()`'s catch-all `else` inflates the Stage 2 FP
     counts.**~~ **FIXED.** The C++ version now counts the four cases
@@ -500,8 +524,8 @@ Alex fixed 8 bugs from the static audit (see group A items below).
     version. `src/functions.cpp:652-668`.
 
 3.  ~~**`sampleBuniv()` drops the residual precision (operator
-    precedence).**~~ **FIXED.** The expression now correctly evaluates to
-    `1.0 / (sigma * sigma)`. `src/jsdm.cpp:579`.
+    precedence).**~~ **FIXED.** The expression now correctly evaluates
+    to `1.0 / (sigma * sigma)`. `src/jsdm.cpp:579`.
 
 4.  ~~**`Bs <- list_params$B` in `update_jSDMcoef()`.**~~ **FIXED.** Now
     correctly reads `list_params$Bs`. `R/jsdmfun.R:940`.
@@ -510,13 +534,13 @@ Alex fixed 8 bugs from the static audit (see group A items below).
     block of the prior covariance now correctly uses `sigma_bs^2`.
     `R/jsdmfun.R:711-713`.
 
-6.  ~~**`useBiotic` is ignored in `computeNewOutputs()`.**~~ **FIXED.** Now
-    tests `useBiotic` where it should (in addition to `useEnvCov`).
+6.  ~~**`useBiotic` is ignored in `computeNewOutputs()`.**~~ **FIXED.**
+    Now tests `useBiotic` where it should (in addition to `useEnvCov`).
     `src/jsdm.cpp:501`.
 
-7.  ~~**`simulateData()` adds the spatial field *after* the responses are
-    drawn.**~~ **FIXED.** The spatial field is now added before drawing
-    responses. `R/jsdmfun.R:429-461`.
+7.  ~~**`simulateData()` adds the spatial field *after* the responses
+    are drawn.**~~ **FIXED.** The spatial field is now added before
+    drawing responses. `R/jsdmfun.R:429-461`.
 
 8.  ~~**`tau_output` is returned entirely `NA`.**~~ **FIXED.** The `tau`
     parameter is now saved in the MCMC loop. `R/runOccJSDM.R:934-1236`.
