@@ -30,6 +30,25 @@ editor_options:
 
     **A. Inference-affecting bugs (wrong numbers, silently)**
 
+    **Trigger conditions (26 July 2026 follow-up).** None of the 5
+    remaining items below corrupts every fit outright -- each is gated
+    behind a specific feature, and one is inert even when it does run. 5
+    and 6 execute the wrong code path on literally every fit, but 5 has
+    zero practical effect unless a non-default prior is set (traced
+    every consumer of `prior_beta_psi`/`_sd`: none is ever called), and
+    6 has zero effect on the fitted/training data regardless of its
+    value (`sample_U_cpp()`/`sample_U()` hard-code a unit-variance prior
+    for `U` during fitting, independent of `sigma_h` -- verified at
+    `src/jsdm.cpp:612` and `R/jsdmfun.R:825`; `sigma_h` only enters
+    predictions at new sites). 2, 3 and 4 are each gated behind a
+    specific feature (`collCovariates`, `useSpatField`, out-of-sample
+    prediction), and 2 is additionally gated behind a `Sample`-ID
+    convention that this package's own `simulateOccJSDMData()` happens
+    to avoid by construction (`Sample` there is a global running counter
+    already in site-then-sample order, verified via `createDataIdx()`,
+    `R/runOccJSDM.R:117-171`) -- which is exactly why none of these five
+    ever surfaced in the vignettes.
+
     2.  **Collection covariates are grouped by `Sample` alone.**
         `process_covariates(data_info, collCovariates, "Sample", N, ...)`
         at `R/runOccJSDM.R:673` does `group_by(Sample) %>% summarise()`,
@@ -42,6 +61,13 @@ editor_options:
         against `theta`. Fix: group by `c("Site", "Sample")`, matching
         the `M_df` construction at `R/runOccJSDM.R:564-569`.
 
+        **Trigger:** dormant unless `collCovariates` is non-`NULL` --
+        `process_covariates()` only runs the risky `group_by()` branch
+        `if (length(covariates) > 0)` (`R/runOccJSDM.R:57`). When it
+        does run, whether it actually corrupts anything depends on the
+        `Sample`-ID convention in the input data, not on anything the
+        package controls.
+
     3.  **The GP length-scale is never updated.** The `sample_ls()` call
         in `update_jSDMcoef()` is wrapped in `if(F){...}`
         (`R/jsdmfun.R:1063`), so `idx_ls` stays at its hard-coded
@@ -52,6 +78,11 @@ editor_options:
         and is called with `Bs` where the signature expects `SE`) or
         document that the spatial range is fixed and expose it as an
         argument.
+
+        **Trigger:** dormant unless `useSpatField = TRUE`. When active,
+        severity scales with how far the true spatial range is from the
+        hard-coded grid value -- it fixes the range rather than biasing
+        every fit equally.
 
     4.  **`transformCovariatesMatrix()` never applies the stored factor
         levels.** `R/runOccJSDM.R:38` does
@@ -65,6 +96,12 @@ editor_options:
         columns do not match the fitted coefficients. Affects
         `predictNewSites()` and `createSpatialPredMatrix()`.
 
+        **Trigger:** never affects `runOccJSDM()` itself, confirmed --
+        only manifests via
+        `predictNewSites()`/`createSpatialPredMatrix()` on new data with
+        a categorical covariate missing a level or with levels in a
+        different order than training.
+
     5.  **`listPriors$prior_beta_psi` / `prior_beta_psi_sd` have no
         effect.** Read at `R/runOccJSDM.R:738-739` and documented under
         `@param listPriors`, but the only consumers
@@ -76,12 +113,25 @@ editor_options:
         defaults: it silently truncates a vector-valued prior to its
         first element. `get_param()` is already available.)
 
+        **Trigger:** unconditional -- a 100%-of-the-time no-op on every
+        single fit, regardless of dataset, because the live prior mean
+        (`M_B`, trait-predicted) and variance (`sigma_b^2`, estimated)
+        never touch these variables. Practically invisible unless a user
+        sets a non-default value expecting it to matter.
+
     6.  **`sigma_h` is never sampled.** Initialised to 1
         (`R/runOccJSDM.R:1009`) and passed through `update_jSDMcoef()`
         unchanged, so `sigmah_output` is constant. `predictNewSites()`
         uses it as the factor-score SD when simulating `U` at new sites
         (`src/jsdm.cpp:487`), so predictions silently assume unit factor
         variance.
+
+        **Trigger:** unconditional in the sense that it's always stuck
+        at 1, but inert for the original fit -- `U` at the training
+        sites is sampled under a hard-coded unit-variance prior
+        regardless of `sigma_h` (see above), so this bug is 100% dormant
+        unless `predictNewSites()` is used to extrapolate to new sites
+        with a nonzero number of factors.
 
     **B. Crashes, unreachable code paths, and API bugs**
 
@@ -163,7 +213,16 @@ editor_options:
         code. (Previously noted in `AGENTS.md`; recorded here so it is
         tracked as a to-do.)
 
-    9.  **Assorted smaller items.**
+    9.  **`computeSpeciesDetected()` has undefined variable `B`.**
+        `R/output.R:2217` has a commented-out line `# B <- min(400, )`,
+        but `B` is used unconditionally on line 2227 to allocate the
+        `detectionsPerSamplePCR` array. The bootstrap size should be 200
+        (mentioned in the memory file) or read from the data. Currently
+        causes `plotCumulativeSpeciesDetections()` to error immediately
+        with `object 'B' not found`. Fix: uncomment and complete the
+        assignment, e.g. `B <- 200`.
+
+    10. **Assorted smaller items.**
 
         (a) `createDataIdx()` is called with `maxP`
             (`R/runOccJSDM.R:638`) for `model = "occupancy"` too, where
