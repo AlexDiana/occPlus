@@ -35,7 +35,7 @@ transformCovariatesMatrix <- function(df, list_matrix, remove_intercept){
 
     }else{
 
-      levels(df[,col]) <- cat_levels[[col]]
+      levels(df[[col]]) <- cat_levels[[col]]
 
     }
   }
@@ -364,10 +364,13 @@ create_waic_quantities <- function(n_obs){
 #' computing credible intervals for conditional/predictive occupancy
 #' probabilities but produces a much larger object.
 #' @param listPriors (Optional) list of prior hyperparameters. Currently
-#' supported: \code{prior_beta_psi}/\code{prior_beta_psi_sd} (mean/sd of the
-#' Normal prior on the occupancy intercept, default \code{0}/\code{1}) and
+#' supported: \code{a_p}/\code{b_p} (Beta prior shape parameters for the true
+#' positive lab stage rate,
+#' default \code{10}/\code{1}), \code{a_q}/\code{b_q} (Beta prior shape parameters
+#' for the false positive
+#' lab stage rate, default \code{1}/\code{10})  and
 #' \code{a_theta0}/\code{b_theta0} (Beta prior shape parameters for the
-#' baseline collection probability, default \code{1}/\code{30}).
+#' false positive field stage rate, default \code{1}/\code{30}).
 #'
 #' @return A list with:
 #' \describe{
@@ -585,6 +588,9 @@ runOccJSDM <- function(data,
         N <- sum(M)
 
         sumM <- c(0, cumsum(M)[-n])
+
+        data_info$SiteSample <- paste(data_info$Site,data_info$Sample, sep = "-")
+
       } else {
         n <- nrow(data_info)
         siteNames <- 1:n
@@ -679,8 +685,8 @@ runOccJSDM <- function(data,
     # For collection covariates (group by Sample, includes intercept)
     {
       if(model %in% c("occupancy","two_stage")){
-        list_X_theta <- process_covariates(data_info, collCovariates, "Sample", N,
-                                      remove_intercept = FALSE)
+        list_X_theta <- process_covariates(data_info, collCovariates, "SiteSample",
+                                           N, remove_intercept = FALSE)
         X_theta <- list_X_theta$df
         list_X_theta_mat <- list_X_theta$list_matrix
       } else {
@@ -744,8 +750,6 @@ runOccJSDM <- function(data,
 
   # priors
   {
-    prior_beta_psi <- ifelse(is.null(listPriors$prior_beta_psi), 0,  listPriors$prior_beta_psi)
-    prior_beta_psi_sd <- ifelse(is.null(listPriors$prior_beta_psi_sd), 1, listPriors$prior_beta_psi_sd)
     prior_beta_theta <- 0
     prior_beta_theta_sd <- 1
     a_theta0 <- ifelse(is.null(listPriors$a_theta0), 1, listPriors$a_theta0)
@@ -754,10 +758,6 @@ runOccJSDM <- function(data,
     b_p <- 1
     a_q <- 1
     b_q <- 20
-    a_sigma0 <- 1
-    b_sigma0 <- 5
-    a_sigma1 <- 1
-    b_sigma1 <- 1
 
     if(model %in% c("occupancy","two_stage")){
       b_betatheta <- rep(1, ncov_theta)
@@ -768,10 +768,6 @@ runOccJSDM <- function(data,
     }
 
   }
-
-  # run MCMC
-
-  message("Running MCMC")
 
   # chain parameters
   {
@@ -867,12 +863,7 @@ runOccJSDM <- function(data,
     if(model == "two_stage"){
       p_output <- array(NA, dim = c(maxP, S, niter, nchain))
       q_output <- array(NA, dim = c(maxP, S, niter, nchain))
-
-      if(summarisedLatentPresences){
-        w_output_mean <- matrix(0, N, S)
-      } else {
-        w_output <- array(NA, dim = c(N, S, niter, nchain))
-      }
+      w_output_mean <- matrix(0, N, S)
     } else {
       p_output <- NULL
       q_output <- NULL
@@ -903,6 +894,9 @@ runOccJSDM <- function(data,
 
   }
 
+  # run MCMC
+  message("Running MCMC")
+
   for (chain in 1:nchain) {
 
     # chain output
@@ -920,9 +914,6 @@ runOccJSDM <- function(data,
       if(model == "two_stage"){
         p_output_chain <- array(NA, dim = c(maxP, S, niter))
         q_output_chain <- array(NA, dim = c(maxP, S, niter))
-        if(!summarisedLatentPresences){
-          w_output_chain <- array(NA, dim = c(N, S, niter))
-        }
       }
 
       # jsdm params

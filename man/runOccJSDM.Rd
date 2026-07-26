@@ -78,10 +78,11 @@ computing credible intervals for conditional/predictive occupancy
 probabilities but produces a much larger object.}
 
 \item{listPriors}{(Optional) list of prior hyperparameters. Currently
-supported: \code{prior_beta_psi}/\code{prior_beta_psi_sd} (mean/sd of the
-Normal prior on the occupancy intercept, default \code{0}/\code{1}) and
+supported: \code{a_p}/\code{b_p} (prior on true positive lab stage rate,
+default \code{10}/\code{1}), \code{a_q}/\code{b_q} (prior on false positive
+lab stage rate, default \code{1}/\code{10})  and
 \code{a_theta0}/\code{b_theta0} (Beta prior shape parameters for the
-baseline collection probability, default \code{1}/\code{30}).}
+false positive field stage rate, default \code{1}/\code{30}).}
 }
 \value{
 A list with:

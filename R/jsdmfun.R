@@ -210,9 +210,11 @@ precomputeSORmatrices <- function(l_s_grid, list_Xs){
   logDetKuu_grid <- rep(NA, length_grid_ls)
   Lm1_grid <- array(NA, c(ns, ns, length_grid_ls))
 
-  message("Precomputing covariance matrices")
 
   if(X_centers > 0){
+
+    message("Precomputing spatial covariance matrices")
+
     for (j in 1:length_grid_ls) {
 
       # if(F){
@@ -1066,13 +1068,11 @@ update_jSDMcoef <- function(list_data,
 
   # sample spatial field scale
   if(ps > 0){
-    if(F){
       idx_ls <- sample_ls(idx_ls, SE,
                           list_SoRSummaries,
                           a_l_s, b_l_s, sigma_s = 1)
-      l_s <- l_s_grid[idx_ls]
+      l_s <- list_SoRSummaries$l_s_grid[idx_ls]
       Ks <- list_SoRSummaries$Ks_all[,,idx_ls]
-    }
   }
 
   # output variables

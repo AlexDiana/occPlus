@@ -12,7 +12,6 @@
 #' @return A fitModel object with the same structure as the input, but with
 #' the MCMC output in `results_output` thinned
 #'
-#' @export
 #' @import dplyr
 #' @import ggplot2
 #'
@@ -630,25 +629,31 @@ plotCollectionCovariates <- function(fitModel,
 #'
 #' @noRd
 plotSpeciesRates <- function(data_plot,
-                             orderSpecies,
-                             subset){
+                             idx_species){
 
-  data_plot %>%
-    filter(Species %in% speciesNames[orderSpecies[subset]]) %>%
-    ggplot(aes(x =  factor(Species, level = speciesNames[orderSpecies]),
-               ymin = `2.5%`,
-               ymax = `97.5%`)) + geom_errorbar() +
+  data_plot <- data_plot %>%
+    mutate(speciesOrder = order(Min)) %>%
+    filter(Species %in% speciesNames[idx_species])
+
+  speciesNameOrdered <- speciesNames[order(data_plot$Min)]
+
+  plot_speciesrates <- data_plot %>%
+    ggplot(aes(x =  factor(Species, level = speciesNameOrdered),
+               ymin = Min,
+               ymax = Max)) + geom_errorbar() +
     xlab("Species") +
-    # ylim(c(0,1)) +
-    ggtitle("Collection rates") +
     theme_bw() +
     ylim(c(0,1)) +
+    ylab("") +
     theme(
-      axis.text = element_text(angle = 90,
+      axis.text = element_text(angle = 0,
                                size = 8),
+      axis.title = element_text(size = 12, face = "bold"),
       plot.title = element_text(hjust = .5,
                                 size = 15)
-    )
+    ) + coord_flip()
+
+  plot_speciesrates
 
 }
 
@@ -679,12 +684,13 @@ plotCollectionRates <- function(fitModel,
                                 idx_species = NULL){
 
   S <- fitModel$infos$S
-  ncov_theta <- fitModel$infos$ncov_theta
   speciesNames <- fitModel$infos$speciesNames
 
   if(is.null(idx_species)){
     idx_species <- 1:S
   }
+
+  speciesNames <- speciesNames[idx_species]
 
   samples_subset <- fitModel$results_output$beta_theta_output[1,,,]
   samples_subset <- apply(samples_subset, 1, c)
@@ -693,30 +699,36 @@ plotCollectionRates <- function(fitModel,
     quantile(logistic(x), probs = c(0.025, 0.975))
   }) %>%
     t %>%
-    as.data.frame %>%
-    mutate(Species = speciesNames) #%>%
+    as.data.frame
+
+
+  plotSpeciesRates(data_plot, idx_species )+
+    ggtitle("Collection rates")
+
+
+  # %>%
+  #   mutate(Species = speciesNames) %>%
   # mutate(speciesOrder = order(`2.5%`)) %>%
   # filter(Species %in% speciesNames[idx_species])
-
-  orderSpecies <- order(data_plot$`2.5%`)
-
-  plot_collectionrates <- data_plot %>%
-    ggplot(aes(x =  factor(Species, level = speciesNames[orderSpecies]),
-               ymin = `2.5%`,
-               ymax = `97.5%`)) + geom_errorbar() +
-    xlab("Species") +
-    # ylim(c(0,1)) +
-    ggtitle("Collection rates") +
-    theme_bw() +
-    ylim(c(0,1)) +
-    theme(
-      axis.text = element_text(angle = 0,
-                               size = 8),
-      plot.title = element_text(hjust = .5,
-                                size = 15)
-    ) + coord_flip()
-
-  plot_collectionrates
+  #
+  # orderSpecies <- order(data_plot$`2.5%`)
+  #
+  # plot_collectionrates <- data_plot %>%
+  #   ggplot(aes(x =  factor(Species, level = speciesNames[orderSpecies]),
+  #              ymin = `2.5%`,
+  #              ymax = `97.5%`)) + geom_errorbar() +
+  #   xlab("Species") +
+  #   ggtitle("Collection rates") +
+  #   theme_bw() +
+  #   ylim(c(0,1)) +
+  #   theme(
+  #     axis.text = element_text(angle = 0,
+  #                              size = 8),
+  #     plot.title = element_text(hjust = .5,
+  #                               size = 15)
+  #   ) + coord_flip()
+  #
+  # plot_collectionrates
 
 }
 
@@ -1459,12 +1471,16 @@ predictNewSites <- function(fitModel,
     X_psi <- transformCovariatesMatrix(X_psi, fitModel$infos$list_X_psi_mat, remove_intercept = T)
 
   } else {
+
     X_psi <- matrix(NA, 0, 0)
+
   }
 
   if(useSpatial & isSpatFieldEstimated & is.null(X_s)) {
     stop("No spatial locations present")
   }
+
+  if(useSpatial & !isSpatFieldEstimated) stop("Cannot use spatial if it was not estimated initially")
 
   # create spatial matrix
   if(useSpatial){
@@ -2186,23 +2202,10 @@ plotCumulativeSpeciesDetections <- function(fitModel, M, K, primer = 0, alpha = 
 #' computeSpeciesDetected
 #'
 #' Simulate the number of species detected as a function of the number of
-#' technical replicates (PCRs), given Beta-distributed detection probabilities.
+#' technical replicates (PCRs) and environmental samples.
 #'
 #' @details
-#' Internal helper for `plotCumulativeSpeciesDetections`. For each of `B`
-#' bootstrap replicates, simulates detections for each species across `K`
-#' technical replicates and one or more primers, then summarises the
-#' cumulative number of species detected as a function of the number of
-#' replicates used.
-#'
-#' @param ab_p Array of Beta distribution shape parameters (alpha, beta) of
-#' size (2 x primers x species), as produced in `plotCumulativeSpeciesDetections`
-#' @param K Maximum number of technical replicates (PCRs) to consider
-#' @param primer Index of the primer to use; 0 pools across all primers
-#' @param alpha Confidence level of the credible interval
-#'
-#' @return A matrix of size (2 x K) with the lower and upper bounds of the
-#' credible interval for the number of species detected, for 1 to K replicates
+#' Internal helper for `plotCumulativeSpeciesDetections`.
 #'
 #' @noRd
 computeSpeciesDetected <- function(beta_theta_output, p_output, M, K, primer, alpha){
@@ -2213,8 +2216,10 @@ computeSpeciesDetected <- function(beta_theta_output, p_output, M, K, primer, al
 
   S <- dim(beta_theta_output)[2]
   numPrimers <- dim(p_output)[2]
+  niter <- dim(beta_theta_output)[1]
 
-  # B <- min(400, )
+  idxObs <- unique(floor(seq(1, min(500, niter), length.out = 500)))
+  B <- length(idxObs)
 
   if(primer == 0){
     idx_primer <- 1:numPrimers
@@ -2233,7 +2238,7 @@ computeSpeciesDetected <- function(beta_theta_output, p_output, M, K, primer, al
 
     w <- sapply(1:M, function(m){
       sapply(1:S, function(s){
-        rbinom(1, 1, logistic(beta_theta_output[b,s]))
+        rbinom(1, 1, logistic(beta_theta_output[idxObs[b],s]))
       })
     })
 
@@ -2249,7 +2254,7 @@ computeSpeciesDetected <- function(beta_theta_output, p_output, M, K, primer, al
 
             detectionsPerSamplePCRSpecies[s,m,k] <-
               sum(sapply(1:P, function(p){
-                rbinom(1, 1, p_output[b,p,s])
+                rbinom(1, 1, p_output[idxObs[b],p,s])
               }) > 0)
 
           }
