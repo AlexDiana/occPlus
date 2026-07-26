@@ -181,18 +181,43 @@ editor_options:
         promise even when `useSpatial = FALSE`; give both `NULL`
         defaults.
 
-    5.  **`set.seed(1)` inside `computeSpeciesDetected()`.**
-        `R/output.R:2222` resets the user's global RNG stream as a side
-        effect of drawing a plot. Save and restore `.Random.seed`
-        instead (or use `withr::with_seed()`).
+    5.  ~~**`set.seed(1)` inside `computeSpeciesDetected()`.**~~
+        **FIXED, incidentally, by `b7b6aa2` (26 July 2026).** Previously
+        `R/output.R:2222` reset the user's global RNG stream as a side
+        effect of drawing a plot. `git show b7b6aa2 -- R/output.R`
+        confirms the `set.seed(1)` line was deleted -- not called out in
+        Alex's commit message, caught here only because reconciling
+        items 6/9 below required re-reading this exact function. Worth
+        moving to the "Fixed bugs" section at the end of this document
+        alongside the other `b7b6aa2` fixes.
 
-    6.  **`computeSpeciesDetected()` uses the first 200 draws, not a
-        posterior sample.** `R/output.R:2206-2207` flatten the chains
-        and then index `b = 1:200`, which is iterations 1-200 of chain 1
-        only -- the most autocorrelated draws in the run, ignoring chain
-        2 entirely. It is also unguarded: fewer than 200 stored draws is
-        a subscript error. Fix: draw `B` indices at random from
-        `seq_len(niter * nchain)`.
+    6.  **`computeSpeciesDetected()` crashes: `B` (bootstrap draw count)
+        is referenced but never assigned.** `R/output.R:2217` has a
+        commented-out assignment, `# B <- min(400, )` -- an apparently
+        unfinished edit, changing the bootstrap count from a fixed 200
+        to something capped by the number of stored draws -- but `B` is
+        used unconditionally three lines later
+        (`detectionsPerSamplePCR <- array(NA, dim = c(B, M, K))`) and to
+        drive `for (b in 1:B)`. Currently causes
+        `plotCumulativeSpeciesDetections()` to error immediately with
+        `object 'B' not found`. Fix: complete the assignment (e.g.
+        `B <- min(400, niter * nchain)`).
+
+        **Reconciles what were two separately-tracked bugs.** The 25
+        July audit's original item 6 caught a genuine design flaw in
+        this same code *as it existed then*: `B <- 200` was hard-coded,
+        and `for (b in 1:B)` therefore iterated iterations 1-200 of
+        chain 1 only -- the most autocorrelated draws in the run,
+        ignoring chain 2 entirely, and unguarded against fewer than 200
+        stored draws. Alex's `b7b6aa2` then edited this exact line --
+        apparently mid-fix -- replacing `B <- 200` with the
+        commented-out `# B <- min(400, )`, which turned the bug from
+        "biased but runs" into "always crashes" without fixing the
+        underlying design issue. That original critique still applies to
+        whatever replaces the commented-out line: don't just restore
+        `B <- 200`; draw `B` indices at random from
+        `seq_len(niter * nchain)` across *all* chains, not a fixed
+        prefix of chain 1.
 
     7.  **Species-ordering bug shared by four plotting functions.**
         `plotOccupancyRates()` (`R/output.R:513-516`),
@@ -213,16 +238,7 @@ editor_options:
         code. (Previously noted in `AGENTS.md`; recorded here so it is
         tracked as a to-do.)
 
-    9.  **`computeSpeciesDetected()` has undefined variable `B`.**
-        `R/output.R:2217` has a commented-out line `# B <- min(400, )`,
-        but `B` is used unconditionally on line 2227 to allocate the
-        `detectionsPerSamplePCR` array. The bootstrap size should be 200
-        (mentioned in the memory file) or read from the data. Currently
-        causes `plotCumulativeSpeciesDetections()` to error immediately
-        with `object 'B' not found`. Fix: uncomment and complete the
-        assignment, e.g. `B <- 200`.
-
-    10. **Assorted smaller items.**
+    9.  **Assorted smaller items.**
 
         (a) `createDataIdx()` is called with `maxP`
             (`R/runOccJSDM.R:638`) for `model = "occupancy"` too, where
