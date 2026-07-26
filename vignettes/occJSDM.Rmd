@@ -231,7 +231,8 @@ have good reason, nor is `threshold = 0` allowed.
 ## Model diagnostics
 
 After model fitting, we check that the MCMC chains have converged and
-mixed well. `occJSDM` provides two functions for this:
+mixed well. `occJSDM` reports model diagnostics directly after fitting
+and also provides two functions for this:
 `returnConvergenceDiagnostics()`, which computes summary statistics
 (including `Rhat` and effective sample size) for every parameter, and
 `plotTraceplot()`, which lets us visually inspect mixing for a chosen
@@ -350,7 +351,7 @@ baselineOccupancyRates <- returnOccupancyRates(fitmodel)
 str(baselineOccupancyRates)
 ```
 
-`returnOccupancyRates()` returns an $(niter \times nchain) \times S$
+`returnOccupancyRates()` returns an $niter \times nchain \times S$
 array.
 
 We can also create marginal-effect plots showing predicted occupancy
@@ -766,7 +767,7 @@ Which coefficient array and set of column names to use depends on which
 type of covariate/parameter we want:
 
 | Covariate/parameter | Column names | Coefficient array |
-|----|----|----|
+|------------------------|------------------------|------------------------|
 | `X_psi.*` (occupancy covariates) | `colnames(fitmodel$X_psi)` | `fitmodel$results_output$jsdm_output$B_output` (`beta_psi`) |
 | species intercept | -- (species-only) | `fitmodel$results_output$jsdm_output$B0_output` (`beta0_psi`) |
 | `X_theta.*` (collection covariates) | `colnames(fitmodel$X_theta)` | `fitmodel$results_output$beta_theta_output` (`beta_theta`) |

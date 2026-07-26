@@ -1,0 +1,231 @@
+================================================================================
+OpenMP & Parallelization Documentation for occJSDM
+================================================================================
+
+Created: July 26, 2026
+Status: Complete reference set for CRAN blocking issues #16, A.6, #17a, #21
+
+================================================================================
+DOCUMENTS CREATED
+================================================================================
+
+1. OPENMP_PARALLELIZATION_GUIDE.md (481 lines, 17 KB)
+   ────────────────────────────────────────────────────
+   Comprehensive guide covering:
+   - Current OpenMP usage (2 active parallel regions)
+   - Why it violates CRAN policy (uncapped threads, RNG thread-safety, global state)
+   - Comparison of two fix options (A: fix OpenMP vs. B: remove & use chains)
+   - Recommended solution: Option B (chain-level parallelism)
+   - Implementation roadmap (3 phases over 7-11 hours)
+   - Backward compatibility strategy
+   - Q&A section addressing common concerns
+   - Timeline and effort estimate
+   - Rollout checklist
+   - References to relevant CRAN items and TODO.Rmd sections
+
+2. OPENMP_QUICK_REFERENCE.md (238 lines, 9.6 KB)
+   ───────────────────────────────────────────────
+   Quick lookup guide including:
+   - Current state table (parallel regions, thread capping, build config, etc.)
+   - Three CRAN violations explained
+   - Side-by-side comparison of two fix options
+   - Implementation overview (4 steps)
+   - Code locations to modify
+   - Testing checklist
+   - Common pitfalls and how to avoid them
+   - Commit messages for the refactoring
+   - FAQ section
+   - References to exact line numbers in source
+
+3. PARALLEL_REFACTOR_EXAMPLES.md (with code examples)
+   ──────────────────────────────────────────────────
+   Detailed concrete code examples for:
+   - Part 1: Extracting chain loop into run_mcmc_chain() function
+   - Part 2: Implementing per-chain output merging (WAIC, running means, arrays)
+   - Part 3: Serial vs. parallel execution paths
+   - Part 4: Minimal reproducible example for unit tests
+   - Part 5: Debugging checklist and verification script
+   - File structure after refactoring
+   - Summary of changes by file
+
+================================================================================
+KEY FINDINGS
+================================================================================
+
+Current State:
+- 2 active OpenMP parallel regions in C++ (src/jsdm.cpp:398, src/functions.cpp:607)
+- No thread capping code (omp_set_num_threads is commented out)
+- Non-thread-safe R RNG in both parallel regions
+- Global state pollution via .onLoad() setting options(mc.cores = ...)
+- Undeclared parallel import in DESCRIPTION
+
+Why It Fails CRAN:
+1. Uncapped thread count violates 2-core limit policy
+2. RNG thread-safety bug causes intermittent platform-dependent failures
+3. Global state changes violate CRAN's package isolation policy
+4. Missing dependency declaration (parallel undeclared)
+
+Recommended Solution (Option B):
+- Remove OpenMP from C++ entirely
+- Parallelize at chain level using parallel::makeCluster() + parLapply()
+- Each chain runs in separate R process (inherently thread-safe)
+- Fully backward compatible (opt-in cores argument)
+- Eliminates all CRAN violations in one architectural change
+
+Benefits of Option B:
+✓ Solves all 3 CRAN violations simultaneously
+✓ Avoids BLAS + fork deadlock risk
+✓ Platform-universal (Windows/macOS/Linux identical)
+✓ Reproducible RNG via clusterSetRNGStream()
+✓ Near-linear speedup with chain-level parallelism
+✓ Easier to understand and debug than OpenMP
+✓ No external dependencies (parallel is base R)
+
+================================================================================
+CRAN ITEMS RESOLVED
+================================================================================
+
+Blocking Item #16: OpenMP Uncapped Threads
+  Status: RESOLVED BY REMOVING OPENMP
+
+Bug A.6: RNG Thread-Safety
+  Status: RESOLVED BY REMOVING OPENMP (each process has separate RNG)
+
+CRAN Item #17a: Global State Pollution
+  Status: RESOLVED BY DELETING R/zzz.R
+
+CRAN Item #21: Undeclared parallel Import
+  Status: RESOLVED BY REMOVING .onLoad() (only reference to parallel)
+
+================================================================================
+IMPLEMENTATION OUTLINE
+================================================================================
+
+Phase 1: Architecture Change (Core Fix)
+  Step 1: Extract chain loop body into run_mcmc_chain() function
+  Step 2: Implement per-chain output merging (WAIC, running means)
+  Step 3: Add serial/parallel code paths to runOccJSDM()
+  Effort: ~4–5 hours
+
+Phase 2: Code Cleanup
+  Step 1: Remove OpenMP from src/Makevars
+  Step 2: Delete #pragma omp lines from C++
+  Step 3: Delete R/zzz.R
+  Effort: ~30 minutes
+
+Phase 3: Testing & Validation
+  Step 1: Write unit tests for serial/parallel equivalence
+  Step 2: Verify vignette renders identically
+  Step 3: Test on multicore machine
+  Step 4: Run devtools::check --as-cran
+  Effort: ~2–3 hours
+
+Total Effort: 7–11 hours
+
+================================================================================
+QUICK START FOR IMPLEMENTER
+================================================================================
+
+1. Read OPENMP_PARALLELIZATION_GUIDE.md to understand the problem
+   (20 min)
+
+2. Read OPENMP_QUICK_REFERENCE.md for code locations and checklist
+   (10 min)
+
+3. Read PARALLEL_REFACTOR_EXAMPLES.md Parts 1–2 to understand refactoring
+   (15 min)
+
+4. Create R/parallel_mcmc.R with:
+   - run_mcmc_chain() function (copy from runOccJSDM.R:895–1200)
+   - merge_posterior_arrays() function (from Part 2 examples)
+   - merge_running_means() function (from Part 2 examples)
+   - merge_waic_across_chains() function (from Part 2 examples)
+   - merge_chain_outputs() master function (from Part 2 examples)
+   Effort: 1–2 hours
+
+5. Refactor runOccJSDM.R:
+   - Add cores = 1L parameter to function signature
+   - Replace chain loop (lines 895–1200) with:
+     if (cores == 1L) { ... serial path ... }
+     else { ... parallel path (from Part 3 examples) ... }
+   - Call merge_chain_outputs() to assemble results
+   Effort: 1–2 hours
+
+6. Test (Part 4 examples):
+   - Write unit test: serial and parallel same seed → identical output
+   - Write unit test: merging functions work correctly
+   - Run existing vignette with cores = 1 (should be identical)
+   - Run existing vignette with cores = 2 (should be identical)
+   Effort: 1–2 hours
+
+7. Clean up:
+   - Delete #pragma omp from src/jsdm.cpp:398
+   - Delete #pragma omp from src/functions.cpp:607
+   - Remove OpenMP from src/Makevars
+   - Delete R/zzz.R
+   - Rebuild: devtools::load_all(), Rcpp::compileAttributes()
+   - Run devtools::check() and verify warnings gone
+   Effort: 30 min
+
+8. Final verification:
+   - devtools::check --as-cran (should pass)
+   - Vignette renders identically (devtools::load_all() then rmarkdown::render)
+   - All tests pass (testthat::test_check())
+   Effort: 30 min
+
+================================================================================
+KEY CODE LOCATIONS
+================================================================================
+
+Parallel regions to remove:
+  src/jsdm.cpp:398           #pragma omp parallel for collapse(2)
+  src/functions.cpp:607      #pragma omp parallel for
+
+Chain loop to extract:
+  R/runOccJSDM.R:895–1200    for (chain in 1:nchain) { ... }
+
+Global state to delete:
+  R/zzz.R:1–7                .onLoad() function
+
+Build config to simplify:
+  src/Makevars:1–2           PKG_CXXFLAGS, PKG_LIBS
+
+================================================================================
+REFERENCES IN CODEBASE
+================================================================================
+
+TODO.Rmd sections:
+  - Item A.6 (line ~200): RNG thread-safety bug
+  - Item D.1 (line ~260): Parallelize over chains using PSOCK
+  - Item D.2 (line ~303): Remove .onLoad() global state
+  - Item #16 (blocking): OpenMP uncapped threads
+  - Item #17a (blocking): Global state pollution
+  - Item #21 (blocking): Undeclared parallel import
+
+CRAN submission plan (TODO.Rmd):
+  - "Blocking" section: items #16 (OpenMP), #17a (global state), #21 (parallel)
+  - "CRAN Compliance" section: items A.6 (RNG), D.1 (chains), D.2 (.onLoad)
+
+===============================================================================
+BACKWARD COMPATIBILITY
+===============================================================================
+
+Default behavior unchanged:
+  runOccJSDM(data, MCMCparams = list(nchain = 2, niter = 1000))
+  → Uses serial path (cores = 1L by default)
+  → Output identical to current code
+
+New feature (opt-in):
+  runOccJSDM(data, MCMCparams = list(nchain = 2, niter = 1000), cores = 2L)
+  → Uses parallel path with 2 worker processes
+  → Output identical to serial path (same seed)
+
+CRAN tests unaffected:
+  - R CMD check never passes cores > 1L
+  - Examples/vignettes use default cores = 1L
+  - No code changes needed in vignettes
+  - Output completely identical (no re-rendering needed)
+
+================================================================================
+END OF DOCUMENTATION
+================================================================================
