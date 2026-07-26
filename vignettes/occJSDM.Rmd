@@ -608,6 +608,7 @@ returns the input table to `plotVariancePartitioning()`.
 ```{r}
 plotVariancePartitioning(fitmodel)
 varpart <- returnVariancePartitioning(fitmodel)
+str(varpart)
 ```
 
 ### Cumulative species detections as a function of PCR replicates
@@ -661,9 +662,8 @@ fitmodel2 <- runOccJSDM(data = data,
                        summarisedLatentPresences = T
                        )
 
-extractWAIC(fitmodel)  # n_factors=2, WAIC=29920.78
-extractWAIC(fitmodel2) # n_factors=3, WAIC=29896.9:  lower value
-# n_factors=3 is better
+extractWAIC(fitmodel)  # n_factors=2, WAIC=12660.32
+extractWAIC(fitmodel2) # n_factors=3, WAIC=12628.43: the lower value, meaning that n_factors=3 is better
 ```
 
 ### Latent presence table to diagnose how occJSDM has estimated occupancies
@@ -718,40 +718,44 @@ names visible while scrolling.
 plotLatentPresences(latentPresences, species_name = "species 1")
 ```
 
-In this example from a previous simulation, Site 31 has 3 sample
-replicates, 3 primers, and 2 PCR replicates per primer. The Conditional
-sample probability (`CondSampleProb`) is 100% in the top two samples
-because of the many eDNA detections in the two samples and is 0% in the
-third sample because of the weak detection signal (only 1/6 positive
-detections, which occJSDM deems to be a likely false positive. This is
-despite the sample's low eDNA collection probability of `CollectionProb`
-of 29%, which has the effect of increasing the model's belief that the
-negative detections are false negatives).
+In this example from a previous simulation, Site 3 has 3 sample
+replicates (7, 8, 9), 3 primers (1, 2, 3), and 2 PCR replicates per
+primer. The Conditional sample probability (`CondSampleProb`) is near 0
+in the top two samples because of the few eDNA detections in the two
+samples. This is despite the sample's low eDNA collection probabilities
+(`CollectionProb`) of 11% and 9%, which have the effect of increasing
+the model's belief that the negative detections are false negatives).
+However, `CondSampleProb` is 94% in the third sample because of the
+strong detection signal (3/6 positive detections, each in a different
+primer).
 
-Given the two high sample probabilities, it is no surprise that occJSDM
-estimates a 100% Conditional *occupancy* probability for the site
-(`CondOccProb`). Note that `CondOccProb` has also taken into account the
-site's environmental, collection, and spatial covariates (not shown).
+Given the one high `CondSampleProb`, it is no surprise that occJSDM
+estimates a 81% Conditional *occupancy* probability for the site
+(`CondOccProb`). Note that `CondOccProb` takes into account both the
+site's detection data (`OTU`) and the site's environmental, collection,
+and spatial covariate values (`X.psi`, `Xs`, and `X_theta`).
 
-The Predictive occupancy probability (`PredOccProb`), which does not
-consider the site's detection data, is only 70%, which suggests that the
-site's environmental, collection, and/or spatial covariate values (not
-shown) are somewhat dissimilar from other sites where the species has
-been observed with high confidence, as judged by `occJSDM`.
+The Predictive occupancy probability (`PredOccProb`) only considers the
+site's environmental, collection, and/or spatial covariate values and
+does *not* consider the site's detection data, is only 57%, which
+suggests that the site's environmental, collection, and/or spatial
+covariate values (not shown) are somewhat dissimilar from other sites
+where the species has been observed with high confidence, as judged by
+`occJSDM`.
 
 The Collection probabilities per sample are driven by the sample's
-collection covariates, which are fitted using the whole dataset. For
-example, the 0.29 `CollectionProb` value in the third sample could be
-because the sample's water volume was low. The high `DetectionProb`
-values (all $\geq 0.89$) are consistent with the species being easily
-amplified by all three primers (with primer pair 1 having a slightly
-higher efficiency than the other two pairs).
+collection covariate values (`X_theta`). For example, the 0.11
+`CollectionProb` value in the first sample might be because the sample's
+water volume was low. The higher `DetectionProb` values, which vary by
+sample and primer (all ≥0.42) are consistent with the species being
+amplifiable by all three primers (with primer pair 3 having a higher
+efficiency than the other two pairs).
 
 The Latent presence table can be used to gain intuition about occJSDM
 and also to try to diagnose the reasons underlying a given species'
 occupancy estimates.
 
-![](images/latentPresences_example.png)
+![](images/clipboard-3819741142.png)
 
 ### Traceplots for a single covariate
 
