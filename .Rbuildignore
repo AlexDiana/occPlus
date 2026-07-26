@@ -8,3 +8,4 @@
 ^deprecated$
 ^dev$
 ^data/.*_highp_highthetabaseline\.rda$
+^PARALLELISATION$
