@@ -486,6 +486,41 @@ editor_options:
     >
     > [Your name]
 
+**Fixed bugs (commit b7b6aa2, 26 July 2026)**
+
+Alex fixed 8 bugs from the static audit (see group A items below).
+
+1.  ~~**`data$info` is re-sorted but `data$OTU` is not.**~~ **FIXED.** The
+    sort permutation is now applied to `y`/`OTU` along with `data_info`.
+    `R/runOccJSDM.R:476-558`.
+
+2.  ~~**`sample_pq_cpp()`'s catch-all `else` inflates the Stage 2 FP
+    counts.**~~ **FIXED.** The C++ version now counts the four cases
+    independently, gated on `primerIdx == l`, matching the R reference
+    version. `src/functions.cpp:652-668`.
+
+3.  ~~**`sampleBuniv()` drops the residual precision (operator
+    precedence).**~~ **FIXED.** The expression now correctly evaluates to
+    `1.0 / (sigma * sigma)`. `src/jsdm.cpp:579`.
+
+4.  ~~**`Bs <- list_params$B` in `update_jSDMcoef()`.**~~ **FIXED.** Now
+    correctly reads `list_params$Bs`. `R/jsdmfun.R:940`.
+
+5.  ~~**`sigma_bs` is sampled but never used.**~~ **FIXED.** The spatial
+    block of the prior covariance now correctly uses `sigma_bs^2`.
+    `R/jsdmfun.R:711-713`.
+
+6.  ~~**`useBiotic` is ignored in `computeNewOutputs()`.**~~ **FIXED.** Now
+    tests `useBiotic` where it should (in addition to `useEnvCov`).
+    `src/jsdm.cpp:501`.
+
+7.  ~~**`simulateData()` adds the spatial field *after* the responses are
+    drawn.**~~ **FIXED.** The spatial field is now added before drawing
+    responses. `R/jsdmfun.R:429-461`.
+
+8.  ~~**`tau_output` is returned entirely `NA`.**~~ **FIXED.** The `tau`
+    parameter is now saved in the MCMC loop. `R/runOccJSDM.R:934-1236`.
+
 **Future versions**
 
 1.  use spike-in to estimate abundance change (i.e. eDNAPlus)
