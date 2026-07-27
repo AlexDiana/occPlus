@@ -60,19 +60,20 @@ editor_options:
         `sigma_s` is the spatial field's marginal SD. It appears in the
         *simulator* (`R/jsdmfun.R:576`, `K2(Xs, Xs, sigma_s, l_s)`) but
         nowhere in the fitting path except as a **hard-coded literal**:
-        `sample_ls(idx_ls, SE, list_SoRSummaries, a_l_s, b_l_s,
-        sigma_s = 1)` (`R/jsdmfun.R:1254`). It is never drawn, never
-        read from `listParams` or `listPriors`, and never returned. The
-        fitted model therefore assumes a unit-variance spatial field
-        regardless of the data.
+        `sample_ls(idx_ls, SE, list_SoRSummaries, a_l_s, b_l_s, sigma_s = 1)`
+        (`R/jsdmfun.R:1254`). It is never drawn, never read from
+        `listParams` or `listPriors`, and never returned. The fitted
+        model therefore assumes a unit-variance spatial field regardless
+        of the data.
 
         **Measured consequence.** `sample_ls()` does run and does accept
         moves (traced: 13 accepted of 60 proposals), but `idx_ls` walks
-        to **10 -- the maximum of `l_s_grid = seq(0.01, 0.3, length.out
-        = 10)` -- and stays there, for every true `l_s` tried (0.30,
-        0.15, 0.08) across multiple seeds.** The length-scale is not
-        being recovered; it is absorbing the amplitude misspecification,
-        since it is the only free spatial parameter left.
+        to **10 -- the maximum of
+        `l_s_grid = seq(0.01, 0.3, length.out = 10)` -- and stays there,
+        for every true `l_s` tried (0.30, 0.15, 0.08) across multiple
+        seeds.** The length-scale is not being recovered; it is
+        absorbing the amplitude misspecification, since it is the only
+        free spatial parameter left.
 
         **Why this matters more than item 1.** `sigma_h` is inert for
         the fitted model and only affects `predictNewSites()`. This one

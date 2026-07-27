@@ -99,7 +99,7 @@ The latent-factor model is invariant to rotation and sign. `reparamFactorModel()
 
 - **Directly comparable** (verified against the code while building `helper-simstudy.R`, 27 July): `B0`, `B`, `G`, `beta_theta`, `theta0`, `p`, `q`, `tau`. Two caveats. `beta_theta` requires passing `collCovariates` to the fit — without it the posterior is `(1 x S)` against a `(ncov_theta+1 x S)` truth. And `n_lattrait` must be pinned to the simulated `gt`, since the default `floor(sqrt(min(S, ncov_psi)))` will not generally match, giving `A`/`C` mismatched dimensions.
 - **`sigma_b`: keep, but read with care.** With a tight `InvGamma(10, 1)` prior and only `p x S` residual coefficients the posterior sits at the prior mean (`sqrt(1/9)` = 0.333), so a fixed truth far from that yields near-zero coverage through prior-data conflict, not sampler error. Measured: true 0.5 gave 0/8, true 0.35 gave 8/8. Scenarios set it near the prior mean; SBC is the principled fix.
-- **NOT comparable, contrary to the original draft of this section:** `Bs`, `Gs`, `sigma_bs`. The simulator builds the spatial field directly from `sigma_s`/`l_s` and sets `Bst <- matrix(0, S, ps)` (`R/jsdmfun.R:557`), so on the truth side `Bs` is empty at `ds = 0` and `sigma_bs` generates nothing; the fit meanwhile represents the field as sparse-GP basis coefficients over `n_supportpoints` knots. Different parameterisations. Measured for `sigma_bs`: true 0.5 against a posterior mean of ~1.6, 0/8 coverage — a meaningless comparison rather than a bug.
+- **NOT comparable, contrary to the original draft of this section:** `Bs`, `Gs`, `sigma_bs`. The simulator builds the spatial field directly from `sigma_s`/`l_s` and sets `Bst <- matrix(0, S, ps)` (`R/jsdmfun.R:557`), so on the truth side `Bs` is empty at `ds = 0` and `sigma_bs` generates nothing; the fit meanwhile represents the field as sparse-GP basis coefficients over `n_supportpoints` knots. Different parameterisations. Measured for `sigma_bs`: true 0.5 against a posterior mean of \~1.6, 0/8 coverage — a meaningless comparison rather than a bug.
 - **Only as identified functions:** residual correlation matrix, `eta`/`psi`, variance partitioning
 - **Must NOT be checked element-wise:** `U`, `L`, `A`, `C` — element-wise coverage would fail for reasons that are not bugs
 - **Excluded:** `sigma_h` — never sampled (group A item 1), so it would fail by construction. **Also `l_s`** — group A item 2: `sigma_s` is hard-coded to 1 at the `sample_ls()` call site, so the length-scale absorbs the amplitude misspecification and rails at the top of `l_s_grid` for every true value tried. Any coverage figure for `l_s` is meaningless until that is fixed. Exclude explicitly and with a comment, so a future reader does not "fix" the test.
@@ -237,19 +237,9 @@ Also: pooling coverage across species within a block buys precision, but those i
 
 ## 10. Open items
 
-0.  *OPEN, and it degrades cells 1 and 2.* **`sigma_s` is never sampled**
-    (`TODO.Rmd` group A item 2, found 27 July while writing tier 1). The
-    spatial field's amplitude is hard-coded to 1 at the `sample_ls()` call
-    site, so the length-scale absorbs the misspecification and rails at the
-    top of `l_s_grid` regardless of the true value — measured at true
-    `l_s` = 0.30, 0.15 and 0.08, across seeds.
+0.  *OPEN, and it degrades cells 1 and 2.* **`sigma_s` is never sampled** (`TODO.Rmd` group A item 2, found 27 July while writing tier 1). The spatial field's amplitude is hard-coded to 1 at the `sample_ls()` call site, so the length-scale absorbs the misspecification and rails at the top of `l_s_grid` regardless of the true value — measured at true `l_s` = 0.30, 0.15 and 0.08, across seeds.
 
-    Consequences here: `l_s` is dropped from the checked parameters (§5.3),
-    and the spatial cells still test `Bs` and the overall spatial
-    contribution but cannot speak to range recovery. **Not blocking** — the
-    cells remain worth running — but a coverage table produced before this
-    is fixed must not be read as evidence about the GP. Re-run cells 1 and 2
-    afterwards.
+    Consequences here: `l_s` is dropped from the checked parameters (§5.3), and the spatial cells still test `Bs` and the overall spatial contribution but cannot speak to range recovery. **Not blocking** — the cells remain worth running — but a coverage table produced before this is fixed must not be read as evidence about the GP. Re-run cells 1 and 2 afterwards.
 
 1.  ~~*OPEN, blocking tier 3.***Minimum `n` for spatial cells.**~~ **RESOLVED 27 July 2026, and no longer blocking.** Measured: the floor is **31 unique locations** with default settings. `n <= 29` fails with `cannot take a sample larger than the population`, `n = 30` with `number of cluster centres must lie between 1 and nrow(x)`, `n >= 31` runs.
 
