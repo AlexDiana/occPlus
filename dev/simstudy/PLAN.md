@@ -122,9 +122,7 @@ Two cores maximum (`_R_CHECK_LIMIT_CORES_`). Tier 3's replicate-level parallelis
 
 Base = `two_stage`, traits on, spatial on, `d = 2`, `n = 100`, `S = 10`, `M = 2`, `P = 2`, `K = 3`, `n_supportpoints = 20`.
 
-Every spatial cell sets `n_supportpoints` explicitly (§10.1). Left to the
-default it is a constant 30 for any `n` below 150, so it would neither scale
-with `n` nor be a controlled factor — and below 31 sites it crashes outright.
+Every spatial cell sets `n_supportpoints` explicitly (§10.1). Left to the default it is a constant 30 for any `n` below 150, so it would neither scale with `n` nor be a controlled factor — and below 31 sites it crashes outright.
 
 | \# | Cell | Differs from base by | Buys |
 |----|----|----|----|
@@ -237,32 +235,16 @@ Also: pooling coverage across species within a block buys precision, but those i
 
 ## 10. Open items
 
-1.  ~~*OPEN, blocking tier 3.* **Minimum `n` for spatial cells.**~~
-    **RESOLVED 27 July 2026, and no longer blocking.** Measured: the
-    floor is **31 unique locations** with default settings. `n <= 29`
-    fails with `cannot take a sample larger than the population`, `n =
-    30` with `number of cluster centres must lie between 1 and nrow(x)`,
-    `n >= 31` runs.
+1.  ~~*OPEN, blocking tier 3.***Minimum `n` for spatial cells.**~~ **RESOLVED 27 July 2026, and no longer blocking.** Measured: the floor is **31 unique locations** with default settings. `n <= 29` fails with `cannot take a sample larger than the population`, `n = 30` with `number of cluster centres must lie between 1 and nrow(x)`, `n >= 31` runs.
 
-    Cause: `getDefaultSupportPoints(n) <- max(30, floor(n * 0.2))`
-    (`R/jsdmfun.R:480`) feeds `kmeans(X_s, centers = ps)`, and the
-    hard-coded 30 wins for every dataset under 150 sites, so the knot
-    count never scales down. Filed as a bug — **`TODO.Rmd` group B item
-    3** — since the default is also statistically wrong well before it
-    crashes (30 knots for 31 sites is ~1 knot per site, defeating the
-    point of a sparse GP).
+    Cause: `getDefaultSupportPoints(n) <- max(30, floor(n * 0.2))` (`R/jsdmfun.R:480`) feeds `kmeans(X_s, centers = ps)`, and the hard-coded 30 wins for every dataset under 150 sites, so the knot count never scales down. Filed as a bug — **`TODO.Rmd` group B item 3** — since the default is also statistically wrong well before it crashes (30 knots for 31 sites is \~1 knot per site, defeating the point of a sparse GP).
 
-    **Consequence for this plan:** cell 5 must set
-    `listParams$n_supportpoints` explicitly rather than relying on the
-    default. Verified working at `n = 20` with 6 knots. Pinning the knot
-    count is the right call for a study cell anyway — it stops the
-    spatial approximation silently changing with `n` across scenarios,
-    which would otherwise confound the low-information comparison. Apply
-    the same reasoning to **every** spatial cell (1, 2, 4–10), not just
-    cell 5: set `n_supportpoints` per scenario so it is a controlled
-    factor rather than a function of `n`.
+    **Consequence for this plan:** cell 5 must set `listParams$n_supportpoints` explicitly rather than relying on the default. Verified working at `n = 20` with 6 knots. Pinning the knot count is the right call for a study cell anyway — it stops the spatial approximation silently changing with `n` across scenarios, which would otherwise confound the low-information comparison. Apply the same reasoning to **every** spatial cell (1, 2, 4–10), not just cell 5: set `n_supportpoints` per scenario so it is a controlled factor rather than a function of `n`.
+
 2.  *OPEN.* Tier 2 failing vs advisory (§6.2).
+
 3.  *Deferred.* Presentation of tier-3 results for the paper. Build the suite first; the summary object then feeds either a short pkgdown article or the manuscript directly. Nothing here forecloses that.
+
 4.  *Deferred.* SBC (§7).
 
 ------------------------------------------------------------------------
@@ -270,8 +252,7 @@ Also: pooling coverage across species within a block buys precision, but those i
 ## 11. Build order
 
 1.  `helper-fixtures.R` + tier 1. Ships, pays immediately, blocks nothing.
-2.  ~~Resolve open item 1 (spatial `n` floor).~~ **Done** — floor is 31
-    sites; every spatial cell now pins `n_supportpoints` (§10.1).
+2.  ~~Resolve open item 1 (spatial `n` floor).~~ **Done** — floor is 31 sites; every spatial cell now pins `n_supportpoints` (§10.1).
 3.  `helper-simstudy.R` with the two seams (§7).
 4.  Tier 2.
 5.  Tier 3 + `run_study.R`.
