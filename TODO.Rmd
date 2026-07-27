@@ -62,16 +62,16 @@ editor_options:
         parameter addition.
 
         **The defect.** Under the SoR (subset-of-regressors)
-        approximation the fitted spatial field is
-        `SE = Ks(l_s) %*% Bs` (`computePsiCoef()`), i.e. a
-        *deterministic function of `Bs` and `l_s`*. But `sample_ls()`
-        (`R/jsdmfun.R:1054`) treats `SE` as a **GP draw** and scores its
-        density under `N(0, sigma_s^2 K(l_s))` while holding `SE` fixed.
-        That is not the conditional posterior of `l_s`, and it is
-        self-defeating: `SE` was already smoothed at the current `l_s`,
-        so it scores progressively better under ever-smoother
-        covariances. The result is a likelihood that is **monotone
-        increasing in `l_s`**, with nothing to penalise the upper bound.
+        approximation the fitted spatial field is `SE = Ks(l_s) %*% Bs`
+        (`computePsiCoef()`), i.e. a *deterministic function of `Bs` and
+        `l_s`*. But `sample_ls()` (`R/jsdmfun.R:1054`) treats `SE` as a
+        **GP draw** and scores its density under
+        `N(0, sigma_s^2 K(l_s))` while holding `SE` fixed. That is not
+        the conditional posterior of `l_s`, and it is self-defeating:
+        `SE` was already smoothed at the current `l_s`, so it scores
+        progressively better under ever-smoother covariances. The result
+        is a likelihood that is **monotone increasing in `l_s`**, with
+        nothing to penalise the upper bound.
 
         **Measured.** `idx_ls` sits at 10 -- the maximum of
         `l_s_grid = seq(0.01, 0.3, length.out = 10)` -- with range 10-10
@@ -94,10 +94,10 @@ editor_options:
             (`sd(SE) = 0.85`) instead of 1 leaves the likelihood
             monotone -- it still rises to the grid maximum. So the
             one-line fix this entry used to propose would not work.
-        (c) *`logDetKuu` is correct.* `sum(log(rcppeigen_get_diag(K_xx)))
-            * 2` matches the true log-determinant at all ten grid points;
-            `rcppeigen_get_diag()` returns the **Cholesky** diagonal
-            despite the name.
+        (c) *`logDetKuu` is correct.*
+            \`sum(log(rcppeigen_get_diag(K_xx)))
+            - 2`matches the true log-determinant at all ten grid points;`rcppeigen_get_diag()\`
+              returns the **Cholesky** diagonal despite the name.
         (d) *Not an artefact of weak data.* Identical behaviour with
             `ds = 2` (real spatial signal) as with `ds = 0`.
 
@@ -109,14 +109,14 @@ editor_options:
         `l_s` where it actually acts, on the data: either recompute
         `eta` with `Ks(l_s*)` and score the observation likelihood under
         the proposal, or integrate out `Bs` and use the standard SoR
-        marginal likelihood. The first is the smaller change but costs an
-        `eta` recomputation per proposal; the second is cleaner and
+        marginal likelihood. The first is the smaller change but costs
+        an `eta` recomputation per proposal; the second is cleaner and
         harder to derive. Roughly half a day if the intended conditional
         is already clear, longer if it needs settling. **Do not attempt
         blind** -- a subtly wrong conditional would be worse than the
         present state, which at least fails visibly.
 
-        **Cheap interim alternative (~1 h).** Since `sample_ls()` does
+        **Cheap interim alternative (\~1 h).** Since `sample_ls()` does
         not work, and enabling it also caused the non-spatial crash
         (Fixed bugs 22 / group B item 1), reverting to a *documented,
         user-settable, fixed* `l_s` is arguably more honest than the
@@ -240,7 +240,7 @@ editor_options:
         `R/jsdmfun.R:578-586` builds the cross-species spatial
         covariance as
 
-        ```
+        ```         
         Lambda <- matrix(rnorm(ds * S), ds, S)
         Sigma  <- t(Lambda) %*% Lambda + diag(10^(-5), nrow = S)
         spatField <- t(chol(K_mat)) %*% Z %*% chol(Sigma)
@@ -263,7 +263,7 @@ editor_options:
         will silently pass against a null case". That entry was recorded
         as fixed because the field is now added *before* the responses
         are drawn, which was a real and separate bug. The field is still
-        ~0 whenever `ds = 0`, for this different reason.
+        \~0 whenever `ds = 0`, for this different reason.
 
         **Fix:** either error/warn when `useSpatField = TRUE` and
         `ds < 1`, or make `ds = 0` mean "shared spatial field across
@@ -272,7 +272,7 @@ editor_options:
 
         Note also that `sigma_s` is not cleanly the field's marginal SD:
         `Sigma = Lambda'Lambda` with `Lambda ~ N(0,1)` contributes its
-        own scale, so amplitude grows with `ds` (0.80 -> 1.01 -> 1.03
+        own scale, so amplitude grows with `ds` (0.80 -\> 1.01 -\> 1.03
         above for a fixed `sigma_s = 0.5`). Worth documenting whatever
         the fix.
 
