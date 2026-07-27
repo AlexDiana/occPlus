@@ -181,7 +181,7 @@ Every spatial cell sets `n_supportpoints` explicitly (§10.1). Left to the defau
 | 5 | low information | low `p`/`theta_baseline`, smaller `n` (see §10.1 — must set `n_supportpoints`) | Calibration where data are thin — the realistic eDNA regime |
 | 6 | `d` under-fit | truth `d = 4`, fit `d = 2` | The common real-world misspecification |
 | 7 | `d` over-fit | truth `d = 2`, fit `d = 4` | Interacts with rotation invariance; least-trusted case |
-| 8 | larger `S` | `S = 10 -> 30` | Does calibration hold as species count grows |
+| 8 | larger `S` | `S = 10 -> 20` | Does calibration hold as species count grows. Trimmed from 30 on 27 July: at `S = 30` this was 1.75x base, the grid's most expensive cell, and the study runs on a fanless machine that throttles. `S = 20` is still double the base and costs 1.2x. |
 | 9 | `occupancy` | no PCR stage | Calibration evidence for the collapsed form |
 | 10 | `binary` | no replicates at all | Calibration evidence for pure JSDM |
 
