@@ -773,8 +773,19 @@ plotFPTPStage2Rates <- function(fitModel,
     primerName <- primerNames[1]
   }
 
-  p_output <- fitModel$results_output$p_output
-  q_output <- fitModel$results_output$q_output
+  idx_primer <- match(as.character(primerName), as.character(primerNames))
+
+  if(is.na(idx_primer)){
+    stop(paste0("primerName '", primerName, "' not found. Available primers: ",
+                paste(primerNames, collapse = ", ")))
+  }
+
+  # Subset to the requested primer before summarising, so that the credible
+  # intervals describe that primer alone. p_output/q_output are 4-D arrays
+  # indexed [primer, species, iteration, chain]; dropping only the primer
+  # margin leaves the species margin (2) in place for the apply() below.
+  p_output <- fitModel$results_output$p_output[idx_primer, , , , drop = FALSE]
+  q_output <- fitModel$results_output$q_output[idx_primer, , , , drop = FALSE]
 
   data_plot_p <- apply(p_output, 2, function(x) {
     quantile(x, probs = c(0.025, 0.975))
@@ -791,9 +802,6 @@ plotFPTPStage2Rates <- function(fitModel,
     as.data.frame %>%
     rename(q1 = `2.5%`,
            q2 = `97.5%`)
-
-  texts <- rownames(data_plot_p)
-  idx_speciesprimer <- stringr::str_match(texts, "\\[(\\d+),(\\d+)\\]")
 
   data_plot <- cbind(data_plot_p, data_plot_q) %>%
     mutate(Species = speciesNames) %>%
@@ -815,7 +823,7 @@ plotFPTPStage2Rates <- function(fitModel,
                       color = "FP rate"), position = position_dodge(width = .15), # Use the SAME width as geom_col
                   width = .5) +
     xlab("Species") +
-    ggtitle("Detection rates") +
+    ggtitle(paste0("Detection rates (primer ", primerName, ")")) +
     theme_bw() +
     # ylim(c(0,1)) +
     ylab("Detection probability") +
