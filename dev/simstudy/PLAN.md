@@ -2,21 +2,18 @@
 
 Plan for the "extensive testing on simulated datasets" item under *MEE paper / Doug to dos* in `TODO.Rmd`. Drafted 27 July 2026.
 
-**Status as of 27 July 2026: stages 1 and 3-5 built and committed; only the
-full R = 100 run (stage 6) remains.** Sections marked *OPEN* still need a
-decision or a measurement.
+**Status as of 27 July 2026: stages 1 and 3-5 built and committed; only the full R = 100 run (stage 6) remains.** Sections marked *OPEN* still need a decision or a measurement.
 
 | Stage | State |
 |----|----|
-| 1. Fixtures + tier 1 | **done** (`6d9526d`) -- 89 assertions, 7 s |
-| 2. Spatial `n` floor | **done** (`41fb736`) -- floor is 31 sites |
-| 3. `helper-simstudy.R` | **done** (`6123036`) -- validated at R = 8 |
-| 4. Tier 2 canary | **done** (`f63eeeb`) -- ~30 s, `skip_on_cran()` |
-| 5. Tier 3 + runner | **done** (`f63eeeb`) -- runner smoke-tested end to end |
-| 6. Full R = 100 run | **not started** -- `Rscript dev/simstudy/run_study.R --cores=8`, ~2.4 h on 8 cores |
+| 1\. Fixtures + tier 1 | **done** (`6d9526d`) -- 89 assertions, 7 s |
+| 2\. Spatial `n` floor | **done** (`41fb736`) -- floor is 31 sites |
+| 3\. `helper-simstudy.R` | **done** (`6123036`) -- validated at R = 8 |
+| 4\. Tier 2 canary | **done** (`f63eeeb`) -- \~30 s, `skip_on_cran()` |
+| 5\. Tier 3 + runner | **done** (`f63eeeb`) -- runner smoke-tested end to end |
+| 6\. Full R = 100 run | **not started** -- `Rscript dev/simstudy/run_study.R --cores=8`, \~2.4 h on 8 cores |
 
-Building it surfaced four corrections to this plan and two package bugs; both
-are recorded in place below rather than only in commit messages.
+Building it surfaced four corrections to this plan and two package bugs; both are recorded in place below rather than only in commit messages.
 
 ------------------------------------------------------------------------
 
@@ -188,11 +185,7 @@ Row-shuffle invariance must be asserted on the **prepared design matrices** (`X_
 
 R = 3–5 replicates at the base cell. Not a calibration check: a smoke signal that recovery has not grossly broken between full tier-3 runs (e.g. correlation between estimated and true `B` above a loose floor).
 
-**RESOLVED: tier 2 fails.** Thresholds were set from measurement rather than
-taste, which is what makes failing safe. Three independent seed sets gave
-overall coverage 0.89/0.89/0.88, lowest block 0.78/0.76/0.76, and
-`cor(post_mean, truth)` 0.62/0.56/0.68; the floors are 0.70, 0.40 and 0.30. A
-pass is therefore not luck and a failure is not noise.
+**RESOLVED: tier 2 fails.** Thresholds were set from measurement rather than taste, which is what makes failing safe. Three independent seed sets gave overall coverage 0.89/0.89/0.88, lowest block 0.78/0.76/0.76, and `cor(post_mean, truth)` 0.62/0.56/0.68; the floors are 0.70, 0.40 and 0.30. A pass is therefore not luck and a failure is not noise.
 
 ------------------------------------------------------------------------
 
@@ -267,21 +260,11 @@ Also: pooling coverage across species within a block buys precision, but those i
 
 2.  ~~*OPEN.* Tier 2 failing vs advisory (§6.2).~~ **RESOLVED: it fails**, on measured thresholds -- see §6.3.
 
-3.  *OPEN, and the main empirical question stage 6 should settle.*
-    **`beta_theta` and `resid_cor` sit below nominal.** Measured at R = 5
-    across three independent seed sets: `beta_theta` 0.78 / 0.80 / 0.78, and
-    `resid_cor` 0.79 / 0.76 / 0.76. Everything else landed 0.86-1.00.
+3.  *OPEN, and the main empirical question stage 6 should settle.* **`beta_theta` and `resid_cor` sit below nominal.** Measured at R = 5 across three independent seed sets: `beta_theta` 0.78 / 0.80 / 0.78, and `resid_cor` 0.79 / 0.76 / 0.76. Everything else landed 0.86-1.00.
 
-    That consistency across independent seed sets makes chance unlikely, but
-    R = 5 is far too small to call it -- the effective SE is ~8%, so 0.78 is
-    only about 2 SE below nominal. At R = 100 the SE is 2.2% and the question
-    is decisive either way.
+    That consistency across independent seed sets makes chance unlikely, but R = 5 is far too small to call it -- the effective SE is \~8%, so 0.78 is only about 2 SE below nominal. At R = 100 the SE is 2.2% and the question is decisive either way.
 
-    Both are held to a lower floor in tiers 2 and 3 rather than excluded,
-    precisely so that settling this stays a purpose of the run rather than
-    something the thresholds quietly paper over. If the undercoverage is real,
-    `beta_theta` points at the Stage 1 collection model and `resid_cor` at the
-    factor-loading posterior; neither has an obvious suspect yet.
+    Both are held to a lower floor in tiers 2 and 3 rather than excluded, precisely so that settling this stays a purpose of the run rather than something the thresholds quietly paper over. If the undercoverage is real, `beta_theta` points at the Stage 1 collection model and `resid_cor` at the factor-loading posterior; neither has an obvious suspect yet.
 
 4.  *Deferred.* Presentation of tier-3 results for the paper. Build the suite first; the summary object then feeds either a short pkgdown article or the manuscript directly. Nothing here forecloses that.
 
@@ -292,29 +275,27 @@ Also: pooling coverage across species within a block buys precision, but those i
 ## 11. Build order
 
 1.  `helper-fixtures.R` + tier 1. Ships, pays immediately, blocks nothing.
+
 2.  ~~Resolve open item 1 (spatial `n` floor).~~ **Done** — floor is 31 sites; every spatial cell now pins `n_supportpoints` (§10.1).
+
 3.  `helper-simstudy.R` with the two seams (§7).
+
 4.  Tier 2.
+
 5.  Tier 3 + `run_study.R`.
+
 6.  **Full R = 100 run; inspect the table.** The only stage left.
 
-    ```
+    ```         
     Rscript dev/simstudy/run_study.R --cores=8
     ```
 
-    ~2.4 h on 8 cores (~19 h serial), extrapolated from 10 s/replicate
-    measured at reduced size. The runner has been smoke-tested end to end --
-    argument parsing, PSOCK cluster, worker setup, both artefacts, failure
-    counting -- but never run at full size.
+    \~2.4 h on 8 cores (\~19 h serial), extrapolated from 10 s/replicate measured at reduced size. The runner has been smoke-tested end to end -- argument parsing, PSOCK cluster, worker setup, both artefacts, failure counting -- but never run at full size.
 
-    Two things to weigh first. **Cells 1 and 2 will be re-run** if `sigma_s`
-    (open item 0) is fixed afterwards, so if that fix is near-term, waiting
-    saves the duplication. And **one cell settles the open empirical
-    question** at a tenth of the cost:
+    Two things to weigh first. **Cells 1 and 2 will be re-run** if `sigma_s` (open item 0) is fixed afterwards, so if that fix is near-term, waiting saves the duplication. And **one cell settles the open empirical question** at a tenth of the cost:
 
-    ```
+    ```         
     Rscript dev/simstudy/run_study.R --cores=8 --scenarios=base
     ```
 
-    ~15 min on 8 cores, and enough to say whether the `beta_theta` /
-    `resid_cor` undercoverage is real (§10.3).
+    \~15 min on 8 cores, and enough to say whether the `beta_theta` / `resid_cor` undercoverage is real (§10.3).

@@ -464,35 +464,35 @@ editor_options:
         nominal coverage rate.
 
         **Full specification: `dev/simstudy/PLAN.md`.** That file is
-        authoritative -- keep design detail there rather than duplicating
-        it here, so the two cannot drift.
+        authoritative -- keep design detail there rather than
+        duplicating it here, so the two cannot drift.
 
         **Status: mostly built (27 July 2026).** Stages 1 and 3-5 are
         committed; only the full R = 100 run remains.
 
         - **Tier 1** (`6d9526d`): 89 structural assertions in 7 s,
-          shipping to CRAN. `helper-fixtures.R`,
-          `test-smoke-configs.R`, `test-regression-bugs.R`,
-          `test-api-contracts.R`. `test-placeholder.R` deleted.
-        - **Tier 2** (`f63eeeb`): recovery canary, ~30 s,
+          shipping to CRAN. `helper-fixtures.R`, `test-smoke-configs.R`,
+          `test-regression-bugs.R`, `test-api-contracts.R`.
+          `test-placeholder.R` deleted.
+        - **Tier 2** (`f63eeeb`): recovery canary, \~30 s,
           `skip_on_cran()`, thresholds set from measurement.
         - **Tier 3 + runner** (`f63eeeb`, `6123036`): env-gated study
           plus `dev/simstudy/run_study.R`, smoke-tested end to end.
         - **Remaining:** `Rscript dev/simstudy/run_study.R --cores=8`,
-          ~2.4 h on 8 cores.
+          \~2.4 h on 8 cores.
 
         **It has already paid for itself.** Writing the tests found two
         package bugs that reading the code had not: `sigma_s` never
         sampled (**group A item 2**) and `predictNewSites()` still
         lacking its `X_psi`/`X_s` defaults (**group B item 4**, which
-        also corrected Fixed bugs 18). It also measured the GP knot floor
-        that became **group B item 3**. Four assertions had to be
+        also corrected Fixed bugs 18). It also measured the GP knot
+        floor that became **group B item 3**. Four assertions had to be
         rewritten once run, because the premise was wrong in ways only
-        execution revealed -- `psi_output` is not produced by every model
-        type, `tau_output` is NA by design outside `continuous`, PCR
-        replicates are exchangeable so row-for-row equality is the wrong
-        bar, and `idx_ls` is constant for a reason unrelated to the fix
-        it appeared to test.
+        execution revealed -- `psi_output` is not produced by every
+        model type, `tau_output` is NA by design outside `continuous`,
+        PCR replicates are exchangeable so row-for-row equality is the
+        wrong bar, and `idx_ls` is constant for a reason unrelated to
+        the fix it appeared to test.
 
         Two constraints from this document that the plan builds on, kept
         here because they are properties of the *bug list*, not of the
@@ -504,10 +504,10 @@ editor_options:
         structure rather than numeric equality.
 
         **One empirical question is open**, and the full run should
-        settle it: `beta_theta` and `resid_cor` came out at 0.78-0.80 and
-        0.76-0.79 across three independent seed sets, against a nominal
-        0.95. Consistent enough that chance is unlikely, but R = 5 is too
-        small to call. See `PLAN.md` §10.3.
+        settle it: `beta_theta` and `resid_cor` came out at 0.78-0.80
+        and 0.76-0.79 across three independent seed sets, against a
+        nominal 0.95. Consistent enough that chance is unlikely, but R =
+        5 is too small to call. See `PLAN.md` §10.3.
 
 2.  Alex to dos
 
