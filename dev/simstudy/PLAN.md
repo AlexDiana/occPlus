@@ -102,7 +102,15 @@ The latent-factor model is invariant to rotation and sign. `reparamFactorModel()
 - **Must NOT be checked element-wise:** `U`, `L`, `A`, `C` — element-wise coverage would fail for reasons that are not bugs
 - **Excluded:** `sigma_h` — never sampled (group A item 1), so it would fail by construction. Exclude explicitly and with a comment, so a future reader does not "fix" the test.
 
-### 5.4 CRAN limits
+### 5.4 The GP knot count must be pinned, not left to the default
+
+`getDefaultSupportPoints(n) <- max(30, floor(n * 0.2))` (`R/jsdmfun.R:480`) is a constant 30 for any dataset below 150 sites, and crashes below 31 (§10.1, and `TODO.Rmd` group B item 3).
+
+Two consequences for the design, beyond the crash. The knot count would be **uncontrolled but not constant** across cells — identical for `n = 40` and `n = 140`, then suddenly proportional above 150 — so any difference attributed to `n` would be partly an artefact of the spatial approximation changing underneath. And at small `n` it approaches one knot per site, which is a qualitatively different (denser) approximation than at `n = 100`, precisely in the low-information cell where calibration is most at risk.
+
+Set `n_supportpoints` explicitly in every spatial cell so it is a controlled factor.
+
+### 5.5 CRAN limits
 
 Two cores maximum (`_R_CHECK_LIMIT_CORES_`). Tier 3's replicate-level parallelism must be off or capped when not env-gated on.
 
@@ -112,7 +120,11 @@ Two cores maximum (`_R_CHECK_LIMIT_CORES_`). Tier 3's replicate-level parallelis
 
 ### 6.1 Tier 3 — the study
 
-Base = `two_stage`, traits on, spatial on, `d = 2`, `n = 100`, `S = 10`, `M = 2`, `P = 2`, `K = 3`.
+Base = `two_stage`, traits on, spatial on, `d = 2`, `n = 100`, `S = 10`, `M = 2`, `P = 2`, `K = 3`, `n_supportpoints = 20`.
+
+Every spatial cell sets `n_supportpoints` explicitly (§10.1). Left to the
+default it is a constant 30 for any `n` below 150, so it would neither scale
+with `n` nor be a controlled factor — and below 31 sites it crashes outright.
 
 | \# | Cell | Differs from base by | Buys |
 |----|----|----|----|
@@ -120,7 +132,7 @@ Base = `two_stage`, traits on, spatial on, `d = 2`, `n = 100`, `S = 10`, `M = 2`
 | 2 | spatial isolated | traits off | `l_s`/`Bs` recovery unconfounded by trait terms |
 | 3 | traits isolated | spatial off | `G` (fourth-corner) recovery unconfounded by the GP |
 | 4 | `P = 3` | `P = 2 -> 3` | Guards Fixed bugs 2; matches shipped `sampledata` |
-| 5 | low information | low `p`/`theta_baseline`, smaller `n` | Calibration where data are thin — the realistic eDNA regime |
+| 5 | low information | low `p`/`theta_baseline`, smaller `n` (see §10.1 — must set `n_supportpoints`) | Calibration where data are thin — the realistic eDNA regime |
 | 6 | `d` under-fit | truth `d = 4`, fit `d = 2` | The common real-world misspecification |
 | 7 | `d` over-fit | truth `d = 2`, fit `d = 4` | Interacts with rotation invariance; least-trusted case |
 | 8 | larger `S` | `S = 10 -> 30` | Does calibration hold as species count grows |
@@ -225,7 +237,30 @@ Also: pooling coverage across species within a block buys precision, but those i
 
 ## 10. Open items
 
-1.  *OPEN, blocking tier 3.* **Minimum `n` for spatial cells.** `n = 30` with `spatCovariates` dies in `kmeans()` ("number of cluster centres must lie between 1 and nrow(x)"); `n = 100` works. The threshold bounds every spatial cell, and cell 5 (low information) wants small `n`. Cheap bisection. If the knot count simply does not adapt to small `n`, that is a bug to file rather than a constraint to design around. Recorded under `TODO.Rmd` Fixed bugs 22.
+1.  ~~*OPEN, blocking tier 3.* **Minimum `n` for spatial cells.**~~
+    **RESOLVED 27 July 2026, and no longer blocking.** Measured: the
+    floor is **31 unique locations** with default settings. `n <= 29`
+    fails with `cannot take a sample larger than the population`, `n =
+    30` with `number of cluster centres must lie between 1 and nrow(x)`,
+    `n >= 31` runs.
+
+    Cause: `getDefaultSupportPoints(n) <- max(30, floor(n * 0.2))`
+    (`R/jsdmfun.R:480`) feeds `kmeans(X_s, centers = ps)`, and the
+    hard-coded 30 wins for every dataset under 150 sites, so the knot
+    count never scales down. Filed as a bug — **`TODO.Rmd` group B item
+    3** — since the default is also statistically wrong well before it
+    crashes (30 knots for 31 sites is ~1 knot per site, defeating the
+    point of a sparse GP).
+
+    **Consequence for this plan:** cell 5 must set
+    `listParams$n_supportpoints` explicitly rather than relying on the
+    default. Verified working at `n = 20` with 6 knots. Pinning the knot
+    count is the right call for a study cell anyway — it stops the
+    spatial approximation silently changing with `n` across scenarios,
+    which would otherwise confound the low-information comparison. Apply
+    the same reasoning to **every** spatial cell (1, 2, 4–10), not just
+    cell 5: set `n_supportpoints` per scenario so it is a controlled
+    factor rather than a function of `n`.
 2.  *OPEN.* Tier 2 failing vs advisory (§6.2).
 3.  *Deferred.* Presentation of tier-3 results for the paper. Build the suite first; the summary object then feeds either a short pkgdown article or the manuscript directly. Nothing here forecloses that.
 4.  *Deferred.* SBC (§7).
@@ -235,10 +270,11 @@ Also: pooling coverage across species within a block buys precision, but those i
 ## 11. Build order
 
 1.  `helper-fixtures.R` + tier 1. Ships, pays immediately, blocks nothing.
-2.  Resolve open item 1 (spatial `n` floor).
+2.  ~~Resolve open item 1 (spatial `n` floor).~~ **Done** — floor is 31
+    sites; every spatial cell now pins `n_supportpoints` (§10.1).
 3.  `helper-simstudy.R` with the two seams (§7).
 4.  Tier 2.
 5.  Tier 3 + `run_study.R`.
 6.  Full R = 100 run; inspect the table.
 
-Stages 1–2 are worth doing regardless of what is decided about the rest.
+Stage 1 is worth doing regardless of what is decided about the rest.
