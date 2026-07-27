@@ -1,3 +1,14 @@
+# DEPRECATED -- does not run. Moved from dev/ on 27 July 2026.
+#
+# Calls three functions that no longer exist in the package:
+#   plotDetectionCovariates(), plotOrdinationCovariates(), plotFPDetectionRates()
+#
+# Its last substantive change was dc9948e ("MCMC updates made"); everything
+# after that was the mechanical occPlus -> occJSDM rename in 991fcb7. Superseded
+# by vignettes/occJSDM.Rmd, which covers the same ground against the current API.
+#
+# Kept for reference only. Not built (^deprecated$ in .Rbuildignore).
+
 
 # LOAD DATA ------
 

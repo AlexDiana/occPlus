@@ -2,8 +2,21 @@ inst/doc
 .Rproj.user
 /doc/
 /Meta/
-/dev/
-/deprecated/
+# dev/ is scratch and stays untracked, EXCEPT dev/simstudy/, which holds the
+# simulation-validation plan and runner. Note the pattern: git cannot re-include
+# a file whose parent directory is excluded, so this must exclude dev/'s
+# *contents* (/dev/*) rather than the directory itself, then re-include the
+# subdirectory. Study output stays ignored -- it is large and regenerable.
+/dev/*
+!/dev/simstudy/
+/dev/simstudy/results/
+# deprecated/ IS tracked: it is the record of superseded code (occPlus-era
+# functions, the old vignette, functions_old.cpp), kept in git and excluded
+# from the build via ^deprecated$ in .Rbuildignore. Its existing contents were
+# tracked only by grandfathering -- they predate the ignore rule this replaces
+# -- which meant anything moved there in future would have been silently
+# untracked. That matters because TODO.Rmd group C plans to move more dead
+# code here. Nothing is ignored under deprecated/ now.
 outputs/caiwang_results.rda
 src/*.o
 src/*.so

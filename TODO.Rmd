@@ -51,7 +51,90 @@ editor_options:
         unless `predictNewSites()` is used to extrapolate to new sites
         with a nonzero number of factors.
 
-    2.  **Non-thread-safe RNG remains in the hottest OpenMP loop**
+    2.  **`sample_ls()` evaluates the wrong density, so the GP
+        length-scale is never recovered and rails at the top of its
+        grid.** Found 27 July 2026 while writing the test suite.
+
+        **This entry previously blamed `sigma_s` being hard-coded to 1
+        and proposed sampling it. That diagnosis was wrong and the
+        proposed fix is disproven** -- see "What was ruled out" below.
+        The real defect is deeper and is a modelling change, not a
+        parameter addition.
+
+        **The defect.** Under the SoR (subset-of-regressors)
+        approximation the fitted spatial field is
+        `SE = Ks(l_s) %*% Bs` (`computePsiCoef()`), i.e. a
+        *deterministic function of `Bs` and `l_s`*. But `sample_ls()`
+        (`R/jsdmfun.R:1054`) treats `SE` as a **GP draw** and scores its
+        density under `N(0, sigma_s^2 K(l_s))` while holding `SE` fixed.
+        That is not the conditional posterior of `l_s`, and it is
+        self-defeating: `SE` was already smoothed at the current `l_s`,
+        so it scores progressively better under ever-smoother
+        covariances. The result is a likelihood that is **monotone
+        increasing in `l_s`**, with nothing to penalise the upper bound.
+
+        **Measured.** `idx_ls` sits at 10 -- the maximum of
+        `l_s_grid = seq(0.01, 0.3, length.out = 10)` -- with range 10-10
+        across the whole post-burn-in run, for **every** true `l_s`
+        tried (0.074, 0.171, 0.300) and with genuine spatial signal
+        present (`ds = 2`). Profiling the grid confirms the cause: the
+        log-likelihood rises monotonically from -376 at `l_s = 0.01` to
+        -154 at `l_s = 0.30`, so the true value is never competitive.
+
+        **What was ruled out** (recorded so it is not re-investigated):
+
+        (a) *Amplitude is not missing from the model.* `sigma_bs` **is**
+            sampled (`R/jsdmfun.R:1211`) and **is** the SoR amplitude,
+            since `Bs` carries prior variance `sigma_bs^2` and the
+            kernel is built at unit amplitude (`K2(..., 1, l_s)`). A
+            separate `sigma_s` would be redundant and would create an
+            identifiability problem.
+        (b) *Passing the correct amplitude does not help.* Profiling the
+            grid at the fitted field's actual amplitude
+            (`sd(SE) = 0.85`) instead of 1 leaves the likelihood
+            monotone -- it still rises to the grid maximum. So the
+            one-line fix this entry used to propose would not work.
+        (c) *`logDetKuu` is correct.* `sum(log(rcppeigen_get_diag(K_xx)))
+            * 2` matches the true log-determinant at all ten grid points;
+            `rcppeigen_get_diag()` returns the **Cholesky** diagonal
+            despite the name.
+        (d) *Not an artefact of weak data.* Identical behaviour with
+            `ds = 2` (real spatial signal) as with `ds = 0`.
+
+        **Impact.** Biases the spatial term of every fit using
+        `useSpatField = TRUE`, and makes `l_s` uninterpretable. Note
+        widening `l_s_grid` alone would simply move the rail.
+
+        **Fix (needs Alex -- a derivation, not a code tweak).** Evaluate
+        `l_s` where it actually acts, on the data: either recompute
+        `eta` with `Ks(l_s*)` and score the observation likelihood under
+        the proposal, or integrate out `Bs` and use the standard SoR
+        marginal likelihood. The first is the smaller change but costs an
+        `eta` recomputation per proposal; the second is cleaner and
+        harder to derive. Roughly half a day if the intended conditional
+        is already clear, longer if it needs settling. **Do not attempt
+        blind** -- a subtly wrong conditional would be worse than the
+        present state, which at least fails visibly.
+
+        **Cheap interim alternative (~1 h).** Since `sample_ls()` does
+        not work, and enabling it also caused the non-spatial crash
+        (Fixed bugs 22 / group B item 1), reverting to a *documented,
+        user-settable, fixed* `l_s` is arguably more honest than the
+        current state: it removes a moving part that is not moving
+        correctly and exposes the assumption instead of burying it in a
+        call-site literal.
+
+        **Not visible before `b7b6aa2`.** While `sample_ls()` sat inside
+        `if(F){...}` the length-scale was openly fixed, which was the
+        original audit's complaint. Enabling it exposed that the update
+        itself was never correct.
+
+        **Test coverage:** `tests/testthat/test-regression-bugs.R`
+        asserts that `sample_ls()` is *reached* rather than that
+        `idx_ls` varies, precisely so the test does not encode this
+        defect. Revisit that test once this is fixed.
+
+    3.  **Non-thread-safe RNG remains in the hottest OpenMP loop**
         (residual of the original audit's A.6; the other half was fixed
         in `b7b6aa2` -- see Fixed bugs 10). `samplePGvariables()`
         (`src/jsdm.cpp:398`) is `#pragma omp parallel for collapse(2)`
@@ -86,15 +169,7 @@ editor_options:
         also accepts `idx_species` and never uses it -- the filter is
         commented out at `:698`.
 
-    2.  **`plotFPTPStage2Rates()` still ignores `primerName`.**
-        `R/output.R:767` and `:775` use `apply(p_output, 2, ...)`, which
-        pools over primer, iteration and chain, so the plot is identical
-        whatever `primerName` is passed. The
-        `idx_speciesprimer <- str_match(...)` line at `:784` is dead
-        code. (Previously noted in `AGENTS.md`; recorded here so it is
-        tracked as a to-do.)
-
-    3.  **`thinOutput()`: two of the three original defects remain**
+    2.  **`thinOutput()`: two of the three original defects remain**
         (residual of the original audit's B.2; see Fixed bugs 16). The
         crash is gone and `thin` is now honoured, but
 
@@ -112,22 +187,110 @@ editor_options:
             function users cannot call. Either re-export it or drop the
             `.Rd`.
 
-    4.  FIXED 
-    
-        **`computeSpeciesDetected()` still uses a prefix of the draws,
-        not a random sample** (residual of the original audit's B.6; see
-        Fixed bugs 18). `R/output.R:2221-2222` now sets
-        `idxObs <- unique(floor(seq(1, min(500, niter), length.out = 500)))`
-        and `B <- length(idxObs)`, which fixes the crash and guards the
-        fewer-than-500-draws case. But `beta_theta_output` was flattened
-        iter-within-chain at `:2214`, so `min(500, niter)` indexes the
-        *first* 500 rows of that flattened array -- i.e. iterations
-        1-500 of chain 1 whenever the per-chain `niter >= 500`, the most
-        autocorrelated draws in the run, still ignoring the other
-        chain(s) entirely. Fix: draw the `B` indices at random from
-        `seq_len(niter * nchain)`.
+    3.  **The default GP knot count breaks every spatial fit below 31
+        sites, and is statistically wrong below \~150.**
+        `getDefaultSupportPoints(n) <- max(30, floor(n * 0.2))`
+        (`R/jsdmfun.R:480`) sets the number of support (inducing) points
+        for the sparse GP; it feeds `ps` (`R/runOccJSDM.R:697`), which
+        becomes `kmeans(X_s, centers = ps)` (`R/jsdmfun.R:353`), where
+        `X_s` has one row per *unique* spatial location. Asking for more
+        cluster centres than there are locations cannot work.
 
-    5.  **Assorted smaller items.**
+        **Measured threshold** (`useSpatField = TRUE`, `spatCovariates`
+        supplied, defaults otherwise):
+
+        | sites | knots (`ps`) | result |
+        |----|----|----|
+        | \<= 29 | 30 | `cannot take a sample larger than the population when 'replace = FALSE'` |
+        | 30 | 30 | `number of cluster centres must lie between 1 and nrow(x)` |
+        | \>= 31 | 30 | runs |
+
+        **Two distinct problems.** (a) *The crash.* Below 31 unique
+        locations the fit dies during setup, before MCMC starts, with an
+        error naming neither the knot count nor the argument that
+        controls it -- a 25-site eDNA study with coordinates is an
+        entirely ordinary design. (b) *The default is inappropriate long
+        before it crashes.* The `max(30, ...)` means the hard-coded 30
+        wins for every dataset under 150 sites, so the knot count does
+        not scale down with `n` at all, and the `floor(n * 0.2)` branch
+        -- the part expressing the actual "20% of sites" intent -- is
+        unreachable for any small study. At `n = 31` that is 30 knots
+        for 31 sites, i.e. nearly one knot per site, which defeats the
+        purpose of a sparse GP approximation (fewer inducing points than
+        data points) and just adds bookkeeping to what is effectively a
+        full GP.
+
+        **Fix:** cap the count below the number of locations and let it
+        scale, e.g. `min(floor(n * 0.2), n - 1)` with a much smaller
+        absolute floor; and validate `n_supportpoints` against `ns` with
+        a message that names the argument.
+
+        **Workaround, already available:** `listParams$n_supportpoints`
+        overrides the default and works -- verified at `n = 20` with 6
+        knots, and at `n = 30`/`50`/`100`. This is why the simulation
+        study is *not* blocked by this item (`dev/simstudy/PLAN.md`
+        §10): its small-`n` cell sets `n_supportpoints` explicitly,
+        which it arguably should do regardless, so the knot count is
+        pinned rather than drifting with `n`.
+
+    4.  **`simulateOccJSDMData(useSpatField = TRUE, ds = 0)` silently
+        generates no spatial field.** Found 27 July 2026 while
+        diagnosing group A item 2.
+
+        `R/jsdmfun.R:578-586` builds the cross-species spatial
+        covariance as
+
+        ```
+        Lambda <- matrix(rnorm(ds * S), ds, S)
+        Sigma  <- t(Lambda) %*% Lambda + diag(10^(-5), nrow = S)
+        spatField <- t(chol(K_mat)) %*% Z %*% chol(Sigma)
+        ```
+
+        With `ds = 0`, `Lambda` is `0 x S` and `t(Lambda) %*% Lambda` is
+        all zeros, so `Sigma` collapses to the jitter `diag(1e-5)` and
+        the field is scaled by `sqrt(1e-5) = 0.0032`. **Measured**
+        `sd(spatField)`, with `sigma_s = 0.5` throughout: **0.0019 at
+        `ds = 0`**, versus 0.80 at `ds = 1`, 1.01 at `ds = 2`, 1.03 at
+        `ds = 3`.
+
+        So `useSpatField = TRUE` is silently a no-op unless `ds >= 1`.
+        Nothing warns, and the returned `spatField` is the right shape,
+        so a caller has no signal that the spatial term is absent.
+
+        **This is exactly the trap the original audit flagged for Fixed
+        bugs 7** -- "`useSpatField = TRUE` currently simulates data with
+        *no* spatial signal, so any coverage check of the spatial term
+        will silently pass against a null case". That entry was recorded
+        as fixed because the field is now added *before* the responses
+        are drawn, which was a real and separate bug. The field is still
+        ~0 whenever `ds = 0`, for this different reason.
+
+        **Fix:** either error/warn when `useSpatField = TRUE` and
+        `ds < 1`, or make `ds = 0` mean "shared spatial field across
+        species" rather than collapsing `Sigma` to jitter. The first is
+        a two-line guard; the second is a modelling decision.
+
+        Note also that `sigma_s` is not cleanly the field's marginal SD:
+        `Sigma = Lambda'Lambda` with `Lambda ~ N(0,1)` contributes its
+        own scale, so amplitude grows with `ds` (0.80 -> 1.01 -> 1.03
+        above for a fixed `sigma_s = 0.5`). Worth documenting whatever
+        the fix.
+
+    5.  **`predictNewSites()` still has no defaults for `X_psi` /
+        `X_s`** (residual of the original audit's B.4; see Fixed bugs
+        18, which wrongly recorded this half as done). Verified via
+        `formals(predictNewSites)`: `fitModel`, `X_psi` and `X_s` all
+        have no default, while `useEnvCov`/`useSpatial` default to `T`.
+        So `predictNewSites(fit, X_psi = X)` errors on the missing `X_s`
+        promise even when `useSpatial = FALSE`, which is exactly the
+        combination the docs describe as supported. Fix: give both
+        `NULL` defaults, matching `useBiotic`, which already has one.
+
+        No test guards this yet -- `tests/testthat/test-api-contracts.R`
+        deliberately omits it rather than encoding the broken behaviour.
+        Add the test with the fix.
+
+    6.  **Assorted smaller items.**
 
         (a) `createDataIdx()` is called with `maxP`
             (`R/runOccJSDM.R:638`) for `model = "occupancy"` too, where
@@ -345,8 +508,8 @@ editor_options:
         **Alex needs to re-clone or hard-reset** his local copy, since
         his existing history is now divergent.
 
-    2.  I ALREADY ADDED DIAGNOSTICS SO NOT NEEDED ANYMORE 
-    
+    2.  I ALREADY ADDED DIAGNOSTICS SO NOT NEEDED ANYMORE
+
         ~~model diagnostics functions from GLGS-eDNA repo~~ -- **done**:
         `computeRhat()`, `summarisePosterior()`, `plotTraceplot()`, and
         `returnConvergenceDiagnostics()` added to `R/diagnostics.R`.
@@ -370,54 +533,60 @@ editor_options:
         decide whether to include in repo**
 
     2.  **extensive testing on simulated datasets.** Use
-        `simulateOccJSDMData()` across the model types
-        (`"binary"`/`"occupancy"`/`"two_stage"`, with and without
-        traits/spatial autocorrelation/latent factors) to check that
-        `runOccJSDM()` recovers the true generating parameters --
-        coefficients, residual correlation structure, variance
-        partitioning -- within credible intervals at a nominal coverage
-        rate, across a range of `n`/`S`/`M`/`K` and effect sizes. Decide
-        whether this becomes the `testthat` suite referenced under
-        "Testing Strategy Implementation" in `AGENTS.md` (currently only
-        `test-placeholder.R` exists) or a separate reproducibility
-        vignette/script, or both.
+        `simulateOccJSDMData()` to check that `runOccJSDM()` recovers
+        the true generating parameters within credible intervals at a
+        nominal coverage rate.
 
-        **Bug-audit context (updated 27 July 2026).** Most of the group
-        A bugs that would have confounded this exercise are now fixed
-        (see **Fixed bugs**), which changes what this testing is for: it
-        is now primarily a *regression* suite guarding fixes that were
-        verified by reading the code rather than by running the model,
-        and only secondarily a bug-discovery exercise. Points to carry
-        into the design:
+        **Full specification: `dev/simstudy/PLAN.md`.** That file is
+        authoritative -- keep design detail there rather than
+        duplicating it here, so the two cannot drift.
 
-        (a) It should pin the fixes that have no test today. The
-            row-ordering fix (Fixed bugs 1 and 11) is the clearest
-            candidate -- feed `runOccJSDM()` a row-shuffled copy of a
-            simulated dataset and check the fit matches the sorted one.
-            The spatial-field-timing fix (Fixed bugs 7) matters just as
-            much: before it, `useSpatField = TRUE` simulated data with
-            *no* spatial signal, so any coverage check of the spatial
-            term would have silently passed against a null case. Now
-            that the field is added before the responses are drawn, that
-            check is finally meaningful -- and is worth writing
-            precisely because nothing currently exercises it.
-        (b) Two group A items are still open and will still bias
-            recovery, so design around them: `sigma_h` never being
-            sampled (A.1) makes any coverage check of
-            `predictNewSites()` at new sites assume unit factor
-            variance, and the residual OpenMP RNG race (A.2) means
-            results on Linux/Windows are not bit-reproducible across
-            runs even at a fixed seed. Prefer fitted-site checks, or a
-            single-threaded build, until A.2 is closed.
-        (c) Alex fixed most of group A without a test accompanying each
-            fix, so several entries in **Fixed bugs** rest on code
-            reading alone. Reproducing at least the inference-affecting
-            ones against simulated truth is the point of this item.
+        **Status: mostly built (27 July 2026).** Stages 1 and 3-5 are
+        committed; only the full R = 100 run remains.
+
+        - **Tier 1** (`6d9526d`): 89 structural assertions in 7 s,
+          shipping to CRAN. `helper-fixtures.R`, `test-smoke-configs.R`,
+          `test-regression-bugs.R`, `test-api-contracts.R`.
+          `test-placeholder.R` deleted.
+        - **Tier 2** (`f63eeeb`): recovery canary, \~30 s,
+          `skip_on_cran()`, thresholds set from measurement.
+        - **Tier 3 + runner** (`f63eeeb`, `6123036`): env-gated study
+          plus `dev/simstudy/run_study.R`, smoke-tested end to end.
+        - **Remaining:** `Rscript dev/simstudy/run_study.R --cores=8`,
+          \~2.4 h on 8 cores.
+
+        **It has already paid for itself.** Writing the tests found two
+        package bugs that reading the code had not: `sigma_s` never
+        sampled (**group A item 2**) and `predictNewSites()` still
+        lacking its `X_psi`/`X_s` defaults (**group B item 5**, which
+        also corrected Fixed bugs 18). It also measured the GP knot
+        floor that became **group B item 3**. Four assertions had to be
+        rewritten once run, because the premise was wrong in ways only
+        execution revealed -- `psi_output` is not produced by every
+        model type, `tau_output` is NA by design outside `continuous`,
+        PCR replicates are exchangeable so row-for-row equality is the
+        wrong bar, and `idx_ls` is constant for a reason unrelated to
+        the fix it appeared to test.
+
+        Two constraints from this document that the plan builds on, kept
+        here because they are properties of the *bug list*, not of the
+        test design: several **Fixed bugs** entries rest on code reading
+        alone, which is the near-term point of this work; and the open
+        group A items shape it -- `sigma_h` (A.1) and `l_s` (A.2) are
+        both excluded from coverage checks because neither is
+        recoverable, and the OpenMP RNG race (A.3) is why tier 1 asserts
+        structure rather than numeric equality.
+
+        **One empirical question is open**, and the full run should
+        settle it: `beta_theta` and `resid_cor` came out at 0.78-0.80
+        and 0.76-0.79 across three independent seed sets, against a
+        nominal 0.95. Consistent enough that chance is unlikely, but R =
+        5 is too small to call. See `PLAN.md` §10.3.
 
 2.  Alex to dos
 
-    1.  Design better model selection criterion (the one currently implemented, which is
-    the same as HMSC, tend to overfit).
+    1.  Design better model selection criterion (the one currently
+        implemented, which is the same as HMSC, tend to overfit).
 
     2.  GAMs for JSDM
 
@@ -448,13 +617,12 @@ editor_options:
     > Announcing **occJSDM**, an R package for combining occupancy and
     > joint species distribution modelling
     > (<https://github.com/AlexDiana/occJSDM>). The package is
-    > \`eDNA-aware' and thus applicable to metabarcoding data.
+    > \`eDNA-aware' and thus can be used on metabarcoding data.
     >
     > Note this is **beta software**, under active development.
     >
     > occJSDM extends the occPlus two-stage eDNA occupancy model of Ji
-    > et al. (2025, *Ecology Letters*, <doi:10.1111/ele.70302>) — which
-    > separates field capture from lab detection, per species — by
+    > et al. (2025, *Ecology Letters*, <doi:10.1111/ele.70302>) by
     > adding a joint species distribution model (JSDM) layer.
     >
     > Highlights:
@@ -463,15 +631,16 @@ editor_options:
     >   false-positive error at two stages (field and lab), per species.
     >   Stage 1: estimates species eDNA collection probability in the
     >   field, given true eDNA presence at the site, and contamination
-    >   probability, given eDNA absence at the site. Stage 2: estimates
-    >   species eDNA detection probability in the lab (i.e. successful
-    >   PCR and sequencing), given eDNA collection, and contamination
-    >   probability, given eDNA non-collection. In datasets where
-    >   multiple primers have been used, each species' detection
-    >   probability is estimated per primer (allowing one to compare
-    >   each primer's efficiency for each species), while species
-    >   occupancies are estimated using information across all primers.
-    >   Both environmental and detection covariates are supported.
+    >   probability, given true eDNA absence at the site. Stage 2:
+    >   estimates species eDNA detection probability in the lab (i.e.
+    >   successful PCR and sequencing), given successful eDNA collection
+    >   in Stage 1, and contamination probability, given eDNA
+    >   non-collection in Stage 1. In datasets where multiple primers
+    >   have been used, each species' detection probability is estimated
+    >   per primer (allowing one to compare each primer's efficiency for
+    >   each species), while species occupancies are estimated using
+    >   information across all primers. Both environmental and detection
+    >   covariates are supported.
     > - JSDM: Integrates the occupancy model with a full-featured JSDM:
     >   species fit jointly, with latent-factor residual correlations.
     >   The JSDM optionally supports species traits shaping occupancy
@@ -491,7 +660,7 @@ editor_options:
     >   that site, thereby using co-occurrence structure. We also allow
     >   species to borrow strength from other species sharing similar
     >   traits, in contrast to the classical approach of having rare
-    >   species \`borrow strength' from abundant species, as is used in
+    >   species borrow strength from abundant species, as is used in
     >   multi-species occupancy models.
     >
     > Vignettes included for data simulation and model
@@ -563,7 +732,7 @@ the *MEE paper* testing item is meant to address.
     thread-safe path the audit described as "half-finished" is now wired
     up on that side. **The `samplePGvariables()` path
     (`src/jsdm.cpp:398`) is still affected** via `randinvg()`'s
-    `R::rnorm` call; that residual is tracked as **group A item 2**
+    `R::rnorm` call; that residual is tracked as **group A item 3**
     above. *(Also not recorded at the time; recovered 27 July.)*
 
 **Post-audit fixes:**
@@ -594,7 +763,7 @@ the *MEE paper* testing item is meant to address.
     rather than hard-coding `by = 5`. **Two of the three original
     defects remain** -- the 2-D branch still thins by row, and the
     scalar `WAIC` still falls through to
-    `print("Dimension not recognised")`. Tracked as **group B item 3**
+    `print("Dimension not recognised")`. Tracked as **group B item 2**
     above.
 
 17. ~~**`computeDiagnostics()` runs on `psi_output`.**~~ **FIXED.**
@@ -602,9 +771,17 @@ the *MEE paper* testing item is meant to address.
     diagnostics. `R/diagnostics.R:403-404`.
 
 18. ~~**`predictNewSites()` does not honour its documented no-op
-    behaviour.**~~ **FIXED.** Added `NULL` defaults for `X_psi` and
-    `X_s` and proper gating on the presence of covariates.
-    `R/output.R:1457,1470`.
+    behaviour.**~~ **PARTIALLY FIXED -- this entry previously overstated
+    what landed; corrected 27 July 2026.** The gating on the presence of
+    covariates was done (`R/output.R:1457,1470`). The **`NULL` defaults
+    were not**: `formals(predictNewSites)` shows `X_psi` and `X_s` still
+    have no defaults at all, so `predictNewSites(fit, X_psi = X)` still
+    fails on the missing `X_s` promise even when `useSpatial = FALSE`.
+    Residual tracked as **group B item 5**.
+
+    Third entry in this list found to overstate a fix (with 16 and 20),
+    which is the argument for the test suite: every one of these was
+    recorded from reading a diff rather than from running the code.
 
 19. ~~**`set.seed(1)` inside `computeSpeciesDetected()`.**~~ **FIXED
     incidentally in b7b6aa2.** The RNG-resetting line was deleted.
@@ -618,7 +795,89 @@ the *MEE paper* testing item is meant to address.
     and guard the fewer-than-500-draws case that the original hard-coded
     `B <- 200` did not. **The sampling is still a prefix, not a random
     draw** across chains, which was the substantive half of the original
-    critique. Tracked as **group B item 4** above.
+    critique. **Now fully fixed** -- see Fixed bugs 23.
+
+**Fix of 27 July 2026:**
+
+21. ~~**`plotFPTPStage2Rates()` ignores `primerName`.**~~ **FIXED.**
+    `p_output`/`q_output` are now subset to the requested primer
+    *before* the quantiles are computed
+    (`p_output[idx_primer, , , , drop = FALSE]`, `R/output.R:790-791`),
+    instead of `apply(p_output, 2, ...)` pooling over primer, iteration
+    and chain. `primerName` is matched against
+    `fitModel$infos$primerNames` via `match(as.character(...))`, so both
+    `primerName = 2` and `primerName = "2"` work (`primerNames` is
+    stored as an *integer* vector, so the string form would otherwise
+    silently fail); an unrecognised primer now errors with the list of
+    available primers rather than quietly plotting the pooled result.
+    The dead `idx_speciesprimer <- str_match(...)` line is deleted, and
+    the plot title now reports which primer is shown.
+
+    **Verified against `sampleresults`** (`P = 3`): the three primers
+    now give three different plots (previously identical); each primer's
+    intervals match hand-computed `quantile()` values on that primer's
+    slice; no primer reproduces the old pooled result; the default still
+    equals primer 1; `idx_species` subsetting and rendering are
+    unaffected.
+
+    **Note:** this was the *only* use of `stringr` anywhere in `R/`, so
+    the package no longer needs it. Three `@import stringr` tags remain
+    (`R/output.R:757`, `:857`, `:1008` -- the latter two were already
+    spurious) along with `import(stringr)` in `NAMESPACE` and `stringr`
+    in `DESCRIPTION`. Removing all three is a small, safe cleanup, best
+    folded into the group C dead-code pass.
+
+22. ~~**REGRESSION: `runOccJSDM()` crashes on every fit that has no
+    spatial covariates.**~~ **FIXED** by Alex in `d6b70b1` ("Fixed bug
+    on sample l_s"), the same day it was reported. Any call without
+    `spatCovariates` had been dying in the first MCMC iteration with
+    `missing value where TRUE/FALSE needed`, thrown from the acceptance
+    test in `sample_ls()`, because `precomputeSORmatrices()` leaves
+    `logDetKuu_grid`/`Lm1_grid` entirely `NA` when there is no spatial
+    field but `update_jSDMcoef()` called `sample_ls()` anyway.
+
+    **The actual fix was a one-word correction, and a better one than
+    the fix suggested when this was filed.** The guard was
+    `ps <- ncol(Bs)`; it is now `ps <- nrow(Bs)` (`R/jsdmfun.R`, in
+    `update_jSDMcoef()`'s "read state variables" block). `Bs` is
+    `[ps x S]` -- spatial basis dimensions by species -- so `ncol(Bs)`
+    was the *species* count, which is never 0. `if (ps > 0)` was
+    therefore always true regardless of whether a spatial field existed.
+    `nrow(Bs)` is the spatial dimension and is correctly 0 with no
+    spatial covariates, so `sample_ls()` is simply not reached. This
+    addresses the root cause (a transposed dimension in the guard)
+    rather than the workaround originally proposed here, which was to
+    re-gate on `X_centers > 0`.
+
+    **Verified after the fix** against the shipped `sampledata`: both
+    `runOccJSDM(..., spatCovariates = c("Xs.1","Xs.2"))` and the same
+    call *without* `spatCovariates` now complete. Tracing confirms the
+    mechanism -- `precomputeSORmatrices()` still reports
+    `X_centers = 0, grids all NA = TRUE` in the non-spatial case, but
+    `sample_ls()` is no longer called, so the `NA`s are never read.
+
+    **Still open from the original report:** the small-`n` `kmeans()`
+    failure found while reproducing this
+    (`number of cluster centres must lie between 1 and nrow(x)` at
+    `n = 30` *with* spatial covariates) was not addressed by `d6b70b1`
+    and has not been re-tested. It constrains the feasible grid for the
+    simulation-study vignette, so confirm it before designing that.
+
+23. ~~**`computeSpeciesDetected()` uses a prefix of the draws, not a
+    sample across chains.**~~ **FIXED.** `R/output.R:2229` now reads
+    `idxObs <- unique(floor(seq(1, niter, length.out = 500)))` -- the
+    `min(500, niter)` cap is gone, so the 500 indices are spread evenly
+    across the *entire* flattened draw set rather than landing in its
+    first 500 rows. Since `beta_theta_output` is flattened
+    iter-within-chain at `:2222`, spanning the full range means every
+    chain now contributes. This resolves the substantive half of the
+    original audit critique (see Fixed bugs 20, which fixed only the
+    crash).
+
+    Note the result is a *systematic* thin rather than the random draw
+    from `seq_len(niter * nchain)` originally suggested. That is
+    equivalent for this purpose and is standard practice for thinning an
+    MCMC chain, so no further change is needed.
 
 **Future versions**
 

@@ -78,8 +78,10 @@ computing credible intervals for conditional/predictive occupancy
 probabilities but produces a much larger object.}
 
 \item{listPriors}{(Optional) list of prior hyperparameters. Currently
-supported: \code{a_p}/\code{b_p} (prior on true positive lab stage rate,
-default \code{10}/\code{1}), \code{a_q}/\code{b_q} (prior on false positive
+supported: \code{a_p}/\code{b_p} (Beta prior shape parameters for the true
+positive lab stage rate,
+default \code{10}/\code{1}), \code{a_q}/\code{b_q} (Beta prior shape parameters
+for the false positive
 lab stage rate, default \code{1}/\code{10})  and
 \code{a_theta0}/\code{b_theta0} (Beta prior shape parameters for the
 false positive field stage rate, default \code{1}/\code{30}).}
