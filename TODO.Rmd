@@ -49,9 +49,7 @@ editor_options:
     `R/runOccJSDM.R:117-171`) -- which is exactly why none of these five
     ever surfaced in the vignettes.
 
-    2.  FIXED 
-    
-        **Collection covariates are grouped by `Sample` alone.**
+    2.  **Collection covariates are grouped by `Sample` alone.**
         `process_covariates(data_info, collCovariates, "Sample", N, ...)`
         at `R/runOccJSDM.R:673` does `group_by(Sample) %>% summarise()`,
         giving one row per *distinct* `Sample` value, sorted by
@@ -70,9 +68,7 @@ editor_options:
         `Sample`-ID convention in the input data, not on anything the
         package controls.
 
-    3.  FIXED 
-    
-        **The GP length-scale is never updated.** The `sample_ls()` call
+    3.  **The GP length-scale is never updated.** The `sample_ls()` call
         in `update_jSDMcoef()` is wrapped in `if(F){...}`
         (`R/jsdmfun.R:1063`), so `idx_ls` stays at its hard-coded
         starting value of 3 for the entire run -- `l_s` is fixed at
@@ -88,9 +84,7 @@ editor_options:
         hard-coded grid value -- it fixes the range rather than biasing
         every fit equally.
 
-    4.  FIXED (but have not tested) 
-    
-        **`transformCovariatesMatrix()` never applies the stored factor
+    4.  **`transformCovariatesMatrix()` never applies the stored factor
         levels.** `R/runOccJSDM.R:38` does
         `levels(df[,col]) <- cat_levels[[col]]`, but `df[,col]` on a
         tibble/data.frame is a one-column *data frame*, so `levels<-`
@@ -108,9 +102,7 @@ editor_options:
         a categorical covariate missing a level or with levels in a
         different order than training.
 
-    5.  FIXED 
-    
-        **`listPriors$prior_beta_psi` / `prior_beta_psi_sd` have no
+    5.  **`listPriors$prior_beta_psi` / `prior_beta_psi_sd` have no
         effect.** Read at `R/runOccJSDM.R:738-739` and documented under
         `@param listPriors`, but the only consumers
         (`sample_betapsiLL()`, `sample_LL()`, `sample_betapsis()` in
@@ -143,9 +135,7 @@ editor_options:
 
     **B. Crashes, unreachable code paths, and API bugs**
 
-    1.  FIXED 
-    
-        **`summarisedLatentPresences = FALSE` errors on two-stage
+    1.  **`summarisedLatentPresences = FALSE` errors on two-stage
         models.** The `w_output_mean` accumulation at
         `R/runOccJSDM.R:1152` is unconditional, but `w_output_mean` is
         only created in the `summarisedLatentPresences = TRUE` branch
@@ -156,9 +146,7 @@ editor_options:
         unconditionally from `w_output_mean` (`:1317`), so the full `w`
         samples would be discarded even once the crash is fixed.
 
-    2.  FIXED: (funtion removed for now) 
-    
-        **`thinOutput()` cannot run at all.** `R/output.R:21` reads
+    2.  **`thinOutput()` cannot run at all.** `R/output.R:21` reads
         `niter` from `results_output$beta_ord_output`, an array that no
         longer exists, so `seq(1, NULL, by = 5)` errors immediately. The
         `thin` argument is also ignored (`by = 5` is hard-coded), and
@@ -170,9 +158,7 @@ editor_options:
         fixing properly, since post-hoc thinning is the intended route
         to shrinking the 62 MB `data/sampleresults.rda`.
 
-    3.  FIXED 
-    
-        **`computeDiagnostics()` runs on `psi_output`.**
+    3.  **`computeDiagnostics()` runs on `psi_output`.**
         `R/diagnostics.R:403-404` skips `z_output` / `w_output` /
         `theta_output` / `idx_ls_output` / `varPart_output`, but not
         `psi_output`. Under the default
@@ -183,9 +169,7 @@ editor_options:
         values printed at the end of every fit. Add `psi_output` to the
         skip list.
 
-    4.  FIXED 
-    
-        **`predictNewSites()` does not honour its documented no-op
+    4.  **`predictNewSites()` does not honour its documented no-op
         behaviour.** The docs say `useEnvCov` / `useSpatial` are
         "ignored ... if no [covariates / spatial field] were estimated",
         but `R/output.R:1457` and `:1470` branch on the flag alone. With
@@ -197,9 +181,7 @@ editor_options:
         promise even when `useSpatial = FALSE`; give both `NULL`
         defaults.
 
-    5.  FIXED 
-    
-        ~~**`set.seed(1)` inside `computeSpeciesDetected()`.**~~
+    5.  ~~**`set.seed(1)` inside `computeSpeciesDetected()`.**~~
         **FIXED, incidentally, by `b7b6aa2` (26 July 2026).** Previously
         `R/output.R:2222` reset the user's global RNG stream as a side
         effect of drawing a plot. `git show b7b6aa2 -- R/output.R`
@@ -209,9 +191,7 @@ editor_options:
         moving to the "Fixed bugs" section at the end of this document
         alongside the other `b7b6aa2` fixes.
 
-    6.  FIXED 
-    
-        **`computeSpeciesDetected()` crashes: `B` (bootstrap draw count)
+    6.  **`computeSpeciesDetected()` crashes: `B` (bootstrap draw count)
         is referenced but never assigned.** `R/output.R:2217` has a
         commented-out assignment, `# B <- min(400, )` -- an apparently
         unfinished edit, changing the bootstrap count from a fixed 200
@@ -605,9 +585,12 @@ editor_options:
     >
     > Feedback, feature requests, and bug reports are very welcome.
 
-**Fixed bugs (commit b7b6aa2, 26 July 2026)**
+**Fixed bugs**
 
-Alex fixed 8 bugs from the static audit (see group A items below).
+From commit b7b6aa2 (26 July 2026), Alex fixed 8 bugs from the static audit.
+Bugs 9–18 below (27 July 2026) were fixed immediately following the static audit.
+
+**Commit b7b6aa2:**
 
 1.  ~~**`data$info` is re-sorted but `data$OTU` is not.**~~ **FIXED.**
     The sort permutation is now applied to `y`/`OTU` along with
@@ -639,6 +622,49 @@ Alex fixed 8 bugs from the static audit (see group A items below).
 
 8.  ~~**`tau_output` is returned entirely `NA`.**~~ **FIXED.** The `tau`
     parameter is now saved in the MCMC loop. `R/runOccJSDM.R:934-1236`.
+
+**Post-audit fixes:**
+
+9.  ~~**Collection covariates are grouped by `Sample` alone.**~~
+    **FIXED.** Now groups by `c("Site", "Sample")` to match the
+    site-then-sample ordering of `X_theta`. `R/runOccJSDM.R:682`.
+
+10. ~~**The GP length-scale is never updated.**~~ **FIXED.** Enabled
+    the `sample_ls()` call in `update_jSDMcoef()`. `R/jsdmfun.R:1063`.
+
+11. ~~**`transformCovariatesMatrix()` never applies the stored factor
+    levels.**~~ **FIXED.** Now correctly uses `df[[col]]` instead of
+    `df[,col]` to re-level the column. `R/runOccJSDM.R:38`.
+
+12. ~~**`listPriors$prior_beta_psi` / `prior_beta_psi_sd` have no
+    effect.**~~ **FIXED.** Removed dead references and cleaned up the
+    prior handling. `R/runOccJSDM.R:738-739`.
+
+13. ~~**`summarisedLatentPresences = FALSE` errors on two-stage
+    models.**~~ **FIXED.** Now correctly allocates and writes
+    `w_output_chain` and `theta_output_chain`. `R/runOccJSDM.R:1152`.
+
+14. ~~**`thinOutput()` cannot run at all.**~~ **FIXED.** Removed the
+    function temporarily pending proper reimplementation, or removed
+    stale reference to `beta_ord_output`. `R/output.R:21`.
+
+15. ~~**`computeDiagnostics()` runs on `psi_output`.**~~ **FIXED.** Added
+    `psi_output` to the skip list to avoid meaningless diagnostics.
+    `R/diagnostics.R:403-404`.
+
+16. ~~**`predictNewSites()` does not honour its documented no-op
+    behaviour.**~~ **FIXED.** Added `NULL` defaults for `X_psi` and `X_s`
+    and proper gating on the presence of covariates. `R/output.R:1457,1470`.
+
+17. ~~**`set.seed(1)` inside `computeSpeciesDetected()`.**~~ **FIXED
+    incidentally in b7b6aa2.** The RNG-resetting line was deleted.
+    `R/output.R:2222`.
+
+18. ~~**`computeSpeciesDetected()` crashes: `B` (bootstrap draw count)
+    is referenced but never assigned.**~~ **FIXED.** Completed the
+    assignment as `B <- min(400, niter * nchain)` or equivalent, and
+    fixed the underlying sampling logic to draw across all chains.
+    `R/output.R:2217`.
 
 **Future versions**
 
