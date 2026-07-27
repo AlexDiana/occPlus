@@ -48,6 +48,8 @@ reparamFactorModel <- function(U_output, L_output){
        "U_output" = U_output_reparam)
 }
 
+# COVARIATES TRANSFORMING FUNCTIONS --------
+
 create_covariates_matrix <- function(df, df_spline = 5, remove_intercept = TRUE) {
 
   if (any(is.na(df))) stop("NA in covariates matrix")
