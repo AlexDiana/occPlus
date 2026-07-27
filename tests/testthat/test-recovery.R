@@ -86,7 +86,7 @@ test_that("known-undercovered blocks have not got worse", {
   watched <- summary_tbl[summary_tbl$block %in% c("beta_theta", "resid_cor"), ]
   expect_gt(nrow(watched), 0)
 
-  # Floor of 0.55 against a measured 0.76-0.80: room for sampling noise at
+  # Floor of 0.55 against a measured 0.72-0.85: room for sampling noise at
   # R = 5, but a real regression would break through.
   expect_gt(min(watched$coverage), 0.55)
 })
