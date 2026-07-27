@@ -77,11 +77,11 @@ These are the things most likely to make the suite wrong or annoying. Each has b
 
 ### 5.1 Never assert exact numeric equality of fitted values in tier 1
 
-`TODO.Rmd` group A item 2 is still open: `randinvg()` (`src/jsdm.cpp:86`) draws from R's global RNG inside `samplePGvariables()`'s OpenMP loop. A fixed seed therefore **does not** reproduce across platforms — it is deterministic on stock macOS clang (no OpenMP) and racy on Linux/Windows.
+`TODO.Rmd` group A item 3 is still open: `randinvg()` (`src/jsdm.cpp:86`) draws from R's global RNG inside `samplePGvariables()`'s OpenMP loop. A fixed seed therefore **does not** reproduce across platforms — it is deterministic on stock macOS clang (no OpenMP) and racy on Linux/Windows.
 
 A tier-1 test asserting `expect_equal()` on posterior quantities would pass locally and fail intermittently on CRAN. That is the worst available failure mode. **Tier 1 assertions must be structural**: does it run, are dimensions right, is a block non-`NA`, does a value vary. Numeric recovery belongs in tiers 2–3, with tolerances.
 
-Revisit once group A item 2 is closed.
+Revisit once group A item 3 is closed.
 
 ### 5.2 Coverage assertions are stochastic and will flake if set tight
 
@@ -100,7 +100,7 @@ The latent-factor model is invariant to rotation and sign. `reparamFactorModel()
 - **Directly comparable:** `B0`, `B`, `G`, `Gs`, `beta_theta`, `theta0`, `p`, `q`, `tau`, `sigma_b`, `sigma_bs`, `l_s`
 - **Only as identified functions:** residual correlation matrix, `eta`/`psi`, variance partitioning
 - **Must NOT be checked element-wise:** `U`, `L`, `A`, `C` — element-wise coverage would fail for reasons that are not bugs
-- **Excluded:** `sigma_h` — never sampled (group A item 1), so it would fail by construction. Exclude explicitly and with a comment, so a future reader does not "fix" the test.
+- **Excluded:** `sigma_h` — never sampled (group A item 1), so it would fail by construction. **Also `l_s`** — group A item 2: `sigma_s` is hard-coded to 1 at the `sample_ls()` call site, so the length-scale absorbs the amplitude misspecification and rails at the top of `l_s_grid` for every true value tried. Any coverage figure for `l_s` is meaningless until that is fixed. Exclude explicitly and with a comment, so a future reader does not "fix" the test.
 
 ### 5.4 The GP knot count must be pinned, not left to the default
 
@@ -127,7 +127,7 @@ Every spatial cell sets `n_supportpoints` explicitly (§10.1). Left to the defau
 | \# | Cell | Differs from base by | Buys |
 |----|----|----|----|
 | 1 | base | — | Flagship config; *is* the traits×spatial interaction |
-| 2 | spatial isolated | traits off | `l_s`/`Bs` recovery unconfounded by trait terms |
+| 2 | spatial isolated | traits off | `Bs` recovery unconfounded by trait terms (**not** `l_s` — see §5.3) |
 | 3 | traits isolated | spatial off | `G` (fourth-corner) recovery unconfounded by the GP |
 | 4 | `P = 3` | `P = 2 -> 3` | Guards Fixed bugs 2; matches shipped `sampledata` |
 | 5 | low information | low `p`/`theta_baseline`, smaller `n` (see §10.1 — must set `n_supportpoints`) | Calibration where data are thin — the realistic eDNA regime |
@@ -234,6 +234,20 @@ Also: pooling coverage across species within a block buys precision, but those i
 ------------------------------------------------------------------------
 
 ## 10. Open items
+
+0.  *OPEN, and it degrades cells 1 and 2.* **`sigma_s` is never sampled**
+    (`TODO.Rmd` group A item 2, found 27 July while writing tier 1). The
+    spatial field's amplitude is hard-coded to 1 at the `sample_ls()` call
+    site, so the length-scale absorbs the misspecification and rails at the
+    top of `l_s_grid` regardless of the true value — measured at true
+    `l_s` = 0.30, 0.15 and 0.08, across seeds.
+
+    Consequences here: `l_s` is dropped from the checked parameters (§5.3),
+    and the spatial cells still test `Bs` and the overall spatial
+    contribution but cannot speak to range recovery. **Not blocking** — the
+    cells remain worth running — but a coverage table produced before this
+    is fixed must not be read as evidence about the GP. Re-run cells 1 and 2
+    afterwards.
 
 1.  ~~*OPEN, blocking tier 3.***Minimum `n` for spatial cells.**~~ **RESOLVED 27 July 2026, and no longer blocking.** Measured: the floor is **31 unique locations** with default settings. `n <= 29` fails with `cannot take a sample larger than the population`, `n = 30` with `number of cluster centres must lie between 1 and nrow(x)`, `n >= 31` runs.
 

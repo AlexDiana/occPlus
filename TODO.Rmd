@@ -51,7 +51,58 @@ editor_options:
         unless `predictNewSites()` is used to extrapolate to new sites
         with a nonzero number of factors.
 
-    2.  **Non-thread-safe RNG remains in the hottest OpenMP loop**
+    2.  **`sigma_s` is never sampled, and the GP length-scale rails at
+        the top of its grid as a result.** Found 27 July 2026 while
+        writing the tier-1 test suite; the same defect class as item 1
+        (`sigma_h`), but with observable consequences for every spatial
+        fit.
+
+        `sigma_s` is the spatial field's marginal SD. It appears in the
+        *simulator* (`R/jsdmfun.R:576`, `K2(Xs, Xs, sigma_s, l_s)`) but
+        nowhere in the fitting path except as a **hard-coded literal**:
+        `sample_ls(idx_ls, SE, list_SoRSummaries, a_l_s, b_l_s,
+        sigma_s = 1)` (`R/jsdmfun.R:1254`). It is never drawn, never
+        read from `listParams` or `listPriors`, and never returned. The
+        fitted model therefore assumes a unit-variance spatial field
+        regardless of the data.
+
+        **Measured consequence.** `sample_ls()` does run and does accept
+        moves (traced: 13 accepted of 60 proposals), but `idx_ls` walks
+        to **10 -- the maximum of `l_s_grid = seq(0.01, 0.3, length.out
+        = 10)` -- and stays there, for every true `l_s` tried (0.30,
+        0.15, 0.08) across multiple seeds.** The length-scale is not
+        being recovered; it is absorbing the amplitude misspecification,
+        since it is the only free spatial parameter left.
+
+        **Why this matters more than item 1.** `sigma_h` is inert for
+        the fitted model and only affects `predictNewSites()`. This one
+        biases the spatial term of *every* fit that uses
+        `useSpatField = TRUE`, and it silently invalidates any check of
+        spatial-range recovery -- including the spatial cells of the
+        simulation study (`dev/simstudy/PLAN.md` §6.1 cells 1 and 2),
+        which would have reported meaningless coverage for `l_s`.
+
+        **Note this was not visible before `b7b6aa2`.** While
+        `sample_ls()` sat inside `if(F){...}` the length-scale was
+        openly fixed, which was the original audit's complaint. Enabling
+        it exposed that the surrounding spatial model has no amplitude
+        parameter to go with it.
+
+        **Fix:** sample `sigma_s` (an inverse-gamma prior alongside
+        `a_sigmab`/`b_sigmab` etc. at `R/runOccJSDM.R:801-804` would be
+        the natural home), or at minimum expose it via `listParams` and
+        return it, so the assumption is visible rather than buried in a
+        call-site literal. Until then, treat `l_s` estimates as
+        uninterpretable and widen `l_s_grid`'s upper bound only after
+        the amplitude question is settled -- widening the grid alone
+        would just move the rail.
+
+        **Test coverage:** `tests/testthat/test-regression-bugs.R`
+        asserts that `sample_ls()` is *reached* rather than that
+        `idx_ls` varies, precisely so the test does not encode this
+        defect. Revisit that test once this is fixed.
+
+    3.  **Non-thread-safe RNG remains in the hottest OpenMP loop**
         (residual of the original audit's A.6; the other half was fixed
         in `b7b6aa2` -- see Fixed bugs 10). `samplePGvariables()`
         (`src/jsdm.cpp:398`) is `#pragma omp parallel for collapse(2)`
@@ -150,7 +201,21 @@ editor_options:
         which it arguably should do regardless, so the knot count is
         pinned rather than drifting with `n`.
 
-    4.  **Assorted smaller items.**
+    4.  **`predictNewSites()` still has no defaults for `X_psi` /
+        `X_s`** (residual of the original audit's B.4; see Fixed bugs
+        18, which wrongly recorded this half as done). Verified via
+        `formals(predictNewSites)`: `fitModel`, `X_psi` and `X_s` all
+        have no default, while `useEnvCov`/`useSpatial` default to `T`.
+        So `predictNewSites(fit, X_psi = X)` errors on the missing `X_s`
+        promise even when `useSpatial = FALSE`, which is exactly the
+        combination the docs describe as supported. Fix: give both
+        `NULL` defaults, matching `useBiotic`, which already has one.
+
+        No test guards this yet -- `tests/testthat/test-api-contracts.R`
+        deliberately omits it rather than encoding the broken behaviour.
+        Add the test with the fix.
+
+    5.  **Assorted smaller items.**
 
         (a) `createDataIdx()` is called with `maxP`
             (`R/runOccJSDM.R:638`) for `model = "occupancy"` too, where
@@ -587,7 +652,7 @@ the *MEE paper* testing item is meant to address.
     thread-safe path the audit described as "half-finished" is now wired
     up on that side. **The `samplePGvariables()` path
     (`src/jsdm.cpp:398`) is still affected** via `randinvg()`'s
-    `R::rnorm` call; that residual is tracked as **group A item 2**
+    `R::rnorm` call; that residual is tracked as **group A item 3**
     above. *(Also not recorded at the time; recovered 27 July.)*
 
 **Post-audit fixes:**
@@ -626,9 +691,17 @@ the *MEE paper* testing item is meant to address.
     diagnostics. `R/diagnostics.R:403-404`.
 
 18. ~~**`predictNewSites()` does not honour its documented no-op
-    behaviour.**~~ **FIXED.** Added `NULL` defaults for `X_psi` and
-    `X_s` and proper gating on the presence of covariates.
-    `R/output.R:1457,1470`.
+    behaviour.**~~ **PARTIALLY FIXED -- this entry previously overstated
+    what landed; corrected 27 July 2026.** The gating on the presence of
+    covariates was done (`R/output.R:1457,1470`). The **`NULL` defaults
+    were not**: `formals(predictNewSites)` shows `X_psi` and `X_s` still
+    have no defaults at all, so `predictNewSites(fit, X_psi = X)` still
+    fails on the missing `X_s` promise even when `useSpatial = FALSE`.
+    Residual tracked as **group B item 4**.
+
+    Third entry in this list found to overstate a fix (with 16 and 20),
+    which is the argument for the test suite: every one of these was
+    recorded from reading a diff rather than from running the code.
 
 19. ~~**`set.seed(1)` inside `computeSpeciesDetected()`.**~~ **FIXED
     incidentally in b7b6aa2.** The RNG-resetting line was deleted.
