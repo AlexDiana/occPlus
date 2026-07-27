@@ -10,7 +10,13 @@ inst/doc
 /dev/*
 !/dev/simstudy/
 /dev/simstudy/results/
-/deprecated/
+# deprecated/ IS tracked: it is the record of superseded code (occPlus-era
+# functions, the old vignette, functions_old.cpp), kept in git and excluded
+# from the build via ^deprecated$ in .Rbuildignore. Its existing contents were
+# tracked only by grandfathering -- they predate the ignore rule this replaces
+# -- which meant anything moved there in future would have been silently
+# untracked. That matters because TODO.Rmd group C plans to move more dead
+# code here. Nothing is ignored under deprecated/ now.
 outputs/caiwang_results.rda
 src/*.o
 src/*.so

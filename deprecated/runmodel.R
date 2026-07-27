@@ -1,3 +1,28 @@
+# DEPRECATED -- does not run. Moved from dev/ on 27 July 2026.
+#
+# Alex's development scratchpad from the occPlus era. Two independent reasons
+# it cannot be executed as-is:
+#
+#   * It calls functions that no longer exist: runOccJSDMPro(), plotParam(),
+#     plotDetectionCovariates(), plotOrdinationCovariates(),
+#     plotFPDetectionRates(). runOccJSDMPro() is not a renaming of anything
+#     current -- it is from the predecessor design, which is why this file
+#     belongs beside deprecated/R/runOccPlus.R.
+#   * It loads data that is not in the repository, one via an absolute path:
+#       load(here("Stan/Count model", "wangdata.rda"))
+#       load("~/occJSDM/dev/gailagongshan_occplus.rda")
+#
+# Its most substantial part -- the OUTPUT SIMS BETA PSI / THETA / ORD sections,
+# roughly 200 lines comparing estimates against simulated truth -- is a manual
+# precursor of the simulation study now implemented properly in
+# tests/testthat/helper-simstudy.R, which does the same comparison across ten
+# scenarios with actual coverage rather than eyeballed plots. See
+# dev/simstudy/PLAN.md.
+#
+# Kept because the SIMULATE BASED ON REAL section may encode parameter settings
+# tuned against real data that are not written down anywhere else. Not built
+# (^deprecated$ in .Rbuildignore).
+
 # library(here); library(stringr);
 # library(tidyverse); library(mixtools)
 #
