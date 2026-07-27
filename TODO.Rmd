@@ -463,46 +463,51 @@ editor_options:
         the true generating parameters within credible intervals at a
         nominal coverage rate.
 
-        **Full specification: `dev/simstudy/PLAN.md`** (agreed 27 July
-        2026, not yet built). That file is authoritative -- keep design
-        detail there rather than duplicating it here, so the two cannot
-        drift.
+        **Full specification: `dev/simstudy/PLAN.md`.** That file is
+        authoritative -- keep design detail there rather than duplicating
+        it here, so the two cannot drift.
 
-        Decisions settled, so this item no longer asks whether it should
-        be a `testthat` suite, a vignette, or a script:
+        **Status: mostly built (27 July 2026).** Stages 1 and 3-5 are
+        committed; only the full R = 100 run remains.
 
-        - **A `testthat` suite**, not a vignette or pkgdown article. The
-          `sample_ls` regression (Fixed bugs 22) broke *every*
-          non-spatial fit and survived because nothing exercised that
-          path; a three-line test would have caught it, and the vignette
-          would not have, since it passes `spatCovariates`. This also
-          discharges Phase 3 step 11 of the CRAN plan in `AGENTS.md`.
-        - **Three tiers.** Tier 1 (structural regression + smoke, under
-          30 s) **ships to CRAN**; tier 2 (recovery canary) is
-          `skip_on_cran()`; tier 3 (the coverage study) is env-gated and
-          cannot be an ordinary test at 2.5-3 h.
-        - **R = 100** replicates, **10 scenarios**, coverage as the
-          statistic, with seams so simulation-based calibration can be
-          added later without restructuring.
+        - **Tier 1** (`6d9526d`): 89 structural assertions in 7 s,
+          shipping to CRAN. `helper-fixtures.R`,
+          `test-smoke-configs.R`, `test-regression-bugs.R`,
+          `test-api-contracts.R`. `test-placeholder.R` deleted.
+        - **Tier 2** (`f63eeeb`): recovery canary, ~30 s,
+          `skip_on_cran()`, thresholds set from measurement.
+        - **Tier 3 + runner** (`f63eeeb`, `6123036`): env-gated study
+          plus `dev/simstudy/run_study.R`, smoke-tested end to end.
+        - **Remaining:** `Rscript dev/simstudy/run_study.R --cores=8`,
+          ~2.4 h on 8 cores.
+
+        **It has already paid for itself.** Writing the tests found two
+        package bugs that reading the code had not: `sigma_s` never
+        sampled (**group A item 2**) and `predictNewSites()` still
+        lacking its `X_psi`/`X_s` defaults (**group B item 4**, which
+        also corrected Fixed bugs 18). It also measured the GP knot floor
+        that became **group B item 3**. Four assertions had to be
+        rewritten once run, because the premise was wrong in ways only
+        execution revealed -- `psi_output` is not produced by every model
+        type, `tau_output` is NA by design outside `continuous`, PCR
+        replicates are exchangeable so row-for-row equality is the wrong
+        bar, and `idx_ls` is constant for a reason unrelated to the fix
+        it appeared to test.
 
         Two constraints from this document that the plan builds on, kept
         here because they are properties of the *bug list*, not of the
         test design: several **Fixed bugs** entries rest on code reading
-        alone and have no test, which is the near-term point of this
-        work; and the two open group A items shape it -- `sigma_h` (A.1)
-        is excluded from coverage checks because it is never sampled,
-        and the OpenMP RNG race (A.2) means a fixed seed is not
-        reproducible on Linux/Windows, which is why tier 1 asserts
+        alone, which is the near-term point of this work; and the open
+        group A items shape it -- `sigma_h` (A.1) and `l_s` (A.2) are
+        both excluded from coverage checks because neither is
+        recoverable, and the OpenMP RNG race (A.3) is why tier 1 asserts
         structure rather than numeric equality.
 
-        **Blocking tier 3:** the minimum `n` for spatial scenarios is
-        unknown (`n = 30` with `spatCovariates` dies in `kmeans()`,
-        `n = 100` works). Cheap to bisect; if the knot count simply does
-        not adapt to small `n`, file it as a bug instead. See Fixed bugs
-        22 and `PLAN.md` §10.
-
-        **Next step:** stage 1 of `PLAN.md` §11 -- fixtures plus tier 1.
-        Worth doing regardless of what is decided about the rest.
+        **One empirical question is open**, and the full run should
+        settle it: `beta_theta` and `resid_cor` came out at 0.78-0.80 and
+        0.76-0.79 across three independent seed sets, against a nominal
+        0.95. Consistent enough that chance is unlikely, but R = 5 is too
+        small to call. See `PLAN.md` §10.3.
 
 2.  Alex to dos
 
