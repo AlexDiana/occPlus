@@ -587,8 +587,9 @@ editor_options:
 
 **Fixed bugs**
 
-From commit b7b6aa2 (26 July 2026), Alex fixed 8 bugs from the static audit.
-Bugs 9–18 below (27 July 2026) were fixed immediately following the static audit.
+From commit b7b6aa2 (26 July 2026), Alex fixed 8 bugs from the static
+audit. Bugs 9–18 below (27 July 2026) were fixed immediately following
+the static audit.
 
 **Commit b7b6aa2:**
 
@@ -629,8 +630,8 @@ Bugs 9–18 below (27 July 2026) were fixed immediately following the static aud
     **FIXED.** Now groups by `c("Site", "Sample")` to match the
     site-then-sample ordering of `X_theta`. `R/runOccJSDM.R:682`.
 
-10. ~~**The GP length-scale is never updated.**~~ **FIXED.** Enabled
-    the `sample_ls()` call in `update_jSDMcoef()`. `R/jsdmfun.R:1063`.
+10. ~~**The GP length-scale is never updated.**~~ **FIXED.** Enabled the
+    `sample_ls()` call in `update_jSDMcoef()`. `R/jsdmfun.R:1063`.
 
 11. ~~**`transformCovariatesMatrix()` never applies the stored factor
     levels.**~~ **FIXED.** Now correctly uses `df[[col]]` instead of
@@ -648,13 +649,14 @@ Bugs 9–18 below (27 July 2026) were fixed immediately following the static aud
     function temporarily pending proper reimplementation, or removed
     stale reference to `beta_ord_output`. `R/output.R:21`.
 
-15. ~~**`computeDiagnostics()` runs on `psi_output`.**~~ **FIXED.** Added
-    `psi_output` to the skip list to avoid meaningless diagnostics.
-    `R/diagnostics.R:403-404`.
+15. ~~**`computeDiagnostics()` runs on `psi_output`.**~~ **FIXED.**
+    Added `psi_output` to the skip list to avoid meaningless
+    diagnostics. `R/diagnostics.R:403-404`.
 
 16. ~~**`predictNewSites()` does not honour its documented no-op
-    behaviour.**~~ **FIXED.** Added `NULL` defaults for `X_psi` and `X_s`
-    and proper gating on the presence of covariates. `R/output.R:1457,1470`.
+    behaviour.**~~ **FIXED.** Added `NULL` defaults for `X_psi` and
+    `X_s` and proper gating on the presence of covariates.
+    `R/output.R:1457,1470`.
 
 17. ~~**`set.seed(1)` inside `computeSpeciesDetected()`.**~~ **FIXED
     incidentally in b7b6aa2.** The RNG-resetting line was deleted.
