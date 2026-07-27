@@ -117,10 +117,10 @@ editor_options:
         supplied, defaults otherwise):
 
         | sites | knots (`ps`) | result |
-        |-------|--------------|--------|
-        | <= 29 | 30 | `cannot take a sample larger than the population when 'replace = FALSE'` |
+        |----|----|----|
+        | \<= 29 | 30 | `cannot take a sample larger than the population when 'replace = FALSE'` |
         | 30 | 30 | `number of cluster centres must lie between 1 and nrow(x)` |
-        | >= 31 | 30 | runs |
+        | \>= 31 | 30 | runs |
 
         **Two distinct problems.** (a) *The crash.* Below 31 unique
         locations the fit dies during setup, before MCMC starts, with an
@@ -142,14 +142,13 @@ editor_options:
         absolute floor; and validate `n_supportpoints` against `ns` with
         a message that names the argument.
 
-        **Workaround, already available:**
-        `listParams$n_supportpoints` overrides the default and works --
-        verified at `n = 20` with 6 knots, and at `n = 30`/`50`/`100`.
-        This is why the simulation study is *not* blocked by this item
-        (`dev/simstudy/PLAN.md` §10): its small-`n` cell sets
-        `n_supportpoints` explicitly, which it arguably should do
-        regardless, so the knot count is pinned rather than drifting
-        with `n`.
+        **Workaround, already available:** `listParams$n_supportpoints`
+        overrides the default and works -- verified at `n = 20` with 6
+        knots, and at `n = 30`/`50`/`100`. This is why the simulation
+        study is *not* blocked by this item (`dev/simstudy/PLAN.md`
+        §10): its small-`n` cell sets `n_supportpoints` explicitly,
+        which it arguably should do regardless, so the knot count is
+        pinned rather than drifting with `n`.
 
     4.  **Assorted smaller items.**
 
@@ -394,8 +393,8 @@ editor_options:
         decide whether to include in repo**
 
     2.  **extensive testing on simulated datasets.** Use
-        `simulateOccJSDMData()` to check that `runOccJSDM()` recovers the
-        true generating parameters within credible intervals at a
+        `simulateOccJSDMData()` to check that `runOccJSDM()` recovers
+        the true generating parameters within credible intervals at a
         nominal coverage rate.
 
         **Full specification: `dev/simstudy/PLAN.md`** (agreed 27 July
