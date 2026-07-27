@@ -51,52 +51,83 @@ editor_options:
         unless `predictNewSites()` is used to extrapolate to new sites
         with a nonzero number of factors.
 
-    2.  **`sigma_s` is never sampled, and the GP length-scale rails at
-        the top of its grid as a result.** Found 27 July 2026 while
-        writing the tier-1 test suite; the same defect class as item 1
-        (`sigma_h`), but with observable consequences for every spatial
-        fit.
+    2.  **`sample_ls()` evaluates the wrong density, so the GP
+        length-scale is never recovered and rails at the top of its
+        grid.** Found 27 July 2026 while writing the test suite.
 
-        `sigma_s` is the spatial field's marginal SD. It appears in the
-        *simulator* (`R/jsdmfun.R:576`, `K2(Xs, Xs, sigma_s, l_s)`) but
-        nowhere in the fitting path except as a **hard-coded literal**:
-        `sample_ls(idx_ls, SE, list_SoRSummaries, a_l_s, b_l_s, sigma_s = 1)`
-        (`R/jsdmfun.R:1254`). It is never drawn, never read from
-        `listParams` or `listPriors`, and never returned. The fitted
-        model therefore assumes a unit-variance spatial field regardless
-        of the data.
+        **This entry previously blamed `sigma_s` being hard-coded to 1
+        and proposed sampling it. That diagnosis was wrong and the
+        proposed fix is disproven** -- see "What was ruled out" below.
+        The real defect is deeper and is a modelling change, not a
+        parameter addition.
 
-        **Measured consequence.** `sample_ls()` does run and does accept
-        moves (traced: 13 accepted of 60 proposals), but `idx_ls` walks
-        to **10 -- the maximum of
-        `l_s_grid = seq(0.01, 0.3, length.out = 10)` -- and stays there,
-        for every true `l_s` tried (0.30, 0.15, 0.08) across multiple
-        seeds.** The length-scale is not being recovered; it is
-        absorbing the amplitude misspecification, since it is the only
-        free spatial parameter left.
+        **The defect.** Under the SoR (subset-of-regressors)
+        approximation the fitted spatial field is
+        `SE = Ks(l_s) %*% Bs` (`computePsiCoef()`), i.e. a
+        *deterministic function of `Bs` and `l_s`*. But `sample_ls()`
+        (`R/jsdmfun.R:1054`) treats `SE` as a **GP draw** and scores its
+        density under `N(0, sigma_s^2 K(l_s))` while holding `SE` fixed.
+        That is not the conditional posterior of `l_s`, and it is
+        self-defeating: `SE` was already smoothed at the current `l_s`,
+        so it scores progressively better under ever-smoother
+        covariances. The result is a likelihood that is **monotone
+        increasing in `l_s`**, with nothing to penalise the upper bound.
 
-        **Why this matters more than item 1.** `sigma_h` is inert for
-        the fitted model and only affects `predictNewSites()`. This one
-        biases the spatial term of *every* fit that uses
-        `useSpatField = TRUE`, and it silently invalidates any check of
-        spatial-range recovery -- including the spatial cells of the
-        simulation study (`dev/simstudy/PLAN.md` §6.1 cells 1 and 2),
-        which would have reported meaningless coverage for `l_s`.
+        **Measured.** `idx_ls` sits at 10 -- the maximum of
+        `l_s_grid = seq(0.01, 0.3, length.out = 10)` -- with range 10-10
+        across the whole post-burn-in run, for **every** true `l_s`
+        tried (0.074, 0.171, 0.300) and with genuine spatial signal
+        present (`ds = 2`). Profiling the grid confirms the cause: the
+        log-likelihood rises monotonically from -376 at `l_s = 0.01` to
+        -154 at `l_s = 0.30`, so the true value is never competitive.
 
-        **Note this was not visible before `b7b6aa2`.** While
-        `sample_ls()` sat inside `if(F){...}` the length-scale was
-        openly fixed, which was the original audit's complaint. Enabling
-        it exposed that the surrounding spatial model has no amplitude
-        parameter to go with it.
+        **What was ruled out** (recorded so it is not re-investigated):
 
-        **Fix:** sample `sigma_s` (an inverse-gamma prior alongside
-        `a_sigmab`/`b_sigmab` etc. at `R/runOccJSDM.R:801-804` would be
-        the natural home), or at minimum expose it via `listParams` and
-        return it, so the assumption is visible rather than buried in a
-        call-site literal. Until then, treat `l_s` estimates as
-        uninterpretable and widen `l_s_grid`'s upper bound only after
-        the amplitude question is settled -- widening the grid alone
-        would just move the rail.
+        (a) *Amplitude is not missing from the model.* `sigma_bs` **is**
+            sampled (`R/jsdmfun.R:1211`) and **is** the SoR amplitude,
+            since `Bs` carries prior variance `sigma_bs^2` and the
+            kernel is built at unit amplitude (`K2(..., 1, l_s)`). A
+            separate `sigma_s` would be redundant and would create an
+            identifiability problem.
+        (b) *Passing the correct amplitude does not help.* Profiling the
+            grid at the fitted field's actual amplitude
+            (`sd(SE) = 0.85`) instead of 1 leaves the likelihood
+            monotone -- it still rises to the grid maximum. So the
+            one-line fix this entry used to propose would not work.
+        (c) *`logDetKuu` is correct.* `sum(log(rcppeigen_get_diag(K_xx)))
+            * 2` matches the true log-determinant at all ten grid points;
+            `rcppeigen_get_diag()` returns the **Cholesky** diagonal
+            despite the name.
+        (d) *Not an artefact of weak data.* Identical behaviour with
+            `ds = 2` (real spatial signal) as with `ds = 0`.
+
+        **Impact.** Biases the spatial term of every fit using
+        `useSpatField = TRUE`, and makes `l_s` uninterpretable. Note
+        widening `l_s_grid` alone would simply move the rail.
+
+        **Fix (needs Alex -- a derivation, not a code tweak).** Evaluate
+        `l_s` where it actually acts, on the data: either recompute
+        `eta` with `Ks(l_s*)` and score the observation likelihood under
+        the proposal, or integrate out `Bs` and use the standard SoR
+        marginal likelihood. The first is the smaller change but costs an
+        `eta` recomputation per proposal; the second is cleaner and
+        harder to derive. Roughly half a day if the intended conditional
+        is already clear, longer if it needs settling. **Do not attempt
+        blind** -- a subtly wrong conditional would be worse than the
+        present state, which at least fails visibly.
+
+        **Cheap interim alternative (~1 h).** Since `sample_ls()` does
+        not work, and enabling it also caused the non-spatial crash
+        (Fixed bugs 22 / group B item 1), reverting to a *documented,
+        user-settable, fixed* `l_s` is arguably more honest than the
+        current state: it removes a moving part that is not moving
+        correctly and exposes the assumption instead of burying it in a
+        call-site literal.
+
+        **Not visible before `b7b6aa2`.** While `sample_ls()` sat inside
+        `if(F){...}` the length-scale was openly fixed, which was the
+        original audit's complaint. Enabling it exposed that the update
+        itself was never correct.
 
         **Test coverage:** `tests/testthat/test-regression-bugs.R`
         asserts that `sample_ls()` is *reached* rather than that
@@ -202,7 +233,50 @@ editor_options:
         which it arguably should do regardless, so the knot count is
         pinned rather than drifting with `n`.
 
-    4.  **`predictNewSites()` still has no defaults for `X_psi` /
+    4.  **`simulateOccJSDMData(useSpatField = TRUE, ds = 0)` silently
+        generates no spatial field.** Found 27 July 2026 while
+        diagnosing group A item 2.
+
+        `R/jsdmfun.R:578-586` builds the cross-species spatial
+        covariance as
+
+        ```
+        Lambda <- matrix(rnorm(ds * S), ds, S)
+        Sigma  <- t(Lambda) %*% Lambda + diag(10^(-5), nrow = S)
+        spatField <- t(chol(K_mat)) %*% Z %*% chol(Sigma)
+        ```
+
+        With `ds = 0`, `Lambda` is `0 x S` and `t(Lambda) %*% Lambda` is
+        all zeros, so `Sigma` collapses to the jitter `diag(1e-5)` and
+        the field is scaled by `sqrt(1e-5) = 0.0032`. **Measured**
+        `sd(spatField)`, with `sigma_s = 0.5` throughout: **0.0019 at
+        `ds = 0`**, versus 0.80 at `ds = 1`, 1.01 at `ds = 2`, 1.03 at
+        `ds = 3`.
+
+        So `useSpatField = TRUE` is silently a no-op unless `ds >= 1`.
+        Nothing warns, and the returned `spatField` is the right shape,
+        so a caller has no signal that the spatial term is absent.
+
+        **This is exactly the trap the original audit flagged for Fixed
+        bugs 7** -- "`useSpatField = TRUE` currently simulates data with
+        *no* spatial signal, so any coverage check of the spatial term
+        will silently pass against a null case". That entry was recorded
+        as fixed because the field is now added *before* the responses
+        are drawn, which was a real and separate bug. The field is still
+        ~0 whenever `ds = 0`, for this different reason.
+
+        **Fix:** either error/warn when `useSpatField = TRUE` and
+        `ds < 1`, or make `ds = 0` mean "shared spatial field across
+        species" rather than collapsing `Sigma` to jitter. The first is
+        a two-line guard; the second is a modelling decision.
+
+        Note also that `sigma_s` is not cleanly the field's marginal SD:
+        `Sigma = Lambda'Lambda` with `Lambda ~ N(0,1)` contributes its
+        own scale, so amplitude grows with `ds` (0.80 -> 1.01 -> 1.03
+        above for a fixed `sigma_s = 0.5`). Worth documenting whatever
+        the fix.
+
+    5.  **`predictNewSites()` still has no defaults for `X_psi` /
         `X_s`** (residual of the original audit's B.4; see Fixed bugs
         18, which wrongly recorded this half as done). Verified via
         `formals(predictNewSites)`: `fitModel`, `X_psi` and `X_s` all
@@ -216,7 +290,7 @@ editor_options:
         deliberately omits it rather than encoding the broken behaviour.
         Add the test with the fix.
 
-    5.  **Assorted smaller items.**
+    6.  **Assorted smaller items.**
 
         (a) `createDataIdx()` is called with `maxP`
             (`R/runOccJSDM.R:638`) for `model = "occupancy"` too, where
@@ -484,7 +558,7 @@ editor_options:
         **It has already paid for itself.** Writing the tests found two
         package bugs that reading the code had not: `sigma_s` never
         sampled (**group A item 2**) and `predictNewSites()` still
-        lacking its `X_psi`/`X_s` defaults (**group B item 4**, which
+        lacking its `X_psi`/`X_s` defaults (**group B item 5**, which
         also corrected Fixed bugs 18). It also measured the GP knot
         floor that became **group B item 3**. Four assertions had to be
         rewritten once run, because the premise was wrong in ways only
@@ -703,7 +777,7 @@ the *MEE paper* testing item is meant to address.
     were not**: `formals(predictNewSites)` shows `X_psi` and `X_s` still
     have no defaults at all, so `predictNewSites(fit, X_psi = X)` still
     fails on the missing `X_s` promise even when `useSpatial = FALSE`.
-    Residual tracked as **group B item 4**.
+    Residual tracked as **group B item 5**.
 
     Third entry in this list found to overstate a fix (with 16 and 20),
     which is the argument for the test suite: every one of these was

@@ -17,6 +17,14 @@ SIMSTUDY_BASE <- list(
   model = "two_stage",
   n = 100L, S = 10L, M = 2L, P = 2L, K = 3L,
   g = 2L, gt = 2L, d = 2L,
+  # ds >= 1 is REQUIRED for a spatial field to exist at all. At ds = 0 the
+  # simulator's cross-species spatial covariance collapses to jitter
+  # (Sigma <- t(Lambda) %*% Lambda + diag(1e-5, S) with Lambda 0 x S), scaling
+  # the field by sqrt(1e-5) = 0.0032. Measured sd(spatField) at sigma_s = 0.5:
+  # 0.0019 at ds = 0 versus 1.01 at ds = 2. Every spatial cell would otherwise
+  # be testing against a null field -- the exact trap the audit flagged for
+  # Fixed bugs 7. See TODO.Rmd group B item 4.
+  ds = 2L,
   ncov_psi = 2L, ncov_theta = 1L,
   useSpatField = TRUE,
   n_supportpoints = 20L,   # pinned, never left to the default (PLAN.md 5.4)
@@ -93,7 +101,7 @@ draw_truth <- function(scenario, seed) {
                         M = M_vec, P = P, K = K_vec,
                         ncov_psi = scenario$ncov_psi,
                         ncov_theta = scenario$ncov_theta),
-    jsdmParams = list(gt = scenario$gt, d = scenario$d, ds = 0,
+    jsdmParams = list(gt = scenario$gt, d = scenario$d, ds = scenario$ds,
                       # Near the InvGamma(10, 1) prior mean of sqrt(1/9); see
                       # the note above simstudy_param_blocks() on why a truth
                       # far from the prior makes this block uninterpretable.
@@ -203,9 +211,11 @@ statistic_rank <- function(draws, truth, ...) {
 #   U, L      rotation/sign invariant -- element-wise coverage is meaningless
 #   A, C      same, plus they are a latent-trait decomposition
 #   Bs, Gs    NOT comparable: the simulator builds the spatial field directly
-#             from sigma_s/l_s (truth is empty at ds = 0), while the fit
-#             represents it as sparse-GP basis coefficients over
-#             n_supportpoints knots. Different parameterisations, verified.
+#             from sigma_s/l_s as `spatField`, and leaves the SoR-form `Bs`
+#             empty -- Bst <- matrix(0, S, ps) means truth is 0 x S
+#             *regardless of ds* (re-checked at ds = 2, still 0 x S). The fit
+#             meanwhile represents the field as sparse-GP basis coefficients
+#             over n_supportpoints knots. Different parameterisations.
 #   sigma_bs  NOT comparable, for the same reason one level up. The simulator
 #             sets Bst <- matrix(0, S, ps) (R/jsdmfun.R:557), so sigma_bs
 #             generates nothing at all on the truth side, while the sampler
