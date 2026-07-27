@@ -322,8 +322,8 @@ editor_options:
         **Alex needs to re-clone or hard-reset** his local copy, since
         his existing history is now divergent.
 
-    2.  I ALREADY ADDED DIAGNOSTICS SO NOT NEEDED ANYMORE 
-    
+    2.  I ALREADY ADDED DIAGNOSTICS SO NOT NEEDED ANYMORE
+
         ~~model diagnostics functions from GLGS-eDNA repo~~ -- **done**:
         `computeRhat()`, `summarisePosterior()`, `plotTraceplot()`, and
         `returnConvergenceDiagnostics()` added to `R/diagnostics.R`.
@@ -393,8 +393,8 @@ editor_options:
 
 2.  Alex to dos
 
-    1.  Design better model selection criterion (the one currently implemented, which is
-    the same as HMSC, tend to overfit).
+    1.  Design better model selection criterion (the one currently
+        implemented, which is the same as HMSC, tend to overfit).
 
     2.  GAMs for JSDM
 
@@ -657,11 +657,11 @@ the *MEE paper* testing item is meant to address.
     `sample_ls()` is no longer called, so the `NA`s are never read.
 
     **Still open from the original report:** the small-`n` `kmeans()`
-    failure found while reproducing this (`number of cluster centres
-    must lie between 1 and nrow(x)` at `n = 30` *with* spatial
-    covariates) was not addressed by `d6b70b1` and has not been
-    re-tested. It constrains the feasible grid for the simulation-study
-    vignette, so confirm it before designing that.
+    failure found while reproducing this
+    (`number of cluster centres must lie between 1 and nrow(x)` at
+    `n = 30` *with* spatial covariates) was not addressed by `d6b70b1`
+    and has not been re-tested. It constrains the feasible grid for the
+    simulation-study vignette, so confirm it before designing that.
 
 23. ~~**`computeSpeciesDetected()` uses a prefix of the draws, not a
     sample across chains.**~~ **FIXED.** `R/output.R:2229` now reads
