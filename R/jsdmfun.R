@@ -48,6 +48,244 @@ reparamFactorModel <- function(U_output, L_output){
        "U_output" = U_output_reparam)
 }
 
+create_covariates_matrix <- function(df, df_spline = 5, remove_intercept = TRUE) {
+
+  if (any(is.na(df))) stop("NA in covariates matrix")
+
+  names_df   <- colnames(df)
+  df         <- df %>% dplyr::mutate(dplyr::across(dplyr::where(~ !is.numeric(.x)), as.factor))
+  is_numeric <- sapply(df, is.numeric)
+
+  mean_df    <- rep(NA, ncol(df))
+  sd_df      <- rep(NA, ncol(df))
+  cat_levels <- vector("list", ncol(df))
+  bs_info    <- vector("list", ncol(df))  # Stores knot attributes for continuous variables
+
+  names(mean_df) <- names(sd_df) <- names(cat_levels) <- names(bs_info) <- names_df
+
+  # Standardize numericals and record factor levels
+  for (col in 1:ncol(df)) {
+    col_name <- names_df[col]
+
+    if (is_numeric[col]) {
+      mean_df[col] <- mean(df[[col]], na.rm = TRUE)
+      sd_df[col]   <- sd(df[[col]], na.rm = TRUE)
+      df[[col]]    <- (df[[col]] - mean_df[col]) / sd_df[col]
+    } else {
+      cat_levels[[col]] <- levels(df[[col]])
+    }
+  }
+
+  # Build spline basis for numeric columns and leave factors untouched
+  list_X <- lapply(1:ncol(df), function(col) {
+    col_name <- names_df[col]
+    col_data <- df[[col]]
+
+    # Apply splines to numeric columns with enough unique values
+    if (is_numeric[col] && length(unique(col_data)) >= df_spline) {
+
+      # Generate basis on training data
+      bs_obj <- splines::bs(col_data, df = df_spline, intercept = FALSE)
+
+      # Save knots & attributes for predicting on new data later
+      bs_info[[col]] <<- list(
+        knots          = attr(bs_obj, "knots"),
+        Boundary.knots = attr(bs_obj, "Boundary.knots"),
+        degree         = attr(bs_obj, "degree"),
+        intercept      = attr(bs_obj, "intercept")
+      )
+
+      colnames(bs_obj) <- paste0(col_name, "_s", seq_len(ncol(bs_obj)))
+      return(bs_obj)
+
+    } else if (is_numeric[col]) {
+      # Fallback for numeric variables with too few unique values (keep linear)
+      mat <- matrix(col_data, ncol = 1)
+      colnames(mat) <- col_name
+      return(mat)
+
+    } else {
+      # Keep categorical columns as data.frame vectors for model.matrix expansion
+      return(data.frame(col_data, fix.empty.names = FALSE) %>% setNames(col_name))
+    }
+  })
+
+  # Re-combine numerical splines and categorical variables
+  df_transformed <- do.call(cbind, list_X)
+
+  # Generate standard dummy matrix (converts factors to dummies)
+  X_final <- stats::model.matrix(~ ., data = as.data.frame(df_transformed))
+
+  if (remove_intercept) {
+    X_final <- X_final[, -1, drop = FALSE]
+  }
+
+  list_matrix <- list(
+    names_df   = names_df,
+    mean_df    = mean_df,
+    sd_df      = sd_df,
+    cat_levels = cat_levels,
+    is_numeric = is_numeric,
+    bs_info    = bs_info
+  )
+
+  return(list(X = X_final, list_matrix = list_matrix))
+}
+
+transform_new_covariates <- function(df, list_matrix, remove_intercept = TRUE) {
+
+  names_df   <- list_matrix$names_df
+  mean_df    <- list_matrix$mean_df
+  sd_df      <- list_matrix$sd_df
+  cat_levels <- list_matrix$cat_levels
+  is_numeric <- list_matrix$is_numeric
+  bs_info    <- list_matrix$bs_info
+
+  if (any(is.na(df))) stop("NA in covariates matrix")
+
+  # Check for missing columns
+  missing_cols <- setdiff(names_df, colnames(df))
+  if (length(missing_cols) > 0) {
+    stop(paste("New data is missing critical columns required by the model:",
+               paste(missing_cols, collapse = ", ")))
+  }
+
+  # Sort columns & align factors
+  df <- df[, names_df, drop = FALSE] %>%
+    dplyr::mutate(dplyr::across(dplyr::where(~ !is.numeric(.x)), as.factor))
+
+  # 1. Standardize numerical and enforce factor levels
+  for (col in 1:ncol(df)) {
+    if (is_numeric[col]) {
+      df[, col] <- (df[, col] - mean_df[col]) / sd_df[col]
+    } else {
+      df[[col]] <- factor(df[[col]], levels = cat_levels[[col]])
+    }
+  }
+
+  # 2. Evaluate splines using stored training knots
+  list_X <- lapply(1:ncol(df), function(col) {
+    col_name <- names_df[col]
+    col_data <- df[[col]]
+
+    if (is_numeric[col] && !is.null(bs_info[[col]])) {
+
+      # Reconstruct spline basis on new data using training knots
+      info <- bs_info[[col]]
+      bs_obj <- splines::bs(
+        col_data,
+        knots          = info$knots,
+        Boundary.knots = info$Boundary.knots,
+        degree         = info$degree,
+        intercept      = info$intercept
+      )
+
+      colnames(bs_obj) <- paste0(col_name, "_s", seq_len(ncol(bs_obj)))
+      return(bs_obj)
+
+    } else if (is_numeric[col]) {
+      mat <- matrix(col_data, ncol = 1)
+      colnames(mat) <- col_name
+      return(mat)
+
+    } else {
+      return(data.frame(col_data, fix.empty.names = FALSE) %>% setNames(col_name))
+    }
+  })
+
+  df_transformed <- do.call(cbind, list_X)
+
+  # 3. Build model.matrix for new data
+  X_new <- stats::model.matrix(~ ., data = as.data.frame(df_transformed))
+
+  if (remove_intercept) {
+    X_new <- X_new[, -1, drop = FALSE]
+  }
+
+  return(X_new)
+}
+
+transformCovariatesMatrix <- function(df, list_matrix, remove_intercept){
+
+  names_df <- list_matrix$names_df
+  mean_df <- list_matrix$mean_df
+  sd_df <- list_matrix$sd_df
+  cat_levels <- list_matrix$cat_levels
+  is_numeric <- list_matrix$is_numeric
+
+  if(any(is.na(df))) stop("NA in covariates matrix")
+
+  # missing columns
+  missing_cols <- setdiff(names_df, colnames(df))
+  if (length(missing_cols) > 0) {
+    stop(paste("New data is missing critical columns required by the model:",
+               paste(missing_cols, collapse = ", ")))
+  }
+
+  # sort the new data and convert non numeric to
+  df <- df[,names_df,drop=F] %>%
+    dplyr::mutate(dplyr::across(dplyr::where(~ !is.numeric(.x)), as.factor))
+
+  # standardise numerical and categorical
+  for (col in 1:ncol(df)) {
+    if(is_numeric[col]){
+
+      df[,col] <- (df[,col] - mean_df[col]) / sd_df[col]
+
+    }else{
+
+      levels(df[[col]]) <- cat_levels[[col]]
+
+    }
+  }
+
+  df <- stats::model.matrix(~., df)
+
+  # Remove intercept if requested (first column is always intercept)
+  if (remove_intercept) {
+    df <- df[, -1, drop = FALSE]
+  }
+
+  return(df)
+
+}
+
+createSplinesObjects <- function(X, df){
+
+  list_ns <- lapply(seq_len(ncol(X)), function(j) {
+    ns_j <- bs(X[, j], df = 5, intercept = F)
+    ns_j
+  })
+
+  list_ns
+
+}
+
+createSplinesMatrixSingleCov <- function(n_s, X_cov){
+
+  Zj <- predict(n_s, X_cov)
+  colnames(Zj) <- paste0(colnames(X_cov), " - s", seq_len(ncol(Zj)))
+
+  Zj
+}
+
+createSplinesMatrix <- function(list_ns, X_new){
+
+  Z_list <- lapply(seq_len(ncol(X_new)), function(j) {
+    # Zj <- predict(list_ns[[j]], X_new[,j])
+    # colnames(Zj) <- paste0(colnames(X)[j], " - s", seq_len(ncol(Zj)))
+    Zj <- createSplinesMatrixSingleCov(list_ns[[j]], X_new[,j,drop=F])
+    Zj
+  })
+
+  Z <- do.call(cbind, Z_list)
+
+  Z
+
+}
+
+# SPATIAL FUNCTIONS -----------
+
 buildGrid <- function(XY_sp, gridStep){
 
   x_grid <- seq(min(XY_sp[,1]) - (1.5) * gridStep,
@@ -160,38 +398,6 @@ computeSpatialSummaries <- function(Xs, ps, maxPoints){
 
 }
 
-computeSORmatrix <- function(l_s, X_tilde, X_s, Xs_index, X_s_centers){
-
-  ps <- nrow(X_tilde)
-
-  if(ps > 0){
-
-    K_uu <- K2(X_tilde, X_tilde, 1, l_s) + diag(10^(-5), nrow = nrow(X_tilde))
-    L_Kmm <- FastGP::rcppeigen_get_chol(K_uu)
-    invL_Kmm <- FastGP::rcppeigen_invert_matrix(L_Kmm)
-    K_staru <- K2(X_s, X_tilde, 1, l_s)
-    KnmLmt <- K_staru %*% t(invL_Kmm)
-    Ks <- t(sapply(1:nrow(KnmLmt), function(i){ KnmLmt[i,X_s_centers[i,]]}))
-    Ks <- Ks[Xs_index,]
-
-    K_xx <- K2(X_s, X_s, 1, l_s) + diag(exp(-10), nrow = nrow(X_s))
-    logDetKuu <- sum(log(FastGP::rcppeigen_get_diag(K_xx))) * 2
-    sq_term <- FastGP::rcppeigen_get_chol(FastGP::rcppeigen_invert_matrix(K_xx))
-
-  } else {
-
-    Ks <- matrix(NA, nrow = length(Xs_index), 0)
-    logDetKuu <- NULL
-    sq_term <- NULL
-
-  }
-
-  list("Ks" = Ks,
-       "logDetKuu" = logDetKuu,
-       "sq_term" = sq_term)
-
-}
-
 precomputeSORmatrices <- function(l_s_grid, list_Xs){
 
   length_grid_ls <- length(l_s_grid)
@@ -239,65 +445,39 @@ precomputeSORmatrices <- function(l_s_grid, list_Xs){
 
 }
 
+computeSORmatrix <- function(l_s, X_tilde, X_s, Xs_index, X_s_centers){
 
-createSplinesObjects <- function(X, df){
+  ps <- nrow(X_tilde)
 
-  # list_ns <- list()
+  if(ps > 0){
 
-  list_ns <- lapply(seq_len(ncol(X)), function(j) {
-    ns_j <- bs(X[, j], df = 5, intercept = F)
-    ns_j
-    # list_ns[[j]] <-
-    # Zj <- ns_j
-    # colnames(Zj) <- paste0(colnames(X)[j], " - s", seq_len(ncol(Zj)))
-    # Zj
-  })
+    K_uu <- K2(X_tilde, X_tilde, 1, l_s) + diag(10^(-5), nrow = nrow(X_tilde))
+    L_Kmm <- FastGP::rcppeigen_get_chol(K_uu)
+    invL_Kmm <- FastGP::rcppeigen_invert_matrix(L_Kmm)
+    K_staru <- K2(X_s, X_tilde, 1, l_s)
+    KnmLmt <- K_staru %*% t(invL_Kmm)
+    Ks <- t(sapply(1:nrow(KnmLmt), function(i){ KnmLmt[i,X_s_centers[i,]]}))
+    Ks <- Ks[Xs_index,]
 
-  # Z <- do.call(cbind, Z_list)
+    K_xx <- K2(X_s, X_s, 1, l_s) + diag(exp(-10), nrow = nrow(X_s))
+    logDetKuu <- sum(log(FastGP::rcppeigen_get_diag(K_xx))) * 2
+    sq_term <- FastGP::rcppeigen_get_chol(FastGP::rcppeigen_invert_matrix(K_xx))
 
-  # Z
+  } else {
 
-  list_ns
+    Ks <- matrix(NA, nrow = length(Xs_index), 0)
+    logDetKuu <- NULL
+    sq_term <- NULL
 
-}
+  }
 
-createSplinesMatrixSingleCov <- function(n_s, X_cov){
-
-  Zj <- predict(n_s, X_cov)
-  colnames(Zj) <- paste0(colnames(X_cov), " - s", seq_len(ncol(Zj)))
-
-  Zj
-}
-
-createSplinesMatrix <- function(list_ns, X_new){
-
-  Z_list <- lapply(seq_len(ncol(X_new)), function(j) {
-    # Zj <- predict(list_ns[[j]], X_new[,j])
-    # colnames(Zj) <- paste0(colnames(X)[j], " - s", seq_len(ncol(Zj)))
-    Zj <- createSplinesMatrixSingleCov(list_ns[[j]], X_new[,j,drop=F])
-    Zj
-  })
-
-  Z <- do.call(cbind, Z_list)
-
-  Z
+  list("Ks" = Ks,
+       "logDetKuu" = logDetKuu,
+       "sq_term" = sq_term)
 
 }
 
 getDefaultSupportPoints <- function(n) max(30, floor(n * 0.2))
-
-# standardiseCovMatrix <- function(X){
-#
-#   meanX <- apply(X, 2, mean)
-#   sdX <- apply(X, 2, sd)
-#
-#   X_scaled <- scale(X)
-#
-#   list("X" = X_scaled,
-#        "meanX" = meanX,
-#        "sdX" = sdX)
-#
-# }
 
 # DATA SIMULATION -------
 
@@ -977,7 +1157,7 @@ update_jSDMcoef <- function(list_data,
 
   # read state variables
   {
-    ps <- ncol(Bs)
+    ps <- nrow(Bs)
   }
 
   # define transformed target variables

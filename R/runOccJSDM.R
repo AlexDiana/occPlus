@@ -6,51 +6,6 @@ get_param <- function(params, key, default = 0) {
   }
 }
 
-transformCovariatesMatrix <- function(df, list_matrix, remove_intercept){
-
-  names_df <- list_matrix$names_df
-  mean_df <- list_matrix$mean_df
-  sd_df <- list_matrix$sd_df
-  cat_levels <- list_matrix$cat_levels
-  is_numeric <- list_matrix$is_numeric
-
-  if(any(is.na(df))) stop("NA in covariates matrix")
-
-  # missing columns
-  missing_cols <- setdiff(names_df, colnames(df))
-  if (length(missing_cols) > 0) {
-    stop(paste("New data is missing critical columns required by the model:",
-               paste(missing_cols, collapse = ", ")))
-  }
-
-  # sort the new data and convert non numeric to
-  df <- df[,names_df,drop=F] %>%
-    dplyr::mutate(dplyr::across(dplyr::where(~ !is.numeric(.x)), as.factor))
-
-  # standardise numerical and categorical
-  for (col in 1:ncol(df)) {
-    if(is_numeric[col]){
-
-      df[,col] <- (df[,col] - mean_df[col]) / sd_df[col]
-
-    }else{
-
-      levels(df[[col]]) <- cat_levels[[col]]
-
-    }
-  }
-
-  df <- stats::model.matrix(~., df)
-
-  # Remove intercept if requested (first column is always intercept)
-  if (remove_intercept) {
-    df <- df[, -1, drop = FALSE]
-  }
-
-  return(df)
-
-}
-
 process_covariates <- function(data_info, covariates, group_by_col, n_obs,
                                remove_intercept = FALSE) {
 
