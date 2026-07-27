@@ -2218,7 +2218,7 @@ computeSpeciesDetected <- function(beta_theta_output, p_output, M, K, primer, al
   numPrimers <- dim(p_output)[2]
   niter <- dim(beta_theta_output)[1]
 
-  idxObs <- unique(floor(seq(1, min(500, niter), length.out = 500)))
+  idxObs <- unique(floor(seq(1, niter, length.out = 500)))
   B <- length(idxObs)
 
   if(primer == 0){

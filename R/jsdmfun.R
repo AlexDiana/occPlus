@@ -239,12 +239,13 @@ precomputeSORmatrices <- function(l_s_grid, list_Xs){
 
 }
 
+
 createSplinesObjects <- function(X, df){
 
   # list_ns <- list()
 
   list_ns <- lapply(seq_len(ncol(X)), function(j) {
-    ns_j <- ns(X[, j], df = 5)
+    ns_j <- bs(X[, j], df = 5, intercept = F)
     ns_j
     # list_ns[[j]] <-
     # Zj <- ns_j

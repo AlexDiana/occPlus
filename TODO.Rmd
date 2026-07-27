@@ -112,7 +112,9 @@ editor_options:
             function users cannot call. Either re-export it or drop the
             `.Rd`.
 
-    4.  **`computeSpeciesDetected()` still uses a prefix of the draws,
+    4.  FIXED 
+    
+        **`computeSpeciesDetected()` still uses a prefix of the draws,
         not a random sample** (residual of the original audit's B.6; see
         Fixed bugs 18). `R/output.R:2221-2222` now sets
         `idxObs <- unique(floor(seq(1, min(500, niter), length.out = 500)))`
