@@ -284,6 +284,8 @@ Of the should-fix items: 7 and 15 are fixed; 11 is closed by deliberate decision
 
 ## Testing Strategy Implementation (July 22, 2026)
 
+> **Superseded in part, 27 July 2026.** `dev/simstudy/PLAN.md` is now the authoritative test-suite design, agreed with Doug: a three-tier `testthat` suite (tier 1 structural + regression, shipping to CRAN; tier 2 `skip_on_cran()` canary; tier 3 an env-gated R = 100 coverage study over 10 scenarios), replacing the earlier idea of a reproducibility vignette or script. It also discharges Phase 3 step 11 of the CRAN plan below. The section that follows predates that decision -- treat its file layout and case list as raw material, and `PLAN.md` as the spec. In particular, note `PLAN.md` §5.1: tier 1 must **not** assert numeric equality of fitted values while group A item 2 (the OpenMP RNG race) is open, because a fixed seed does not reproduce on Linux/Windows, so any such test would pass locally and flake on CRAN.
+
 **Rationale**: The package currently has only a placeholder test file (`tests/testthat/test-placeholder.R`). A comprehensive test suite is needed to (1) validate core functionality, (2) prevent regression of fixed bugs, (3) ensure CRAN compliance, and (4) support ongoing development.
 
 ### Test Architecture

@@ -347,49 +347,50 @@ editor_options:
         decide whether to include in repo**
 
     2.  **extensive testing on simulated datasets.** Use
-        `simulateOccJSDMData()` across the model types
-        (`"binary"`/`"occupancy"`/`"two_stage"`, with and without
-        traits/spatial autocorrelation/latent factors) to check that
-        `runOccJSDM()` recovers the true generating parameters --
-        coefficients, residual correlation structure, variance
-        partitioning -- within credible intervals at a nominal coverage
-        rate, across a range of `n`/`S`/`M`/`K` and effect sizes. Decide
-        whether this becomes the `testthat` suite referenced under
-        "Testing Strategy Implementation" in `AGENTS.md` (currently only
-        `test-placeholder.R` exists) or a separate reproducibility
-        vignette/script, or both.
+        `simulateOccJSDMData()` to check that `runOccJSDM()` recovers the
+        true generating parameters within credible intervals at a
+        nominal coverage rate.
 
-        **Bug-audit context (updated 27 July 2026).** Most of the group
-        A bugs that would have confounded this exercise are now fixed
-        (see **Fixed bugs**), which changes what this testing is for: it
-        is now primarily a *regression* suite guarding fixes that were
-        verified by reading the code rather than by running the model,
-        and only secondarily a bug-discovery exercise. Points to carry
-        into the design:
+        **Full specification: `dev/simstudy/PLAN.md`** (agreed 27 July
+        2026, not yet built). That file is authoritative -- keep design
+        detail there rather than duplicating it here, so the two cannot
+        drift.
 
-        (a) It should pin the fixes that have no test today. The
-            row-ordering fix (Fixed bugs 1 and 11) is the clearest
-            candidate -- feed `runOccJSDM()` a row-shuffled copy of a
-            simulated dataset and check the fit matches the sorted one.
-            The spatial-field-timing fix (Fixed bugs 7) matters just as
-            much: before it, `useSpatField = TRUE` simulated data with
-            *no* spatial signal, so any coverage check of the spatial
-            term would have silently passed against a null case. Now
-            that the field is added before the responses are drawn, that
-            check is finally meaningful -- and is worth writing
-            precisely because nothing currently exercises it.
-        (b) Two group A items are still open and will still bias
-            recovery, so design around them: `sigma_h` never being
-            sampled (A.1) makes any coverage check of
-            `predictNewSites()` at new sites assume unit factor
-            variance, and the residual OpenMP RNG race (A.2) means
-            results on Linux/Windows are not bit-reproducible across
-            runs even at a fixed seed. Prefer fitted-site checks, or a
-            single-threaded build, until A.2 is closed.
-        (c) Alex fixed most of group A without a test accompanying each
-            fix, so several entries in **Fixed bugs** rest on code
-            reading alone. Reproducing at least the inference-affecting
-            ones against simulated truth is the point of this item.
+        Decisions settled, so this item no longer asks whether it should
+        be a `testthat` suite, a vignette, or a script:
+
+        - **A `testthat` suite**, not a vignette or pkgdown article. The
+          `sample_ls` regression (Fixed bugs 22) broke *every*
+          non-spatial fit and survived because nothing exercised that
+          path; a three-line test would have caught it, and the vignette
+          would not have, since it passes `spatCovariates`. This also
+          discharges Phase 3 step 11 of the CRAN plan in `AGENTS.md`.
+        - **Three tiers.** Tier 1 (structural regression + smoke, under
+          30 s) **ships to CRAN**; tier 2 (recovery canary) is
+          `skip_on_cran()`; tier 3 (the coverage study) is env-gated and
+          cannot be an ordinary test at 2.5-3 h.
+        - **R = 100** replicates, **10 scenarios**, coverage as the
+          statistic, with seams so simulation-based calibration can be
+          added later without restructuring.
+
+        Two constraints from this document that the plan builds on, kept
+        here because they are properties of the *bug list*, not of the
+        test design: several **Fixed bugs** entries rest on code reading
+        alone and have no test, which is the near-term point of this
+        work; and the two open group A items shape it -- `sigma_h` (A.1)
+        is excluded from coverage checks because it is never sampled,
+        and the OpenMP RNG race (A.2) means a fixed seed is not
+        reproducible on Linux/Windows, which is why tier 1 asserts
+        structure rather than numeric equality.
+
+        **Blocking tier 3:** the minimum `n` for spatial scenarios is
+        unknown (`n = 30` with `spatCovariates` dies in `kmeans()`,
+        `n = 100` works). Cheap to bisect; if the knot count simply does
+        not adapt to small `n`, file it as a bug instead. See Fixed bugs
+        22 and `PLAN.md` §10.
+
+        **Next step:** stage 1 of `PLAN.md` §11 -- fixtures plus tier 1.
+        Worth doing regardless of what is decided about the rest.
 
 2.  Alex to dos
 
