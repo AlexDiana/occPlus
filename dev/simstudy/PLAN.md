@@ -19,9 +19,7 @@ Building it surfaced four corrections to this plan and two package bugs; both ar
 
 ## Running the suite
 
-Six levels, cheapest first. Times are wall clock on Doug's machine and include
-~9 s of R startup and `load_all()` compilation, so the test work itself is
-correspondingly less.
+Six levels, cheapest first. Times are wall clock on Doug's machine and include \~9 s of R startup and `load_all()` compilation, so the test work itself is correspondingly less.
 
 | Level | Command | Time | Covers |
 |----|----|----|----|
@@ -32,42 +30,23 @@ correspondingly less.
 | One study cell | `Rscript dev/simstudy/run_study.R --cores=8 --scenarios=base` | \~15 min | tier 3, one cell at R = 100 |
 | Full study | `Rscript dev/simstudy/run_study.R --cores=8` | \~2.4 h | tier 3, all 10 cells at R = 100 |
 
-**`devtools::test()` is the day-to-day command** — run it after any change to
-`R/` or `src/`. In RStudio, Cmd+Shift+T. `filter` is a regex on the filename
-minus the `test-` prefix; the tier-1 files are `smoke`, `regression` and `api`.
+**`devtools::test()` is the day-to-day command** — run it after any change to `R/` or `src/`. In RStudio, Cmd+Shift+T. `filter` is a regex on the filename minus the `test-` prefix; the tier-1 files are `smoke`, `regression` and `api`.
 
-**After touching C++**, if you have been switching branches or the object files
-look stale:
+**After touching C++**, if you have been switching branches or the object files look stale:
 
-```
+```         
 Rscript -e 'pkgbuild::clean_dll(); devtools::test()'
 ```
 
-**Before pushing**, use `devtools::check()` rather than `devtools::test()`. It
-is the only way to see the tests as CRAN will run them: `test()` uses
-`load_all()`, whereas `check()` installs the package properly.
+**Before pushing**, use `devtools::check()` rather than `devtools::test()`. It is the only way to see the tests as CRAN will run them: `test()` uses `load_all()`, whereas `check()` installs the package properly.
 
-**The study runner never runs from `devtools::test()`.** Tier 3 is gated on
-`OCCJSDM_SIMSTUDY`; setting it runs the study *serially* through the test
-entry point, which is \~19 h. Use `run_study.R` for any real run — it
-parallelises across replicates. `--R=`, `--cores=`, `--scenarios=`, `--out=`,
-`--nburn=` and `--niter=` are all overridable.
+**The study runner never runs from `devtools::test()`.** Tier 3 is gated on `OCCJSDM_SIMSTUDY`; setting it runs the study *serially* through the test entry point, which is \~19 h. Use `run_study.R` for any real run — it parallelises across replicates. `--R=`, `--cores=`, `--scenarios=`, `--out=`, `--nburn=` and `--niter=` are all overridable.
 
 ### Two things to know before changing a test
 
-**A failing test names its bug.** The regression tests are titled
-`"Fixed bugs 22: ..."`, `"Fixed bugs 8: ..."` and so on, keyed to the *Fixed
-bugs* list in `TODO.Rmd`. Read that entry before debugging — it says what
-broke, when, and why it mattered.
+**A failing test names its bug.** The regression tests are titled `"Fixed bugs 22: ..."`, `"Fixed bugs 8: ..."` and so on, keyed to the *Fixed bugs* list in `TODO.Rmd`. Read that entry before debugging — it says what broke, when, and why it mattered.
 
-**Do not "fix" a loose assertion by tightening it.** Several are deliberately
-loose and the comment above each says why. The GP length-scale test asserts
-that `sample_ls()` is *reached*, not that `idx_ls` varies, precisely so it does
-not encode the open `sigma_s` bug (§10.0); tightening it would make it pass for
-the wrong reason now and fail confusingly once that bug is fixed. The
-shuffle-invariance test asserts group totals rather than row-for-row equality
-because PCR replicates are exchangeable. The tier-2 thresholds are set from
-measurement across three seed sets (§6.3), not from taste.
+**Do not "fix" a loose assertion by tightening it.** Several are deliberately loose and the comment above each says why. The GP length-scale test asserts that `sample_ls()` is *reached*, not that `idx_ls` varies, precisely so it does not encode the open `sigma_s` bug (§10.0); tightening it would make it pass for the wrong reason now and fail confusingly once that bug is fixed. The shuffle-invariance test asserts group totals rather than row-for-row equality because PCR replicates are exchangeable. The tier-2 thresholds are set from measurement across three seed sets (§6.3), not from taste.
 
 ------------------------------------------------------------------------
 
