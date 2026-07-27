@@ -15,13 +15,20 @@ editor_options:
     1.  Allow for different primers per sample
 
     **Bugs found in a static audit of `R/` and `src/`, 25 July 2026.**
-    Every line number below was re-verified against the tree *after*
-    Alex's `0abb104` ("Fixed bug in simulated data") was merged in
-    `0da2e6a`, so they are current as of `e33fc0b`. Note that `0abb104`
-    inserted `sample_rnb()` at `R/jsdmfun.R:581`, shifting everything
-    below it in that file by +36 lines relative to `738464c`. Everything
-    below was found by reading the code, not by running the model, so
-    each should be reproduced before it is fixed. Grouped by severity.
+    Everything below was found by reading the code, not by running the
+    model, so each should be reproduced before it is fixed. Grouped by
+    severity.
+
+    **Status as of 27 July 2026.** The audit originally listed 15 group
+    A and 10 group B items; most have since been fixed and moved to
+    **Fixed bugs** at the end of this document, which is now the
+    authoritative record of what has been resolved. Only the *unfixed*
+    remainder is listed here, renumbered. Cross-references elsewhere in
+    this document (groups C/D, the *MEE paper* section) use the
+    **current** numbering, not the original audit numbering. Line
+    numbers were verified against `e33fc0b` and re-checked against the
+    working tree on 27 July; those in the fixed-bug entries below point
+    at the *post-fix* code and so will not match the original audit.
 
     Already fixed by `0abb104`, and so *not* listed below: the
     `simulateOccJSDMData(model = "occupancy")` `idx_z_k` bug -- that
@@ -44,6 +51,28 @@ editor_options:
         unless `predictNewSites()` is used to extrapolate to new sites
         with a nonzero number of factors.
 
+    2.  **Non-thread-safe RNG remains in the hottest OpenMP loop**
+        (residual of the original audit's A.6; the other half was fixed
+        in `b7b6aa2` -- see Fixed bugs 10). `samplePGvariables()`
+        (`src/jsdm.cpp:398`) is `#pragma omp parallel for collapse(2)`
+        and calls `rpg()` -\> `samplepg()` -\> `tinvgauss()`, whose
+        rejection branch calls `randinvg()` (`src/jsdm.cpp:86`), and
+        that still draws from R's global RNG via `R::rnorm(0.0, 1.0)` at
+        `:88`. The surrounding Polya-Gamma helpers were already
+        converted to the `thread_local std::mt19937` engine
+        (`get_rng()`/`runif()`, `src/jsdm.cpp:9-22`, in `53c38f1`), so
+        `randinvg()` is the one remaining hole on this path. R's RNG
+        state is global and not thread-safe, so wherever OpenMP is
+        actually active -- Linux and Windows/Rtools, but *not* stock
+        macOS clang, which is presumably why this has not shown up
+        locally -- this loop races.
+
+        **Trigger:** dormant on stock macOS clang (no OpenMP), live on
+        Linux/Windows. `samplePGvariables()` is the hottest kernel in
+        the sampler, so fix it properly (route `randinvg()` through the
+        existing `thread_local` engine, matching what `runif()` already
+        does) rather than by disabling OpenMP.
+
     **B. Crashes, unreachable code paths, and API bugs**
 
     1.  **Species-ordering bug shared by four plotting functions.**
@@ -65,7 +94,38 @@ editor_options:
         code. (Previously noted in `AGENTS.md`; recorded here so it is
         tracked as a to-do.)
 
-    3.  **Assorted smaller items.**
+    3.  **`thinOutput()`: two of the three original defects remain**
+        (residual of the original audit's B.2; see Fixed bugs 16). The
+        crash is gone and `thin` is now honoured, but
+
+        (a) the 2-D branch still thins **by row**
+            (`x[idx_thinned,,drop=F]`, `R/output.R:57`), which silently
+            drops *sites* from the `psi_output` / `w_output` /
+            `theta_output` posterior-mean matrices under the default
+            `summarisedLatentPresences = TRUE` -- those matrices are
+            `n x S`, so their rows are sites, not iterations; and (b)
+            the scalar `WAIC` still falls through to
+            `print("Dimension not recognised")` (`:62`) and becomes
+            `NULL`. Also worth settling: `thinOutput()` is no longer in
+            `NAMESPACE` (de-exported), but `man/thinOutput.Rd` still
+            ships a `\usage` block for it, so the manual documents a
+            function users cannot call. Either re-export it or drop the
+            `.Rd`.
+
+    4.  **`computeSpeciesDetected()` still uses a prefix of the draws,
+        not a random sample** (residual of the original audit's B.6; see
+        Fixed bugs 18). `R/output.R:2221-2222` now sets
+        `idxObs <- unique(floor(seq(1, min(500, niter), length.out = 500)))`
+        and `B <- length(idxObs)`, which fixes the crash and guards the
+        fewer-than-500-draws case. But `beta_theta_output` was flattened
+        iter-within-chain at `:2214`, so `min(500, niter)` indexes the
+        *first* 500 rows of that flattened array -- i.e. iterations
+        1-500 of chain 1 whenever the per-chain `niter >= 500`, the most
+        autocorrelated draws in the run, still ignoring the other
+        chain(s) entirely. Fix: draw the `B` indices at random from
+        `seq_len(niter * nchain)`.
+
+    5.  **Assorted smaller items.**
 
         (a) `createDataIdx()` is called with `maxP`
             (`R/runOccJSDM.R:638`) for `model = "occupancy"` too, where
@@ -165,7 +225,7 @@ editor_options:
         each chain touches only its own `*_output_chain` arrays, so
         running the chains in separate *processes* gives close to an
         `nchain`-fold speedup and sidesteps the RNG thread-safety
-        problem in bug A.6 entirely (each process has its own RNG
+        problem in bug A.2 entirely (each process has its own RNG
         state). Portability constraints, though:
 
         - **`parallel::mclapply()` is not an option.** It is fork-based,
@@ -175,7 +235,7 @@ editor_options:
           on Alex's machine and on CRAN's Windows check. Even on
           Linux/macOS, forking a session with a live threaded-BLAS or
           OpenMP pool (OpenBLAS on most Linux distros, Accelerate on
-          macOS) is a well-known deadlock source -- and doubly so if A.6
+          macOS) is a well-known deadlock source -- and doubly so if A.2
           is fixed by *keeping* OpenMP.
         - **`parallel::makeCluster()` (PSOCK) + `parLapply()` works on
           all three platforms**, and `parallel::clusterSetRNGStream()`
@@ -185,7 +245,7 @@ editor_options:
           (`clusterEvalQ(cl, library(occJSDM))`, plus serialising the
           data out and the per-chain arrays back) -- negligible against
           a multi-minute MCMC, though the return trip is not free given
-          how large `Bs_output`/`U_output` are (see D.9).
+          how large `Bs_output`/`U_output` are (see D.7).
         - **Make it opt-in**: a `cores = 1L` argument, serial by
           default, so existing behaviour is unchanged and CRAN's
           two-core limit for examples/tests/vignettes is respected.
@@ -194,13 +254,16 @@ editor_options:
         returning its own `*_output_chain` arrays -- mechanical, since
         the loop already writes only to per-chain objects. The one piece
         of genuinely shared state is the WAIC accumulator, which
-        currently streams across chains sequentially; parallelising
-        forces one accumulator per chain plus a merge, which is exactly
-        what the fix for bug A.4 requires anyway (`mean_lik` is a plain
-        mean; `M2` merges with the standard parallel-variance formula).
-        The `z_output_mean` / `psi_output_mean` / `w_output_mean` /
-        `theta_output_mean` running means merge by simple addition of
-        the per-chain partials.
+        currently streams across chains sequentially via the single
+        `currentWAICiter` counter introduced by the fix in Fixed bugs 9;
+        parallelising forces one accumulator per chain plus a merge
+        (`mean_lik` is a plain mean; `M2` merges with the standard
+        parallel-variance formula), and the
+        `if (numIters != (currentWAICiter - 1)) stop(...)` guard at
+        `R/runOccJSDM.R:1251` will need to be restated in terms of the
+        summed per-chain counts. The `z_output_mean` / `psi_output_mean`
+        / `w_output_mean` / `theta_output_mean` running means merge by
+        simple addition of the per-chain partials.
 
     2.  **Drop the `options(mc.cores = ...)` call in `.onLoad()`.**
         `R/zzz.R` sets a global option at load time, which changes the
@@ -247,16 +310,17 @@ editor_options:
         reductions: `w` from `rowsum(y > 0, idx_w_k) > 0`, `z` from
         `rowsum(w, idx_z_w) > 0`.
 
-    7.  **Do not allocate posterior arrays that are never filled.** With
-        `summarisedLatentPresences = FALSE`, `w_output`
-        (`N x S x niter x nchain`) is allocated and never written, as
-        are `w_output_chain` and `theta_output_chain` (see B.1). More
-        generally, `Bs_output` (`ps x S x niter x nchain`) and
-        `U_output` (`n x d x niter x nchain`) are the two largest
-        components of the 62 MB `sampleresults.rda`; a `keep =` argument
-        selecting which blocks to retain, or storing the latent-factor
-        blocks pre-thinned, would address both the runtime allocation
-        and the CRAN size blocker.
+    7.  **Do not allocate posterior arrays that are never filled.** The
+        `summarisedLatentPresences = FALSE` half of this was resolved by
+        the fix in Fixed bugs 15 (`w_output_chain` /
+        `theta_output_chain` are now written rather than allocated and
+        abandoned), so what remains is the sizing question: `Bs_output`
+        (`ps x S x niter x nchain`) and `U_output`
+        (`n x d x niter x nchain`) are the two largest components of the
+        62 MB `sampleresults.rda`; a `keep =` argument selecting which
+        blocks to retain, or storing the latent-factor blocks
+        pre-thinned, would address both the runtime allocation and the
+        CRAN size blocker.
 
     8.  **Reduce the repeated `arma::inv()` calls in the samplers.**
         `sample_beta_cpp()` (`src/functions.cpp:249-253`), `sampleB()`
@@ -312,20 +376,39 @@ editor_options:
         whether this becomes the `testthat` suite referenced under
         "Testing Strategy Implementation" in `AGENTS.md` (currently only
         `test-placeholder.R` exists) or a separate reproducibility
-        vignette/script, or both. Two things from the July 25 2026 bug
-        audit to keep in mind while designing this: (a) it would double
-        as the regression test for TODO.Rmd group A items 1-2 (feeding
-        `runOccJSDM()` a row-shuffled copy of a simulated dataset and
-        checking the fit matches the sorted one) and item 11
-        (`useSpatField = TRUE` currently simulates data with *no*
-        spatial signal, so any coverage check of the spatial term will
-        silently pass against a null case until that bug is fixed); and
+        vignette/script, or both.
 
-        (b) some of those bugs (A.4 WAIC, A.5 `sigma_b` having no
-            effect, A.7-9 spatial/GP parameters not updating) will bias
-            recovery in ways this testing is specifically designed to
-            catch, so fixing group A first will make the results more
-            interpretable.
+        **Bug-audit context (updated 27 July 2026).** Most of the group
+        A bugs that would have confounded this exercise are now fixed
+        (see **Fixed bugs**), which changes what this testing is for: it
+        is now primarily a *regression* suite guarding fixes that were
+        verified by reading the code rather than by running the model,
+        and only secondarily a bug-discovery exercise. Points to carry
+        into the design:
+
+        (a) It should pin the fixes that have no test today. The
+            row-ordering fix (Fixed bugs 1 and 11) is the clearest
+            candidate -- feed `runOccJSDM()` a row-shuffled copy of a
+            simulated dataset and check the fit matches the sorted one.
+            The spatial-field-timing fix (Fixed bugs 7) matters just as
+            much: before it, `useSpatField = TRUE` simulated data with
+            *no* spatial signal, so any coverage check of the spatial
+            term would have silently passed against a null case. Now
+            that the field is added before the responses are drawn, that
+            check is finally meaningful -- and is worth writing
+            precisely because nothing currently exercises it.
+        (b) Two group A items are still open and will still bias
+            recovery, so design around them: `sigma_h` never being
+            sampled (A.1) makes any coverage check of
+            `predictNewSites()` at new sites assume unit factor
+            variance, and the residual OpenMP RNG race (A.2) means
+            results on Linux/Windows are not bit-reproducible across
+            runs even at a fixed seed. Prefer fitted-site checks, or a
+            single-threaded build, until A.2 is closed.
+        (c) Alex fixed most of group A without a test accompanying each
+            fix, so several entries in **Fixed bugs** rest on code
+            reading alone. Reproducing at least the inference-affecting
+            ones against simulated truth is the point of this item.
 
 2.  Alex to dos
 
@@ -414,9 +497,15 @@ editor_options:
 
 **Fixed bugs**
 
-From commit b7b6aa2 (26 July 2026), Alex fixed 8 bugs from the static
-audit. Bugs 9–18 below (27 July 2026) were fixed immediately following
-the static audit.
+This is the authoritative record of audit items that have been resolved.
+Items 1-10 were fixed in commit `b7b6aa2` (26 July 2026); items 11-20
+followed on 27 July 2026. Line numbers point at the *post-fix* code.
+
+Items 16 and 18 are marked **partially fixed**: the crash in each is
+gone, but part of the original defect remains, and the remainder is
+tracked as a live item in group B above. Nothing in this list has a test
+attached -- every entry was verified by reading the code, which is what
+the *MEE paper* testing item is meant to address.
 
 **Commit b7b6aa2:**
 
@@ -451,49 +540,81 @@ the static audit.
 8.  ~~**`tau_output` is returned entirely `NA`.**~~ **FIXED.** The `tau`
     parameter is now saved in the MCMC loop. `R/runOccJSDM.R:934-1236`.
 
+9.  ~~**WAIC running means divide by the raw iteration counter.**~~
+    **FIXED.** A dedicated `currentWAICiter` counter is initialised to 1
+    (`R/runOccJSDM.R:831`) and incremented only inside the WAIC block
+    (`:1200`), so the running means now divide by the number of WAIC
+    accumulations rather than by the raw MCMC iteration index. A guard,
+    `if (numIters != (currentWAICiter - 1)) stop("Current wAIC iter wrong")`
+    (`:1251`), asserts the two agree. Confirmed introduced by `b7b6aa2`
+    via `git log -S currentWAICiter`. *(This fix was not recorded when
+    the other `b7b6aa2` fixes were logged; recovered on 27 July while
+    reconciling cross-references.)*
+
+10. ~~**Non-thread-safe RNG inside the OpenMP loops.**~~ **PARTIALLY
+    FIXED.** `sample_beta_nocov_cpp_TS()` (`src/functions.cpp:308`) now
+    calls the thread-safe `sample_beta_cpp_TS()` rather than the non-TS
+    `sample_beta_cpp()`, which closes the race in
+    `sample_betatheta_cpp_parallel()` (`src/functions.cpp:607`) -- the
+    thread-safe path the audit described as "half-finished" is now wired
+    up on that side. **The `samplePGvariables()` path
+    (`src/jsdm.cpp:398`) is still affected** via `randinvg()`'s
+    `R::rnorm` call; that residual is tracked as **group A item 2**
+    above. *(Also not recorded at the time; recovered 27 July.)*
+
 **Post-audit fixes:**
 
-9.  ~~**Collection covariates are grouped by `Sample` alone.**~~
+11. ~~**Collection covariates are grouped by `Sample` alone.**~~
     **FIXED.** Now groups by `c("Site", "Sample")` to match the
     site-then-sample ordering of `X_theta`. `R/runOccJSDM.R:682`.
 
-10. ~~**The GP length-scale is never updated.**~~ **FIXED.** Enabled the
+12. ~~**The GP length-scale is never updated.**~~ **FIXED.** Enabled the
     `sample_ls()` call in `update_jSDMcoef()`. `R/jsdmfun.R:1063`.
 
-11. ~~**`transformCovariatesMatrix()` never applies the stored factor
+13. ~~**`transformCovariatesMatrix()` never applies the stored factor
     levels.**~~ **FIXED.** Now correctly uses `df[[col]]` instead of
     `df[,col]` to re-level the column. `R/runOccJSDM.R:38`.
 
-12. ~~**`listPriors$prior_beta_psi` / `prior_beta_psi_sd` have no
+14. ~~**`listPriors$prior_beta_psi` / `prior_beta_psi_sd` have no
     effect.**~~ **FIXED.** Removed dead references and cleaned up the
     prior handling. `R/runOccJSDM.R:738-739`.
 
-13. ~~**`summarisedLatentPresences = FALSE` errors on two-stage
+15. ~~**`summarisedLatentPresences = FALSE` errors on two-stage
     models.**~~ **FIXED.** Now correctly allocates and writes
     `w_output_chain` and `theta_output_chain`. `R/runOccJSDM.R:1152`.
 
-14. ~~**`thinOutput()` cannot run at all.**~~ **FIXED.** Removed the
-    function temporarily pending proper reimplementation, or removed
-    stale reference to `beta_ord_output`. `R/output.R:21`.
+16. ~~**`thinOutput()` cannot run at all.**~~ **PARTIALLY FIXED.** The
+    function still exists (`R/output.R:18`) and now runs: `niter` is
+    read from `fitModel$results_output$jsdm_output$B0_output` instead of
+    the long-gone `beta_ord_output`, and the `thin` argument is honoured
+    rather than hard-coding `by = 5`. **Two of the three original
+    defects remain** -- the 2-D branch still thins by row, and the
+    scalar `WAIC` still falls through to
+    `print("Dimension not recognised")`. Tracked as **group B item 3**
+    above.
 
-15. ~~**`computeDiagnostics()` runs on `psi_output`.**~~ **FIXED.**
+17. ~~**`computeDiagnostics()` runs on `psi_output`.**~~ **FIXED.**
     Added `psi_output` to the skip list to avoid meaningless
     diagnostics. `R/diagnostics.R:403-404`.
 
-16. ~~**`predictNewSites()` does not honour its documented no-op
+18. ~~**`predictNewSites()` does not honour its documented no-op
     behaviour.**~~ **FIXED.** Added `NULL` defaults for `X_psi` and
     `X_s` and proper gating on the presence of covariates.
     `R/output.R:1457,1470`.
 
-17. ~~**`set.seed(1)` inside `computeSpeciesDetected()`.**~~ **FIXED
+19. ~~**`set.seed(1)` inside `computeSpeciesDetected()`.**~~ **FIXED
     incidentally in b7b6aa2.** The RNG-resetting line was deleted.
     `R/output.R:2222`.
 
-18. ~~**`computeSpeciesDetected()` crashes: `B` (bootstrap draw count)
-    is referenced but never assigned.**~~ **FIXED.** Completed the
-    assignment as `B <- min(400, niter * nchain)` or equivalent, and
-    fixed the underlying sampling logic to draw across all chains.
-    `R/output.R:2217`.
+20. ~~**`computeSpeciesDetected()` crashes: `B` (bootstrap draw count)
+    is referenced but never assigned.**~~ **PARTIALLY FIXED.** The crash
+    is gone:
+    `idxObs <- unique(floor(seq(1, min(500, niter), length.out = 500)))`
+    and `B <- length(idxObs)` (`R/output.R:2221-2222`) both assign `B`
+    and guard the fewer-than-500-draws case that the original hard-coded
+    `B <- 200` did not. **The sampling is still a prefix, not a random
+    draw** across chains, which was the substantive half of the original
+    critique. Tracked as **group B item 4** above.
 
 **Future versions**
 
