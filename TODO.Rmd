@@ -472,7 +472,9 @@ editor_options:
         **Alex needs to re-clone or hard-reset** his local copy, since
         his existing history is now divergent.
 
-    2.  ~~model diagnostics functions from GLGS-eDNA repo~~ -- **done**:
+    2.  I ALREADY ADDED DIAGNOSTICS SO NOT NEEDED ANYMORE 
+    
+        ~~model diagnostics functions from GLGS-eDNA repo~~ -- **done**:
         `computeRhat()`, `summarisePosterior()`, `plotTraceplot()`, and
         `returnConvergenceDiagnostics()` added to `R/diagnostics.R`.
         `computeRhat()`/`summarisePosterior()` were later de-exported
@@ -522,8 +524,8 @@ editor_options:
 
 2.  Alex to dos
 
-    1.  Switch to integrated WAIC (instead of the current conditional
-        WAIC, which overfits as it happens also in HMSC).
+    1.  Design better model selection criterion (the one currently implemented, which is
+    the same as HMSC, tend to overfit).
 
     2.  GAMs for JSDM
 
