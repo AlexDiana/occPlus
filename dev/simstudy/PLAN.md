@@ -2,7 +2,7 @@
 
 Plan for the "extensive testing on simulated datasets" item under *MEE paper / Doug to dos* in `TODO.Rmd`. Drafted 27 July 2026.
 
-**Status as of 27 July 2026: stages 1 and 3-5 built and committed; only the full R = 100 run (stage 6) remains.** Sections marked *OPEN* still need a decision or a measurement.
+**Status as of 28 July 2026: complete. All stages built and the full R = 100 study has run.** Its results are in §12 and they identified four defects, three of which are now traced to specific lines of code. Sections marked *OPEN* still need a decision or a measurement.
 
 | Stage | State |
 |----|----|
@@ -11,7 +11,7 @@ Plan for the "extensive testing on simulated datasets" item under *MEE paper / D
 | 3\. `helper-simstudy.R` | **done** (`6123036`) -- validated at R = 8 |
 | 4\. Tier 2 canary | **done** (`f63eeeb`) -- \~30 s, `skip_on_cran()` |
 | 5\. Tier 3 + runner | **done** (`f63eeeb`) -- runner smoke-tested end to end |
-| 6\. Full R = 100 run | **not started** -- `Rscript dev/simstudy/run_study.R --cores=8`, \~2.4 h on 8 cores |
+| 6\. Full R = 100 run | **done, 28 July** -- all 10 cells at R = 100, 900 replicates, 0 failures. Results in `dev/simstudy/results/`. See §12. |
 
 Building it surfaced four corrections to this plan and two package bugs; both are recorded in place below rather than only in commit messages.
 
@@ -299,15 +299,80 @@ Also: pooling coverage across species within a block buys precision, but those i
 
 2.  ~~*OPEN.* Tier 2 failing vs advisory (§6.3).~~ **RESOLVED: it fails**, on measured thresholds -- see §6.3.
 
-3.  *OPEN, and the main empirical question stage 6 should settle.* **`beta_theta` and `resid_cor` sit below nominal.** Measured at R = 5 across three independent seed sets: `beta_theta` 0.78 / 0.80 / 0.78, and `resid_cor` 0.79 / 0.76 / 0.76. Everything else landed 0.86-1.00.
-
-    That consistency across independent seed sets makes chance unlikely, but R = 5 is far too small to call it -- the effective SE is \~8%, so 0.78 is only about 2 SE below nominal. At R = 100 the SE is 2.2% and the question is decisive either way.
-
-    Both are held to a lower floor in tiers 2 and 3 rather than excluded, precisely so that settling this stays a purpose of the run rather than something the thresholds quietly paper over. If the undercoverage is real, `beta_theta` points at the Stage 1 collection model and `resid_cor` at the factor-loading posterior; neither has an obvious suspect yet.
+3.  ~~*OPEN.* **`beta_theta` and `resid_cor` sit below nominal.**~~
+    **RESOLVED 28 July by the full run, and both traced to code.**
+    `beta_theta` undercovers in *every* cell (0.676-0.730) -- the flatness
+    across model types, primer counts and factor misspecification is the
+    signature of a structural cause, and it is `TODO.Rmd` group A item 3
+    (prior mean 1 instead of 0 on the collection slopes). `resid_cor` sits
+    at 0.74-0.77 in nine cells and is group A item 4
+    (`reparamFactorModel()` breaking `t(L) %*% L`). See §12.
 
 4.  *Deferred.* Presentation of tier-3 results for the paper. Build the suite first; the summary object then feeds either a short pkgdown article or the manuscript directly. Nothing here forecloses that.
 
 5.  *Deferred.* SBC (§7).
+
+------------------------------------------------------------------------
+
+## 12. Results of the full run (28 July 2026)
+
+900 replicates, 10 scenarios, 0 failures, 474 min on 5 cores. 155,578
+individual interval checks. Coverage SE at R = 100 is 2.2 points, so treat
+anything in 0.93-0.97 as indistinguishable from nominal.
+
+| block | base | spat.isol | trait.isol | primers3 | low.info | d.under | d.over | sp20 | occ | binary |
+|----|----|----|----|----|----|----|----|----|----|----|
+| `B` | 0.943 | 0.876 | 0.913 | 0.931 | **0.854** | 0.937 | 0.947 | 0.935 | 0.943 | 0.948 |
+| `B0` | 0.945 | 0.953 | 0.948 | 0.955 | 0.892 | 0.954 | 0.955 | 0.956 | 0.956 | 0.942 |
+| `beta_theta` | **0.717** | **0.730** | **0.721** | **0.679** | **0.860** | **0.714** | **0.709** | **0.693** | **0.676** | -- |
+| `G` | 0.945 | -- | 0.953 | 0.963 | 0.880 | 0.943 | 0.958 | 0.925 | 0.963 | 0.958 |
+| `p` | **0.898** | **0.900** | **0.904** | 0.917 | **0.103** | 0.906 | 0.909 | 0.903 | -- | -- |
+| `q` | 0.948 | 0.942 | 0.944 | 0.935 | 0.904 | 0.946 | 0.945 | 0.947 | -- | -- |
+| `resid_cor` | **0.763** | **0.758** | **0.757** | **0.768** | **0.764** | *0.980* | **0.739** | **0.752** | **0.761** | **0.746** |
+| `sigma_b` | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* |
+| `theta0` | 0.941 | 0.947 | 0.941 | 0.954 | **0.477** | 0.959 | 0.938 | 0.949 | 0.959 | -- |
+
+**Bold = undercovers. Italic = overcovers. `--` = not estimated in that cell.**
+
+### What holds
+
+`G` (fourth-corner), `q` (Stage 2 false positives), `B0` and `B` are at or
+near nominal in every cell except `low_information`. The quantities most
+likely to be reported in an ecology paper are trustworthy as they stand.
+
+### What does not, and why
+
+1. **`beta_theta`, 0.676-0.730, every cell.** Flat across model type,
+   primer count, species count and factor misspecification -- structural,
+   not conditional. Cause: group A item 3, prior mean 1 on the collection
+   slopes. Note `low_information` is *better* (0.860), consistent with a
+   fixed prior pull mattering relatively less when the data are weak enough
+   that everything is uncertain.
+
+2. **`resid_cor`, 0.74-0.77, nine of ten cells.** Cause: group A item 4,
+   `reparamFactorModel()` breaking the identity that residual covariance =
+   `t(L) %*% L`. **The exception is diagnostic**: `d_underfit` (truth 4
+   factors, fitted 2) *over*covers at 0.980, so under-fitting the ordination
+   widens the intervals enough to mask the bias. The defect's visible
+   severity therefore depends on the fitted factor dimension.
+
+3. **`p` collapses to 0.103 in `low_information`**, bias +0.49, while
+   sitting at 0.90-0.92 elsewhere. That cell has true `p` in 0.1-0.3 against
+   the hard-coded `Beta(5, 1)` prior mean of 0.833. Cause: group A item 6.
+   This is the study's most severe single result and it lands precisely in
+   the low-detection regime the package exists to serve.
+
+4. **`low_information` is compromised across the board** -- `theta0` 0.477,
+   `B0` bias -0.93, `B` 0.854, `G` 0.880. When data are thin the priors
+   dominate, and several of those priors are wrong. Any user with a small or
+   low-detection dataset is most exposed to exactly the defects above.
+
+### Caveats that travel with this table
+
+`l_s` and `sigma_h` are absent because neither is recoverable (group A items
+1 and 2), so **no cell says anything about spatial range**. `sigma_b` reads
+1.000 everywhere because it is prior-dominated by construction (§5.3), not
+because it is well estimated. Differences below 2.2 points are noise.
 
 ------------------------------------------------------------------------
 

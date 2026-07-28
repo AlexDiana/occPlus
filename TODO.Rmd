@@ -169,6 +169,16 @@ editor_options:
         roughly a 50% interval, not 95%. This is a headline Stage 1
         output.
 
+        **Confirmed across the whole grid (28 July, R = 100 x 10
+        scenarios).** `beta_theta` undercovers in **every cell that
+        estimates it** -- 0.676 (occupancy), 0.679 (3 primers), 0.693
+        (20 species), 0.709 / 0.714 (`d` over- and under-fitted), 0.721,
+        0.730, 0.717 (base). The flatness across model type, primer
+        count, species count and factor misspecification is what marks
+        it structural rather than conditional. `low_information` is the
+        one milder cell (0.860), consistent with a fixed prior pull
+        mattering relatively less when everything is uncertain anyway.
+
         **Fix:** `rep(0, ncov_theta)`. The surrounding lines suggest the
         indices were simply inverted -- a prior mean of \~1 on the
         *intercept* (theta \~ 0.73 on the logit scale) with 0 on the
@@ -221,6 +231,15 @@ editor_options:
         co-occurrence, pushing correlations toward +/-1. This is the
         headline JSDM output and the basis of the ordination
         interpretation.
+
+        **Confirmed across the grid, with one diagnostic exception.**
+        `resid_cor` sits at 0.739-0.768 in **nine of ten** scenarios.
+        The exception is `d_underfit` (truth 4 factors, fitted 2), which
+        *over*covers at **0.980** -- under-fitting the ordination widens
+        the intervals enough to hide the bias. So the defect's visible
+        severity depends on the fitted factor dimension, which matters
+        when judging a real fit: a model with too few factors will look
+        better calibrated than it is.
 
         **Fix, two options.** (a) Make the reparameterisation purely
         orthogonal -- rotate by `Q` alone, dropping the `diag(diag(R))`
@@ -297,6 +316,14 @@ editor_options:
         |-----------------------|-----------|------------|
         | `Beta(5, 1)` as coded | 0.903     | **+0.050** |
         | `Beta(1, 1)` flat     | **0.944** | **-0.005** |
+
+**Confirmed at scale, and far worse than the base
+        run suggested.** In the `low_information` cell -- true `p` in
+        0.1-0.3 against the prior mean of 0.833 -- coverage collapses to
+        **0.103** with bias **+0.49**, against 0.90-0.92 in every other
+        cell. That is the single most severe result in the study, and it
+        lands precisely in the low-detection regime the package exists
+        to serve.
 
         Flattening the prior restores nominal coverage and removes the
         bias essentially completely. (6 replicates at reduced size, so
