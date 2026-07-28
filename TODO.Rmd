@@ -255,78 +255,78 @@ editor_options:
         existing `thread_local` engine, matching what `runif()` already
         does) rather than by disabling OpenMP.
 
-    6.  **POSSIBLE BUG -- for Alex to judge. The Stage 2 detection
-        prior is hard-coded, undocumented-as-coded, and optimistic; it
-        explains part but not all of `p`'s undercoverage.** Found
-        28 July 2026 by the coverage study. Filed as *possible* because
-        one part is a clear defect, one part is a design choice only
-        Alex can rule on, and one part is an unproven hypothesis. Kept
-        separate from item 3 (the other prior bug) since only that one
-        is unambiguous.
+    6.  **The Stage 2 detection prior is too informative and too
+        optimistic; it causes `p`'s undercoverage, and it is hard-coded
+        so a user cannot work around it.** Found 28 July 2026 by the
+        coverage study. **Originally filed as a *possible* bug on the
+        theory that part of the bias was inherent to a two-stage model
+        with both stages latent. That theory is now disproven** -- see
+        the experiment below. What remains is a straightforward defect
+        plus one design choice for Alex.
 
-        **Confirmed defects (not in question).** `R/runOccJSDM.R:712-715`:
+        **The code** (`R/runOccJSDM.R:712-715`):
 
         ```
         a_p <- 5;  b_p <- 1        # Beta(5, 1), prior mean 0.833
         a_q <- 1;  b_q <- 20       # Beta(1, 20), prior mean 0.048
         ```
 
-        (a) These four are **never read from `listPriors`**, although
-            `@param listPriors` documents all four as supported. Setting
-            them silently does nothing -- the same failure mode as
-            `prior_beta_psi` (Fixed bugs 14). Note the two lines above
-            them, `a_theta0`/`b_theta0`, *are* wired up correctly, so
-            this looks like an omission rather than a decision.
-        (b) The **documented defaults do not match the code**: the docs
-            say `a_p`/`b_p` default 10/1 (code: 5/1) and `a_q`/`b_q`
-            default 1/10 (code: 1/20).
+        **Three defects, all confirmed.**
 
-        **The design question (Alex's call).** Beta(5, 1) puts the prior
-        mean for PCR detection at **0.833** -- it asserts detection is
-        probably above 0.8. That may be right for the Ji et al. system,
-        but `data/sampledata.rda` was deliberately regenerated at
-        `p` in 0.3-0.6 precisely because that is the realistic eDNA
-        regime, so the shipped default prior and the shipped example
-        data disagree about what a plausible detection rate is.
+        (a) *Beta(5, 1) biases `p` and wrecks its coverage.* Prior mean
+            0.833 asserts PCR detection is probably above 0.8, while
+            `data/sampledata.rda` was deliberately regenerated at
+            `p` in 0.3-0.6 as the realistic eDNA regime. The shipped
+            prior and the shipped example data disagree about what a
+            plausible detection rate is.
+        (b) *All four are never read from `listPriors`*, although
+            `@param listPriors` documents them as supported -- setting
+            them silently does nothing, the same failure mode as
+            `prior_beta_psi` (Fixed bugs 14). Note `a_theta0`/`b_theta0`
+            on the two lines above *are* wired up, so this reads as an
+            omission. Because of this a user cannot work around (a)
+            without editing the package.
+        (c) *The documented defaults disagree with the code*: docs say
+            `a_p`/`b_p` default 10/1 (code 5/1) and `a_q`/`b_q` default
+            1/10 (code 1/20).
 
-        **What was measured, and what it does *not* explain.** Base run,
-        R = 100: `p` coverage **0.899**, bias **+0.062** -- reproduced at
-        smaller scale (0.903, +0.050). Decomposing it:
+        **The experiment that settled it.** Same data, same seeds, only
+        the prior changed:
 
-        | | value |
-        |----|----|
-        | oracle estimate using the *true* `w` | 0.452 |
-        | true `p` | 0.450 |
-        | shift attributable to the Beta(5,1) prior | **+0.017** |
-        | observed bias | **+0.062** |
+        | prior on `p` | coverage | bias |
+        |----|----|----|
+        | `Beta(5, 1)` as coded | 0.903 | **+0.050** |
+        | `Beta(1, 1)` flat | **0.944** | **-0.005** |
 
-        So the four-case counting in `sample_pq_cpp()` is **sound** (the
-        oracle is unbiased, which also re-confirms the Fixed bugs 2 fix),
-        and the prior accounts for only about a quarter of the bias. The
-        remaining ~+0.045 comes from the *estimated* `w` differing from
-        the true `w`.
+        Flattening the prior restores nominal coverage and removes the
+        bias essentially completely. (6 replicates at reduced size, so
+        the coverage figures carry real sampling error; the *bias*
+        reversal from +0.050 to -0.005 is unambiguous. The as-coded arm
+        reproduces the R = 100 base run, 0.899/+0.062, which validates
+        the comparison.)
 
-        **Hypothesis, unproven.** `p` is estimated only over replicates
-        the sampler currently believes have `w = 1`. A positive read is
-        strong evidence for `w = 1` (since `q` is ~0.03), so that set is
-        enriched for positives; and the higher `p` looks, the less
-        plausible a `w = 1` with no read becomes, enriching it further.
-        A prior pulling `p` toward 0.83 would tip that loop from the
-        start. If this is right it is partly *inherent* to a two-stage
-        model with both stages latent, not purely a coding error --
-        which is exactly why it needs Alex's judgement rather than a
-        patch.
+        **Why the effect is ~3x the prior's direct pull.** Computed
+        against oracle counts (using the *true* `w`), Beta(5,1) shifts
+        the Beta posterior by only **+0.017**; the observed bias is
+        +0.050 to +0.062. The difference is amplification through the
+        latent state: `p` is estimated only over replicates the sampler
+        believes have `w = 1`, a set enriched for positive reads, and a
+        higher `p` makes a `w = 1` with no read less plausible still. So
+        the feedback loop is real -- but it is *driven by* the prior,
+        not independent of it, which is precisely what the flat-prior
+        arm demonstrates.
 
-        **Test in progress:** re-running with a flat Beta(1, 1) on `p`.
-        If the bias collapses toward zero the prior is triggering the
-        loop; if it stays near +0.045 the loop is inherent and the prior
-        is a separate, smaller problem. *(Result to be appended.)*
+        **Also confirmed along the way:** the four-case counting in
+        `sample_pq_cpp()` is sound. The oracle estimate using true `w`
+        recovers `p` exactly (0.452 against a true 0.450), which
+        independently re-confirms the Fixed bugs 2 fix.
 
-        **Minimum action regardless of the design call:** wire the four
-        hyperparameters through from `listPriors`, and make the
-        documented defaults match the code. That is uncontroversial and
-        would let a user work around the prior without editing the
-        package.
+        **Fix.** (b) and (c) are uncontroversial: wire the four
+        hyperparameters through from `listPriors` and make the docs
+        match. For (a), **Alex should choose the default** -- `Beta(1,1)`
+        was only a diagnostic, not a recommendation. The requirement is
+        that the default not be sharply informative at 0.83 when the
+        package's own example data sits at 0.3-0.6.
 
     **B. Crashes, unreachable code paths, and API bugs**
 
