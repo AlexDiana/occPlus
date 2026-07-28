@@ -121,11 +121,11 @@ These are the things most likely to make the suite wrong or annoying. Each has b
 
 ### 5.1 Never assert exact numeric equality of fitted values in tier 1
 
-`TODO.Rmd` group A item 3 is still open: `randinvg()` (`src/jsdm.cpp:86`) draws from R's global RNG inside `samplePGvariables()`'s OpenMP loop. A fixed seed therefore **does not** reproduce across platforms — it is deterministic on stock macOS clang (no OpenMP) and racy on Linux/Windows.
+`TODO.Rmd` group A item 5 is still open: `randinvg()` (`src/jsdm.cpp:86`) draws from R's global RNG inside `samplePGvariables()`'s OpenMP loop. A fixed seed therefore **does not** reproduce across platforms — it is deterministic on stock macOS clang (no OpenMP) and racy on Linux/Windows.
 
 A tier-1 test asserting `expect_equal()` on posterior quantities would pass locally and fail intermittently on CRAN. That is the worst available failure mode. **Tier 1 assertions must be structural**: does it run, are dimensions right, is a block non-`NA`, does a value vary. Numeric recovery belongs in tiers 2–3, with tolerances.
 
-Revisit once group A item 3 is closed.
+Revisit once group A item 5 is closed.
 
 ### 5.2 Coverage assertions are stochastic and will flake if set tight
 
@@ -168,7 +168,7 @@ Two cores maximum (`_R_CHECK_LIMIT_CORES_`). Tier 3's replicate-level parallelis
 
 Base = `two_stage`, traits on, spatial on, `d = 2`, **`ds = 2`**, `n = 100`, `S = 10`, `M = 2`, `P = 2`, `K = 3`, `n_supportpoints = 20`.
 
-`ds >= 1` is required or there is no spatial field at all: at `ds = 0` the simulator's cross-species spatial covariance collapses to jitter and `sd(spatField)` is 0.0019 rather than ~1.0 (`TODO.Rmd` group B item 4). The grid used `ds = 0` until 27 July, which would have made every spatial cell a null-field test — the exact trap the audit flagged for Fixed bugs 7.
+`ds >= 1` is required or there is no spatial field at all: at `ds = 0` the simulator's cross-species spatial covariance collapses to jitter and `sd(spatField)` is 0.0019 rather than \~1.0 (`TODO.Rmd` group B item 4). The grid used `ds = 0` until 27 July, which would have made every spatial cell a null-field test — the exact trap the audit flagged for Fixed bugs 7.
 
 Every spatial cell sets `n_supportpoints` explicitly (§10.1). Left to the default it is a constant 30 for any `n` below 150, so it would neither scale with `n` nor be a controlled factor — and below 31 sites it crashes outright.
 
@@ -181,7 +181,7 @@ Every spatial cell sets `n_supportpoints` explicitly (§10.1). Left to the defau
 | 5 | low information | low `p`/`theta_baseline`, smaller `n` (see §10.1 — must set `n_supportpoints`) | Calibration where data are thin — the realistic eDNA regime |
 | 6 | `d` under-fit | truth `d = 4`, fit `d = 2` | The common real-world misspecification |
 | 7 | `d` over-fit | truth `d = 2`, fit `d = 4` | Interacts with rotation invariance; least-trusted case |
-| 8 | larger `S` | `S = 10 -> 30` | Does calibration hold as species count grows |
+| 8 | larger `S` | `S = 10 -> 20` | Does calibration hold as species count grows. Trimmed from 30 on 27 July: at `S = 30` this was 1.75x base, the grid's most expensive cell, and the study runs on a fanless machine that throttles. `S = 20` is still double the base and costs 1.2x. |
 | 9 | `occupancy` | no PCR stage | Calibration evidence for the collapsed form |
 | 10 | `binary` | no replicates at all | Calibration evidence for pure JSDM |
 
@@ -283,30 +283,13 @@ Also: pooling coverage across species within a block buys precision, but those i
 
 ## 10. Open items
 
-0.  *OPEN, and it degrades cells 1 and 2.* **The GP length-scale is never
-    recovered** (`TODO.Rmd` group A item 2, re-diagnosed 27 July).
+0.  *OPEN, and it degrades cells 1 and 2.* **The GP length-scale is never recovered** (`TODO.Rmd` group A item 2, re-diagnosed 27 July).
 
-    `sample_ls()` treats the fitted field `SE` as a GP draw and scores its
-    density under `N(0, sigma_s^2 K(l_s))` while holding `SE` fixed. But under
-    the SoR approximation `SE = Ks(l_s) %*% Bs` is a *deterministic function of
-    `l_s`*, already smoothed at the current value, so it scores better and
-    better under smoother covariances. The likelihood is monotone increasing in
-    `l_s` and `idx_ls` pins at the grid maximum — measured at range 10-10 for
-    every true `l_s` tried (0.074, 0.171, 0.300) with real spatial signal
-    present.
+    `sample_ls()` treats the fitted field `SE` as a GP draw and scores its density under `N(0, sigma_s^2 K(l_s))` while holding `SE` fixed. But under the SoR approximation `SE = Ks(l_s) %*% Bs` is a *deterministic function of `l_s`*, already smoothed at the current value, so it scores better and better under smoother covariances. The likelihood is monotone increasing in `l_s` and `idx_ls` pins at the grid maximum — measured at range 10-10 for every true `l_s` tried (0.074, 0.171, 0.300) with real spatial signal present.
 
-    **This supersedes the earlier entry here, which blamed `sigma_s` being
-    hard-coded to 1 and expected a one-line fix.** Profiling the grid at the
-    field's actual amplitude leaves the likelihood monotone, so that fix is
-    disproven. `sigma_bs` is already sampled and already is the SoR amplitude;
-    a separate `sigma_s` would be redundant. The real fix is a modelling change
-    needing Alex — see the TODO entry.
+    **This supersedes the earlier entry here, which blamed `sigma_s` being hard-coded to 1 and expected a one-line fix.** Profiling the grid at the field's actual amplitude leaves the likelihood monotone, so that fix is disproven. `sigma_bs` is already sampled and already is the SoR amplitude; a separate `sigma_s` would be redundant. The real fix is a modelling change needing Alex — see the TODO entry.
 
-    Consequences here: `l_s` stays out of the checked parameters (§5.3), and
-    the spatial cells still test `Bs` and the overall spatial contribution but
-    say nothing about range recovery. **Not blocking** — those cells remain
-    worth running — but no table produced before this is fixed may be read as
-    evidence about the GP. Re-run cells 1 and 2 afterwards.
+    Consequences here: `l_s` stays out of the checked parameters (§5.3), and the spatial cells still test `Bs` and the overall spatial contribution but say nothing about range recovery. **Not blocking** — those cells remain worth running — but no table produced before this is fixed may be read as evidence about the GP. Re-run cells 1 and 2 afterwards.
 
 1.  ~~*OPEN, blocking tier 3.***Minimum `n` for spatial cells.**~~ **RESOLVED 27 July 2026, and no longer blocking.** Measured: the floor is **31 unique locations** with default settings. `n <= 29` fails with `cannot take a sample larger than the population`, `n = 30` with `number of cluster centres must lie between 1 and nrow(x)`, `n >= 31` runs.
 

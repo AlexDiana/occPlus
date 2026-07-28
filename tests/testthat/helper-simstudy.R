@@ -61,7 +61,13 @@ simstudy_scenarios <- function() {
                             theta_baseline_range = c(0.05, 0.2)),
     mk("d_underfit",        d = 4L, fit_d = 2L),
     mk("d_overfit",         d = 2L, fit_d = 4L),
-    mk("species_30",        S = 30L),
+    # Trimmed from S = 30 to S = 20 on 27 July. At S = 30 this cell cost
+    # 1.75x base -- the most expensive in the grid by a wide margin -- and the
+    # study is run on a fanless machine that throttles under sustained load.
+    # S = 20 is still double the base S = 10, so the cell still answers "does
+    # calibration hold as species count grows"; it just does so at 1.2x base
+    # instead of 1.75x. Relabelled so the name does not lie about S.
+    mk("species_20",        S = 20L),
     mk("occupancy",         model = "occupancy"),
     mk("binary",            model = "binary")
   )
