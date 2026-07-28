@@ -266,7 +266,7 @@ editor_options:
 
         **The code** (`R/runOccJSDM.R:712-715`):
 
-        ```
+        ```         
         a_p <- 5;  b_p <- 1        # Beta(5, 1), prior mean 0.833
         a_q <- 1;  b_q <- 20       # Beta(1, 20), prior mean 0.048
         ```
@@ -275,10 +275,10 @@ editor_options:
 
         (a) *Beta(5, 1) biases `p` and wrecks its coverage.* Prior mean
             0.833 asserts PCR detection is probably above 0.8, while
-            `data/sampledata.rda` was deliberately regenerated at
-            `p` in 0.3-0.6 as the realistic eDNA regime. The shipped
-            prior and the shipped example data disagree about what a
-            plausible detection rate is.
+            `data/sampledata.rda` was deliberately regenerated at `p` in
+            0.3-0.6 as the realistic eDNA regime. The shipped prior and
+            the shipped example data disagree about what a plausible
+            detection rate is.
         (b) *All four are never read from `listPriors`*, although
             `@param listPriors` documents them as supported -- setting
             them silently does nothing, the same failure mode as
@@ -293,10 +293,10 @@ editor_options:
         **The experiment that settled it.** Same data, same seeds, only
         the prior changed:
 
-        | prior on `p` | coverage | bias |
-        |----|----|----|
-        | `Beta(5, 1)` as coded | 0.903 | **+0.050** |
-        | `Beta(1, 1)` flat | **0.944** | **-0.005** |
+        | prior on `p`          | coverage  | bias       |
+        |-----------------------|-----------|------------|
+        | `Beta(5, 1)` as coded | 0.903     | **+0.050** |
+        | `Beta(1, 1)` flat     | **0.944** | **-0.005** |
 
         Flattening the prior restores nominal coverage and removes the
         bias essentially completely. (6 replicates at reduced size, so
@@ -305,7 +305,7 @@ editor_options:
         reproduces the R = 100 base run, 0.899/+0.062, which validates
         the comparison.)
 
-        **Why the effect is ~3x the prior's direct pull.** Computed
+        **Why the effect is \~3x the prior's direct pull.** Computed
         against oracle counts (using the *true* `w`), Beta(5,1) shifts
         the Beta posterior by only **+0.017**; the observed bias is
         +0.050 to +0.062. The difference is amplification through the
@@ -323,10 +323,10 @@ editor_options:
 
         **Fix.** (b) and (c) are uncontroversial: wire the four
         hyperparameters through from `listPriors` and make the docs
-        match. For (a), **Alex should choose the default** -- `Beta(1,1)`
-        was only a diagnostic, not a recommendation. The requirement is
-        that the default not be sharply informative at 0.83 when the
-        package's own example data sits at 0.3-0.6.
+        match. For (a), **Alex should choose the default** --
+        `Beta(1,1)` was only a diagnostic, not a recommendation. The
+        requirement is that the default not be sharply informative at
+        0.83 when the package's own example data sits at 0.3-0.6.
 
     **B. Crashes, unreachable code paths, and API bugs**
 
