@@ -78,7 +78,30 @@ run_one <- function(k) {
   out
 }
 
+# Progress reporting. Without this the run is silent until it finishes, which
+# for a multi-hour grid means no way to tell "working" from "wedged" and no
+# ETA -- a real shortcoming when the first full run overran its estimate by
+# 50% on a throttling machine.
+#
+# parLapply() is blocking and silent, so jobs are submitted in chunks and a
+# line is emitted after each. Chunks are a multiple of the core count and use
+# parLapplyLB() internally, so load balancing is preserved within a chunk; the
+# only cost is that each chunk waits for its own slowest job. With jobs
+# shuffled (above) that tail is small.
+progress_line <- function(done, total, t0, failed) {
+  el <- as.numeric(difftime(Sys.time(), t0, units = "mins"))
+  frac <- done / total
+  eta <- if (frac > 0) el * (1 - frac) / frac else NA_real_
+  message(sprintf(
+    "  [%3.0f%%] %d/%d replicates | %.0f min elapsed | ~%.0f min left%s",
+    100 * frac, done, total, el, eta,
+    if (failed > 0) sprintf(" | %d failed", failed) else ""))
+  flush(stderr())
+}
+
+n_jobs <- nrow(jobs)
 t0 <- Sys.time()
+
 if (n_cores > 1L) {
   cl <- makeCluster(n_cores)                      # PSOCK; portable
   on.exit(stopCluster(cl), add = TRUE)
@@ -92,9 +115,31 @@ if (n_cores > 1L) {
     source(file.path(pkg_root, "tests", "testthat", "helper-simstudy.R"))
     NULL
   })
-  res <- parLapply(cl, seq_len(nrow(jobs)), run_one)
+
+  # Aim for ~20 progress lines, but never a chunk smaller than the pool (that
+  # would idle cores) nor larger than 4x it (that would report too rarely).
+  chunk_size <- max(n_cores, min(n_cores * 4L, ceiling(n_jobs / 20)))
+  chunks <- split(seq_len(n_jobs), ceiling(seq_len(n_jobs) / chunk_size))
+  res <- vector("list", length(chunks))
+  done <- 0L; failed_so_far <- 0L
+
+  for (ci in seq_along(chunks)) {
+    res[[ci]] <- parLapplyLB(cl, chunks[[ci]], run_one)
+    done <- done + length(chunks[[ci]])
+    failed_so_far <- failed_so_far +
+      sum(vapply(res[[ci]], function(d) any(d$block == "ERROR"), logical(1)))
+    progress_line(done, n_jobs, t0, failed_so_far)
+  }
+  res <- unlist(res, recursive = FALSE)
+
 } else {
-  res <- lapply(seq_len(nrow(jobs)), run_one)
+  res <- vector("list", n_jobs)
+  failed_so_far <- 0L
+  for (k in seq_len(n_jobs)) {
+    res[[k]] <- run_one(k)
+    if (any(res[[k]]$block == "ERROR")) failed_so_far <- failed_so_far + 1L
+    if (k %% 10L == 0L || k == n_jobs) progress_line(k, n_jobs, t0, failed_so_far)
+  }
 }
 elapsed <- as.numeric(difftime(Sys.time(), t0, units = "mins"))
 
