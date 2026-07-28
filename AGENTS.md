@@ -29,7 +29,7 @@ The `threshold` argument to `runOccJSDM()` controls how `OTU` is interpreted: `t
 
 ## Known issues in existing code
 
-**FIVE GROUP A (INFERENCE-AFFECTING) ITEMS REMAIN, as of July 28 2026.** Two were added on 28 July by the coverage study -- a prior mean of 1 (not 0) on collection-covariate slopes, and `reparamFactorModel()` inflating reported species correlations -- and both are confirmed with measurements; see TODO.Rmd.
+**SIX GROUP A ITEMS REMAIN, as of July 28 2026 -- five confirmed, one filed as a *possible* bug for Alex to judge.** Three were added on 28 July by the coverage study. Two are confirmed with measurements: a prior mean of 1 (not 0) on collection-covariate slopes, and `reparamFactorModel()` inflating reported species correlations. The third (item 6, Stage 2 detection prior) is deliberately filed as *possible* -- part of it is a clear defect (four hyperparameters documented as settable but never read from `listPriors`, with defaults that disagree with the docs), part is a design choice about how optimistic the detection prior should be, and part is an unproven hypothesis about latent-state feedback. See TODO.Rmd.
 
 *(Earlier note, still accurate for the other three:)* This supersedes the earlier "NONE REMAINING / all 8 fixed" claim, which was wrong on both counts -- `b7b6aa2` fixed **10** audit items, not 8 (two were never logged: the WAIC iteration-counter fix and a partial fix to the OpenMP RNG race), and two group A items were never fixed at all. `TODO.Rmd`'s **Fixed bugs** section is the authoritative record; the reconciliation is documented in "Current work status" below. Currently open in group A:
 
