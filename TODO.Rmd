@@ -62,16 +62,16 @@ editor_options:
         parameter addition.
 
         **The defect.** Under the SoR (subset-of-regressors)
-        approximation the fitted spatial field is
-        `SE = Ks(l_s) %*% Bs` (`computePsiCoef()`), i.e. a
-        *deterministic function of `Bs` and `l_s`*. But `sample_ls()`
-        (`R/jsdmfun.R:1054`) treats `SE` as a **GP draw** and scores its
-        density under `N(0, sigma_s^2 K(l_s))` while holding `SE` fixed.
-        That is not the conditional posterior of `l_s`, and it is
-        self-defeating: `SE` was already smoothed at the current `l_s`,
-        so it scores progressively better under ever-smoother
-        covariances. The result is a likelihood that is **monotone
-        increasing in `l_s`**, with nothing to penalise the upper bound.
+        approximation the fitted spatial field is `SE = Ks(l_s) %*% Bs`
+        (`computePsiCoef()`), i.e. a *deterministic function of `Bs` and
+        `l_s`*. But `sample_ls()` (`R/jsdmfun.R:1054`) treats `SE` as a
+        **GP draw** and scores its density under
+        `N(0, sigma_s^2 K(l_s))` while holding `SE` fixed. That is not
+        the conditional posterior of `l_s`, and it is self-defeating:
+        `SE` was already smoothed at the current `l_s`, so it scores
+        progressively better under ever-smoother covariances. The result
+        is a likelihood that is **monotone increasing in `l_s`**, with
+        nothing to penalise the upper bound.
 
         **Measured.** `idx_ls` sits at 10 -- the maximum of
         `l_s_grid = seq(0.01, 0.3, length.out = 10)` -- with range 10-10
@@ -94,10 +94,10 @@ editor_options:
             (`sd(SE) = 0.85`) instead of 1 leaves the likelihood
             monotone -- it still rises to the grid maximum. So the
             one-line fix this entry used to propose would not work.
-        (c) *`logDetKuu` is correct.* `sum(log(rcppeigen_get_diag(K_xx)))
-            * 2` matches the true log-determinant at all ten grid points;
-            `rcppeigen_get_diag()` returns the **Cholesky** diagonal
-            despite the name.
+        (c) *`logDetKuu` is correct.*
+            \`sum(log(rcppeigen_get_diag(K_xx)))
+            - 2`matches the true log-determinant at all ten grid points;`rcppeigen_get_diag()\`
+              returns the **Cholesky** diagonal despite the name.
         (d) *Not an artefact of weak data.* Identical behaviour with
             `ds = 2` (real spatial signal) as with `ds = 0`.
 
@@ -109,14 +109,14 @@ editor_options:
         `l_s` where it actually acts, on the data: either recompute
         `eta` with `Ks(l_s*)` and score the observation likelihood under
         the proposal, or integrate out `Bs` and use the standard SoR
-        marginal likelihood. The first is the smaller change but costs an
-        `eta` recomputation per proposal; the second is cleaner and
+        marginal likelihood. The first is the smaller change but costs
+        an `eta` recomputation per proposal; the second is cleaner and
         harder to derive. Roughly half a day if the intended conditional
         is already clear, longer if it needs settling. **Do not attempt
         blind** -- a subtly wrong conditional would be worse than the
         present state, which at least fails visibly.
 
-        **Cheap interim alternative (~1 h).** Since `sample_ls()` does
+        **Cheap interim alternative (\~1 h).** Since `sample_ls()` does
         not work, and enabling it also caused the non-spatial crash
         (Fixed bugs 22 / group B item 1), reverting to a *documented,
         user-settable, fixed* `l_s` is arguably more honest than the
@@ -134,9 +134,112 @@ editor_options:
         `idx_ls` varies, precisely so the test does not encode this
         defect. Revisit that test once this is fixed.
 
+<<<<<<< HEAD
     3.  FIXED 
     
         **Non-thread-safe RNG remains in the hottest OpenMP loop**
+=======
+    3.  **The prior mean for collection-covariate slopes is 1, not 0.**
+        Found 28 July 2026 by the coverage study; **confirmed, with the
+        cleanest evidence in the whole audit.**
+
+        `R/runOccJSDM.R:718-722`:
+
+        ```         
+        b_betatheta <- rep(1, ncov_theta)      # prior MEAN = 1, all coefs
+        B_betatheta <- diag(1, nrow = ncov_theta)
+        b_betatheta[1] <- prior_beta_theta     # only the intercept reset
+        ```
+
+        Every element of the prior mean is initialised to **1**, and
+        only element 1 -- the intercept -- is then overwritten with
+        `prior_beta_theta` (default 0). So every *actual covariate
+        slope* carries a prior centred on +1 with variance 1.
+
+        **Measured, R = 100.** Splitting `beta_theta` by coefficient:
+
+        | coefficient | prior mean             | coverage  | bias   |
+        |-------------|------------------------|-----------|--------|
+        | intercept   | 0 (overridden)         | **0.937** | +0.073 |
+        | slope       | **1** (not overridden) | **0.496** | +0.113 |
+
+        The one coefficient with a sensible prior covers correctly; the
+        one with prior mean 1 covers at barely half, with the positive
+        bias the pull predicts. True slopes average +0.01 (drawn from
+        {-1, 0, +1} by `R/simulateData.R:123`), so a prior at +1 drags
+        them up.
+
+        **Impact.** Any reported effect of a covariate on eDNA
+        *collection* is biased toward +1 and its credible interval is
+        roughly a 50% interval, not 95%. This is a headline Stage 1
+        output.
+
+        **Fix:** `rep(0, ncov_theta)`. The surrounding lines suggest the
+        indices were simply inverted -- a prior mean of \~1 on the
+        *intercept* (theta \~ 0.73 on the logit scale) with 0 on the
+        slopes would be a defensible design; what is coded is the
+        reverse. Worth confirming the intent with Alex rather than
+        assuming.
+
+        **Related:** group A item 6 records a second prior problem, on
+        the Stage 2 detection rate. That one is filed as *possible*
+        rather than confirmed; this one is not in doubt.
+
+        **Also here, latent:** `B_betatheta[1,1] <- prior_beta_theta_sd`
+        assigns a *standard deviation* into what is used as a
+        *covariance* matrix. Harmless at the default of 1 (1\^2 = 1),
+        but wrong for any other value a user sets.
+
+    4.  **`reparamFactorModel()` breaks the identity that residual
+        covariance = `t(L) %*% L`, so reported species correlations are
+        inflated.** Found 28 July 2026 by the coverage study; confirmed
+        numerically.
+
+        `reparamFactorModel()` (`R/jsdmfun.R:48`) rewrites the stored
+        `U` and `L` each iteration as `L_new = diag(1/diag(R)) %*% R`
+        and `U_new = U %*% Q %*% diag(diag(R))`, where `L = QR`. That
+        **preserves `U %*% L`** -- verified to 4e-16 -- so the linear
+        predictor is untouched and the rotation is legitimate for
+        identifiability.
+
+        But `returnResidualCorrelationMatrix()` computes the correlation
+        as `cov2cor(t(L) %*% L)` from the *stored, reparameterised* `L`.
+        That identity only holds when `U` is standardised, and the
+        reparameterisation moves scale out of `U` into `L`: measured
+        `Var(U)` afterwards is `diag(0.23, 2.01)`, not the identity.
+
+        **Measured.** On a random `d = 2`, `S = 6` example the
+        correlation matrix changes by up to **0.61**, systematically
+        toward the extremes:
+
+        ```         
+        +0.713 -> +0.926     -0.168 -> -0.780
+        -0.811 -> -0.958     +0.443 -> +0.875
+        ```
+
+        Inflated point estimates with correctly-sized intervals is
+        exactly what produces undercoverage, and `resid_cor` measured
+        **0.763** at R = 100.
+
+        **Impact.** `returnResidualCorrelationMatrix()` and
+        `plotResidualCorrelationMatrix()` overstate species
+        co-occurrence, pushing correlations toward +/-1. This is the
+        headline JSDM output and the basis of the ordination
+        interpretation.
+
+        **Fix, two options.** (a) Make the reparameterisation purely
+        orthogonal -- rotate by `Q` alone, dropping the `diag(diag(R))`
+        scaling. Then `L_new = t(Q) %*% L` gives
+        `t(L_new) %*% L_new = t(L) %*% L` and `Var(U_new) = I`, so both
+        the identifiability constraint and the covariance identity hold.
+
+        (b) Keep the current scaling and compute the correlation as
+            `t(L) %*% Var(U) %*% L`. (a) is simpler and preserves the
+            existing output contract; check with Alex which constraint
+            the `diag(diag(R))` scaling was meant to impose.
+
+    5.  **Non-thread-safe RNG remains in the hottest OpenMP loop**
+>>>>>>> c851f6ffac111520d9bc8de3995e236f076bf214
         (residual of the original audit's A.6; the other half was fixed
         in `b7b6aa2` -- see Fixed bugs 10). `samplePGvariables()`
         (`src/jsdm.cpp:398`) is `#pragma omp parallel for collapse(2)`
@@ -157,6 +260,79 @@ editor_options:
         the sampler, so fix it properly (route `randinvg()` through the
         existing `thread_local` engine, matching what `runif()` already
         does) rather than by disabling OpenMP.
+
+    6.  **The Stage 2 detection prior is too informative and too
+        optimistic; it causes `p`'s undercoverage, and it is hard-coded
+        so a user cannot work around it.** Found 28 July 2026 by the
+        coverage study. **Originally filed as a *possible* bug on the
+        theory that part of the bias was inherent to a two-stage model
+        with both stages latent. That theory is now disproven** -- see
+        the experiment below. What remains is a straightforward defect
+        plus one design choice for Alex.
+
+        **The code** (`R/runOccJSDM.R:712-715`):
+
+        ```         
+        a_p <- 5;  b_p <- 1        # Beta(5, 1), prior mean 0.833
+        a_q <- 1;  b_q <- 20       # Beta(1, 20), prior mean 0.048
+        ```
+
+        **Three defects, all confirmed.**
+
+        (a) *Beta(5, 1) biases `p` and wrecks its coverage.* Prior mean
+            0.833 asserts PCR detection is probably above 0.8, while
+            `data/sampledata.rda` was deliberately regenerated at `p` in
+            0.3-0.6 as the realistic eDNA regime. The shipped prior and
+            the shipped example data disagree about what a plausible
+            detection rate is.
+        (b) *All four are never read from `listPriors`*, although
+            `@param listPriors` documents them as supported -- setting
+            them silently does nothing, the same failure mode as
+            `prior_beta_psi` (Fixed bugs 14). Note `a_theta0`/`b_theta0`
+            on the two lines above *are* wired up, so this reads as an
+            omission. Because of this a user cannot work around (a)
+            without editing the package.
+        (c) *The documented defaults disagree with the code*: docs say
+            `a_p`/`b_p` default 10/1 (code 5/1) and `a_q`/`b_q` default
+            1/10 (code 1/20).
+
+        **The experiment that settled it.** Same data, same seeds, only
+        the prior changed:
+
+        | prior on `p`          | coverage  | bias       |
+        |-----------------------|-----------|------------|
+        | `Beta(5, 1)` as coded | 0.903     | **+0.050** |
+        | `Beta(1, 1)` flat     | **0.944** | **-0.005** |
+
+        Flattening the prior restores nominal coverage and removes the
+        bias essentially completely. (6 replicates at reduced size, so
+        the coverage figures carry real sampling error; the *bias*
+        reversal from +0.050 to -0.005 is unambiguous. The as-coded arm
+        reproduces the R = 100 base run, 0.899/+0.062, which validates
+        the comparison.)
+
+        **Why the effect is \~3x the prior's direct pull.** Computed
+        against oracle counts (using the *true* `w`), Beta(5,1) shifts
+        the Beta posterior by only **+0.017**; the observed bias is
+        +0.050 to +0.062. The difference is amplification through the
+        latent state: `p` is estimated only over replicates the sampler
+        believes have `w = 1`, a set enriched for positive reads, and a
+        higher `p` makes a `w = 1` with no read less plausible still. So
+        the feedback loop is real -- but it is *driven by* the prior,
+        not independent of it, which is precisely what the flat-prior
+        arm demonstrates.
+
+        **Also confirmed along the way:** the four-case counting in
+        `sample_pq_cpp()` is sound. The oracle estimate using true `w`
+        recovers `p` exactly (0.452 against a true 0.450), which
+        independently re-confirms the Fixed bugs 2 fix.
+
+        **Fix.** (b) and (c) are uncontroversial: wire the four
+        hyperparameters through from `listPriors` and make the docs
+        match. For (a), **Alex should choose the default** --
+        `Beta(1,1)` was only a diagnostic, not a recommendation. The
+        requirement is that the default not be sharply informative at
+        0.83 when the package's own example data sits at 0.3-0.6.
 
     **B. Crashes, unreachable code paths, and API bugs**
 
@@ -246,7 +422,7 @@ editor_options:
         `R/jsdmfun.R:578-586` builds the cross-species spatial
         covariance as
 
-        ```
+        ```         
         Lambda <- matrix(rnorm(ds * S), ds, S)
         Sigma  <- t(Lambda) %*% Lambda + diag(10^(-5), nrow = S)
         spatField <- t(chol(K_mat)) %*% Z %*% chol(Sigma)
@@ -269,7 +445,7 @@ editor_options:
         will silently pass against a null case". That entry was recorded
         as fixed because the field is now added *before* the responses
         are drawn, which was a real and separate bug. The field is still
-        ~0 whenever `ds = 0`, for this different reason.
+        \~0 whenever `ds = 0`, for this different reason.
 
         **Fix:** either error/warn when `useSpatField = TRUE` and
         `ds < 1`, or make `ds = 0` mean "shared spatial field across
@@ -278,7 +454,7 @@ editor_options:
 
         Note also that `sigma_s` is not cleanly the field's marginal SD:
         `Sigma = Lambda'Lambda` with `Lambda ~ N(0,1)` contributes its
-        own scale, so amplitude grows with `ds` (0.80 -> 1.01 -> 1.03
+        own scale, so amplitude grows with `ds` (0.80 -\> 1.01 -\> 1.03
         above for a fixed `sigma_s = 0.5`). Worth documenting whatever
         the fix.
 
@@ -738,7 +914,7 @@ the *MEE paper* testing item is meant to address.
     thread-safe path the audit described as "half-finished" is now wired
     up on that side. **The `samplePGvariables()` path
     (`src/jsdm.cpp:398`) is still affected** via `randinvg()`'s
-    `R::rnorm` call; that residual is tracked as **group A item 3**
+    `R::rnorm` call; that residual is tracked as **group A item 5**
     above. *(Also not recorded at the time; recovered 27 July.)*
 
 **Post-audit fixes:**
