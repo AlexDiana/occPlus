@@ -50,7 +50,14 @@ reparamFactorModel <- function(U_output, L_output){
 
 # COVARIATES TRANSFORMING FUNCTIONS --------
 
-create_covariates_matrix <- function(df, df_spline = 5, remove_intercept = TRUE) {
+
+create_covariates_matrix <- function(df,
+                                     spline_vars = TRUE,
+                                     df_spline = 5,
+                                     remove_intercept = TRUE,
+                                     min_obs_per_df = 10) {
+
+  if (is.matrix(df)) df <- as.data.frame(df)
 
   if (any(is.na(df))) stop("NA in covariates matrix")
 
@@ -58,17 +65,38 @@ create_covariates_matrix <- function(df, df_spline = 5, remove_intercept = TRUE)
   df         <- df %>% dplyr::mutate(dplyr::across(dplyr::where(~ !is.numeric(.x)), as.factor))
   is_numeric <- sapply(df, is.numeric)
 
+  # Determine which specific numeric variables get splines
+  if (is.logical(spline_vars)) {
+    if (spline_vars) {
+      target_spline_vars <- names_df[is_numeric] # All numeric
+    } else {
+      target_spline_vars <- character(0)          # None
+    }
+  } else if (is.character(spline_vars)) {
+    # Check that requested variables actually exist and are numeric
+    invalid_vars <- setdiff(spline_vars, names_df)
+    if (length(invalid_vars) > 0) {
+      stop(paste("Requested spline_vars not found in data:", paste(invalid_vars, collapse = ", ")))
+    }
+    non_num <- spline_vars[!is_numeric[spline_vars]]
+    if (length(non_num) > 0) {
+      warning(paste("Ignoring non-numeric variables in spline_vars:", paste(non_num, collapse = ", ")))
+    }
+    target_spline_vars <- intersect(spline_vars, names_df[is_numeric])
+  } else {
+    stop("'spline_vars' must be a logical (TRUE/FALSE) or a character vector of column names.")
+  }
+
   mean_df    <- rep(NA, ncol(df))
   sd_df      <- rep(NA, ncol(df))
   cat_levels <- vector("list", ncol(df))
-  bs_info    <- vector("list", ncol(df))  # Stores knot attributes for continuous variables
+  bs_info    <- vector("list", ncol(df))  # Stores spline attributes
 
   names(mean_df) <- names(sd_df) <- names(cat_levels) <- names(bs_info) <- names_df
 
   # Standardize numericals and record factor levels
   for (col in 1:ncol(df)) {
     col_name <- names_df[col]
-
     if (is_numeric[col]) {
       mean_df[col] <- mean(df[[col]], na.rm = TRUE)
       sd_df[col]   <- sd(df[[col]], na.rm = TRUE)
@@ -78,18 +106,29 @@ create_covariates_matrix <- function(df, df_spline = 5, remove_intercept = TRUE)
     }
   }
 
-  # Build spline basis for numeric columns and leave factors untouched
+  # Sample size check rule for splines
+  min_required_obs <- df_spline * min_obs_per_df
+
+  # Build matrix columns
   list_X <- lapply(1:ncol(df), function(col) {
     col_name <- names_df[col]
     col_data <- df[[col]]
 
-    # Apply splines to numeric columns with enough unique values
-    if (is_numeric[col] && length(unique(col_data)) >= df_spline) {
+    # Check if variable is selected for spline AND meets sample size rule
+    should_spline <- (col_name %in% target_spline_vars) &&
+      (length(unique(col_data)) >= min_required_obs)
 
-      # Generate basis on training data
+    if (col_name %in% target_spline_vars && length(unique(col_data)) < min_required_obs) {
+      message(paste0("Note: '", col_name, "' has fewer than ", min_required_obs,
+                     " unique values. Fitting as linear term instead of spline."))
+    }
+
+    if (is_numeric[col] && should_spline) {
+
+      # Generate spline basis
       bs_obj <- splines::bs(col_data, df = df_spline, intercept = FALSE)
 
-      # Save knots & attributes for predicting on new data later
+      # Save knot info for prediction step later
       bs_info[[col]] <<- list(
         knots          = attr(bs_obj, "knots"),
         Boundary.knots = attr(bs_obj, "Boundary.knots"),
@@ -101,21 +140,20 @@ create_covariates_matrix <- function(df, df_spline = 5, remove_intercept = TRUE)
       return(bs_obj)
 
     } else if (is_numeric[col]) {
-      # Fallback for numeric variables with too few unique values (keep linear)
+      # Linear term fallback
       mat <- matrix(col_data, ncol = 1)
       colnames(mat) <- col_name
       return(mat)
 
     } else {
-      # Keep categorical columns as data.frame vectors for model.matrix expansion
+      # Categorical variables
       return(data.frame(col_data, fix.empty.names = FALSE) %>% setNames(col_name))
     }
   })
 
-  # Re-combine numerical splines and categorical variables
   df_transformed <- do.call(cbind, list_X)
 
-  # Generate standard dummy matrix (converts factors to dummies)
+  # Generate dummy design matrix
   X_final <- stats::model.matrix(~ ., data = as.data.frame(df_transformed))
 
   if (remove_intercept) {
@@ -123,12 +161,13 @@ create_covariates_matrix <- function(df, df_spline = 5, remove_intercept = TRUE)
   }
 
   list_matrix <- list(
-    names_df   = names_df,
-    mean_df    = mean_df,
-    sd_df      = sd_df,
-    cat_levels = cat_levels,
-    is_numeric = is_numeric,
-    bs_info    = bs_info
+    names_df           = names_df,
+    mean_df            = mean_df,
+    sd_df              = sd_df,
+    cat_levels         = cat_levels,
+    is_numeric         = is_numeric,
+    bs_info            = bs_info,
+    target_spline_vars = target_spline_vars
   )
 
   return(list(X = X_final, list_matrix = list_matrix))
@@ -143,20 +182,19 @@ transform_new_covariates <- function(df, list_matrix, remove_intercept = TRUE) {
   is_numeric <- list_matrix$is_numeric
   bs_info    <- list_matrix$bs_info
 
+  if (is.matrix(df)) df <- as.data.frame(df)
+
   if (any(is.na(df))) stop("NA in covariates matrix")
 
-  # Check for missing columns
   missing_cols <- setdiff(names_df, colnames(df))
   if (length(missing_cols) > 0) {
-    stop(paste("New data is missing critical columns required by the model:",
-               paste(missing_cols, collapse = ", ")))
+    stop(paste("New data is missing required columns:", paste(missing_cols, collapse = ", ")))
   }
 
-  # Sort columns & align factors
   df <- df[, names_df, drop = FALSE] %>%
     dplyr::mutate(dplyr::across(dplyr::where(~ !is.numeric(.x)), as.factor))
 
-  # 1. Standardize numerical and enforce factor levels
+  # 1. Standardize numericals and enforce factor levels
   for (col in 1:ncol(df)) {
     if (is_numeric[col]) {
       df[, col] <- (df[, col] - mean_df[col]) / sd_df[col]
@@ -165,14 +203,13 @@ transform_new_covariates <- function(df, list_matrix, remove_intercept = TRUE) {
     }
   }
 
-  # 2. Evaluate splines using stored training knots
+  # 2. Evaluate splines or keep linear
   list_X <- lapply(1:ncol(df), function(col) {
     col_name <- names_df[col]
     col_data <- df[[col]]
 
     if (is_numeric[col] && !is.null(bs_info[[col]])) {
-
-      # Reconstruct spline basis on new data using training knots
+      # Reconstruct spline using saved training knots
       info <- bs_info[[col]]
       bs_obj <- splines::bs(
         col_data,
@@ -197,7 +234,6 @@ transform_new_covariates <- function(df, list_matrix, remove_intercept = TRUE) {
 
   df_transformed <- do.call(cbind, list_X)
 
-  # 3. Build model.matrix for new data
   X_new <- stats::model.matrix(~ ., data = as.data.frame(df_transformed))
 
   if (remove_intercept) {
@@ -286,6 +322,81 @@ createSplinesMatrix <- function(list_ns, X_new){
 
 }
 
+plot_species_curve <- function(species_name,
+                               cov_name,
+                               mcmc_param,
+                               list_matrix,
+                               X0, X,
+                               n_points = 200,
+                               link = c("identity", "logit")) {
+
+  X0 <- as.data.frame(X0)
+  X <- as.data.frame(X)
+
+  link <- match.arg(link)
+
+  indices <- grep(cov_name, colnames(X))
+
+  # 1. Sequence of target covariate across its original range
+  cov_min <- min(X0[[cov_name]], na.rm = TRUE)
+  cov_max <- max(X0[[cov_name]], na.rm = TRUE)
+  cov_seq <- seq(cov_min, cov_max, length.out = n_points)
+
+  # 2. Build synthetic evaluation grid
+  # Hold target variable at sequence, other numerics at mean, factors at baseline level
+  grid_df <- data.frame(matrix(ncol = length(list_matrix$names_df), nrow = n_points))
+  colnames(grid_df) <- list_matrix$names_df
+
+  for (col_name in list_matrix$names_df) {
+    if (col_name == target_cov) {
+      grid_df[[col_name]] <- cov_seq
+    } else if (list_matrix$is_numeric[[col_name]]) {
+      grid_df[[col_name]] <- list_matrix$mean_df[[col_name]]  # Hold continuous at original mean
+    } else {
+      grid_df[[col_name]] <- list_matrix$cat_levels[[col_name]][1] # Baseline factor level
+    }
+  }
+
+  # 3. Transform evaluation grid using stored training knots/means
+  # Note: set remove_intercept = FALSE if your beta vector includes the intercept
+  X_pred <- transform_new_covariates(grid_df, list_matrix, remove_intercept = FALSE)
+
+  # 4. Multiply design matrix by MCMC draws
+  # beta_mcmc_j is a matrix of size (N_draws x P_cols)
+  # posterior_fit will be of size (n_points x N_draws)
+  linear_predictor <- X_pred %*% t(beta_mcmc_j)
+
+  # 5. Apply Link Function (if fitting presence-absence or counts)
+  if (link == "probit") {
+    posterior_fit <- stats::pnorm(linear_predictor)
+  } else if (link == "logit") {
+    posterior_fit <- stats::plogis(linear_predictor)
+  } else {
+    posterior_fit <- linear_predictor
+  }
+
+  # 6. Summarize posterior mean and 95% Credible Intervals (2.5% & 97.5% quantiles)
+  plot_data <- data.frame(
+    x     = cov_seq,
+    mean  = apply(posterior_fit, 1, mean),
+    lower = apply(posterior_fit, 1, quantile, probs = 0.025),
+    upper = apply(posterior_fit, 1, quantile, probs = 0.975)
+  )
+
+  # 7. Generate ggplot
+  p <- ggplot(plot_data, aes(x = x, y = mean)) +
+    geom_ribbon(aes(ymin = lower, ymax = upper), fill = "#3388ff", alpha = 0.25) +
+    geom_line(color = "#0044cc", linewidth = 1) +
+    labs(
+      x = target_cov,
+      y = ifelse(link == "identity", "Response (Linear Predictor)", "Occupancy Probability")
+    ) +
+    theme_minimal(base_size = 12) +
+    theme(plot.title = element_text(face = "bold"))
+
+  return(p)
+}
+
 # SPATIAL FUNCTIONS -----------
 
 buildGrid <- function(XY_sp, gridStep){
@@ -352,6 +463,14 @@ computeSpatialSummaries <- function(Xs, ps, maxPoints){
 
     # location of support points
     # X_tilde <- as.matrix(buildGrid(X_s, gridStep = .4))
+
+    # assign ps again based on new locations
+    if(ps > (nrow(X_s)-1)){
+      ps <- nrow(X_s) - 1
+    }
+
+    maxPoints <- min(maxPoints, ps)
+
     list_kmeans <- kmeans(X_s, centers = ps)
     X_tilde <- list_kmeans$centers
 
@@ -396,7 +515,8 @@ computeSpatialSummaries <- function(Xs, ps, maxPoints){
     "X_tilde" = X_tilde, # location of support points
     "X_s_centers" = X_s_centers, # indexes to match new locations to the coefficients
     "Xs_centers" = Xs_centers, # indexes to match original locations to the coefficients
-    "X_s" = X_s) # new unique locations
+    "X_s" = X_s, # new unique locations
+    "ps" = ps) # new number of support points
 
 }
 
@@ -479,7 +599,7 @@ computeSORmatrix <- function(l_s, X_tilde, X_s, Xs_index, X_s_centers){
 
 }
 
-getDefaultSupportPoints <- function(n) max(30, floor(n * 0.2))
+getDefaultSupportPoints <- function(n) min(floor(n * 0.2), n - 1)
 
 # DATA SIMULATION -------
 
@@ -503,10 +623,12 @@ simulateData <- function(
     if(p > 0) colnames(X) <- paste("EnvCov", seq_len(p))
     if(usingSplines){
       X0 <- X
-      list_ns <- createSplinesObjects(X, df= 3)
-      X <- createSplinesMatrix(list_ns, X0)
+      list_X <- create_covariates_matrix(X, df_spline = 5, remove_intercept = TRUE)
+      X <- list_X$X
       p0 <- p
       p <- ncol(X)
+    } else {
+      X0 <- X
     }
 
     # Traits matrix
@@ -576,16 +698,27 @@ simulateData <- function(
     if(useSpatField){
 
       K_mat <- K2(Xs, Xs, sigma_s, l_s) + diag(10^(-5), nrow = ns)
-
-      Lambda <- matrix(rnorm(ds * S), ds, S)
-      Sigma <- t(Lambda) %*% Lambda + diag(10^(-5), nrow = S)
-
       LU <- chol(K_mat)
-      LV <- chol(Sigma)
 
-      Z <- matrix(rnorm(n * S), n, S)
+      if(ds > 0){
 
-      spatField <- t(LU) %*% Z %*% LV
+        Lambda <- matrix(rnorm(ds * S), ds, S)
+        Sigma <- t(Lambda) %*% Lambda + diag(10^(-5), nrow = S)
+        Sigma <- cov2cor(Sigma)
+        LV <- chol(Sigma)
+
+        Z <- matrix(rnorm(n * S), n, S)
+
+        spatField <- t(LU) %*% Z %*% LV
+
+      } else { # shared spatial field
+
+        LU <- chol(K_mat)
+        Z <- rnorm(n)
+
+        spatField <- matrix(t(LU) %*% Z, n, S, byrow = F)
+
+      }
 
     } else {
       spatField <- matrix(0, n, S)
@@ -649,7 +782,7 @@ simulateData <- function(
   {
     data <- list(
     "z" = z,
-    "X" = X,
+    "X" = X0,
     "Tr" = Tr,
     "Xs" = Xs
     )

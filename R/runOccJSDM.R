@@ -741,6 +741,7 @@ runOccJSDM <- function(data,
     X_s_centers <- list_Xs$X_s_centers
     X_tilde <- list_Xs$X_tilde
     X_s <- list_Xs$X_s
+    ps <- list_Xs$ps
 
     length_grid_ls <- 10
     l_s_grid <- seq(0.01, 0.3, length.out = length_grid_ls)
@@ -1009,11 +1010,11 @@ runOccJSDM <- function(data,
 
       if(iter > nburn){
         currentIter <- (iter - nburn) / nthin
-        if(currentIter %% 100 == 0){
+        if(currentIter %% 10 == 0){
           message(paste0("Chain ", chain, " - Iteration ",currentIter))
         }
       } else {
-        if(iter %% 100 == 0){
+        if(iter %% 10 == 0){
           message(paste0("Chain ", chain, " - Burn in Iteration ",iter))
         }
       }

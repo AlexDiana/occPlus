@@ -1566,11 +1566,11 @@ predictNewSites <- function(fitModel,
 
   }
 
+  if(useSpatial & !isSpatFieldEstimated) stop("Cannot use spatial if it was not estimated initially")
+
   if(useSpatial & isSpatFieldEstimated & is.null(X_s)) {
     stop("No spatial locations present")
   }
-
-  if(useSpatial & !isSpatFieldEstimated) stop("Cannot use spatial if it was not estimated initially")
 
   # create spatial matrix
   if(useSpatial){

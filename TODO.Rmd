@@ -134,7 +134,9 @@ editor_options:
         `idx_ls` varies, precisely so the test does not encode this
         defect. Revisit that test once this is fixed.
 
-    3.  **Non-thread-safe RNG remains in the hottest OpenMP loop**
+    3.  FIXED 
+    
+        **Non-thread-safe RNG remains in the hottest OpenMP loop**
         (residual of the original audit's A.6; the other half was fixed
         in `b7b6aa2` -- see Fixed bugs 10). `samplePGvariables()`
         (`src/jsdm.cpp:398`) is `#pragma omp parallel for collapse(2)`
@@ -187,7 +189,9 @@ editor_options:
             function users cannot call. Either re-export it or drop the
             `.Rd`.
 
-    3.  **The default GP knot count breaks every spatial fit below 31
+    3.  FIXED
+    
+        **The default GP knot count breaks every spatial fit below 31
         sites, and is statistically wrong below \~150.**
         `getDefaultSupportPoints(n) <- max(30, floor(n * 0.2))`
         (`R/jsdmfun.R:480`) sets the number of support (inducing) points
@@ -233,7 +237,9 @@ editor_options:
         which it arguably should do regardless, so the knot count is
         pinned rather than drifting with `n`.
 
-    4.  **`simulateOccJSDMData(useSpatField = TRUE, ds = 0)` silently
+    4.  FIXED 
+    
+        **`simulateOccJSDMData(useSpatField = TRUE, ds = 0)` silently
         generates no spatial field.** Found 27 July 2026 while
         diagnosing group A item 2.
 
