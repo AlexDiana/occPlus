@@ -5,9 +5,11 @@
 #   Rscript dev/simstudy/run_study.R [--R=100] [--cores=8] [--scenarios=a,b]
 #                                    [--out=dev/simstudy/results]
 #                                    [--nburn=1000] [--niter=1000] [--resume]
+#                                    [--caffeinate]
 #
 # --resume picks up from the checkpoint written by a previous invocation with
 # the same --scenarios and --out, skipping replicates already completed.
+# --caffeinate (macOS only) stops the machine sleeping mid-run.
 #
 # Replicates are parallelised across *processes*, which is free: each is an
 # independent dataset and fit, needing no package changes -- unlike the
@@ -38,8 +40,28 @@ nburn    <- as.integer(getopt("nburn", "1000"))
 niter    <- as.integer(getopt("niter", "1000"))
 
 resume   <- any(args == "--resume")
+keepawake<- any(args == "--caffeinate")
 
 pkg_root <- normalizePath(getopt("pkg", "."), mustWork = TRUE)
+
+# Optionally hold the machine awake for the duration. Scoped to this process
+# via -w, so the assertion dies with the run and there is no power setting to
+# undo, even if the run crashes.
+#
+# A convenience, not the safety net -- checkpointing is what makes an
+# interrupted run recoverable. This only avoids wasting wall-clock: on
+# 28 July a sleeping laptop cost ~80 min of elapsed time with no work done,
+# and the sleep was invisible in the progress output at the time.
+if (keepawake) {
+  if (Sys.info()[["sysname"]] == "Darwin") {
+    system2("caffeinate", c("-is", "-w", Sys.getpid()), wait = FALSE)
+    message("  caffeinate: holding the machine awake until this run exits")
+    message("  (a closed lid on battery still sleeps; caffeinate cannot override that)")
+  } else {
+    message("  --caffeinate is macOS-only; ignored on ", Sys.info()[["sysname"]], ".")
+    message("  Linux equivalent: systemd-inhibit --what=idle Rscript ...")
+  }
+}
 
 # --- load package + helpers ----------------------------------------------
 
@@ -124,15 +146,45 @@ ckpt_append <- function(rows) {
 # parLapplyLB() internally, so load balancing is preserved within a chunk; the
 # only cost is that each chunk waits for its own slowest job. With jobs
 # shuffled (above) that tail is small.
-progress_line <- function(done, total, t0, failed) {
+# ETA comes from a TRAILING WINDOW, not the cumulative average. A cumulative
+# average is badly misleading whenever throughput changes: on 28 July the
+# machine slept mid-run and the log kept reporting "~28 min left" while the
+# recent rate implied several times that.
+#
+# cpu/wall is printed for the same reason. Compared against `cores` it says
+# how much of the wall time was actually spent computing; a ratio collapsing
+# toward zero while elapsed climbs is the unambiguous signature of a suspended
+# machine, which is otherwise hard to tell from thermal throttling by eye.
+.prog <- new.env(parent = emptyenv())
+.prog$hist <- numeric(0)
+
+progress_line <- function(done, total, t0, failed, cpu_min = NA_real_) {
   el <- as.numeric(difftime(Sys.time(), t0, units = "mins"))
   frac <- done / total
-  eta <- if (frac > 0) el * (1 - frac) / frac else NA_real_
+  .prog$hist <- c(.prog$hist, el)
+
+  h <- .prog$hist
+  win <- utils::tail(h, 6L)
+  per_report <- if (length(win) >= 2L)
+    (win[length(win)] - win[1]) / (length(win) - 1L) else el
+  reports_left <- (total - done) / (done / length(h))
+  eta <- per_report * reports_left
+
+  cpu_txt <- if (is.finite(cpu_min) && el > 0)
+    sprintf(" | cpu/wall %.1fx", cpu_min / el) else ""
+
   message(sprintf(
-    "  [%3.0f%%] %d/%d replicates | %.0f min elapsed | ~%.0f min left%s",
-    100 * frac, done, total, el, eta,
+    "  [%3.0f%%] %d/%d replicates | %.0f min elapsed | ~%.0f min left%s%s",
+    100 * frac, done, total, el, eta, cpu_txt,
     if (failed > 0) sprintf(" | %d failed", failed) else ""))
   flush(stderr())
+}
+
+# Total CPU-minutes burned by the worker processes so far.
+cluster_cpu_min <- function(cl) {
+  out <- try(clusterEvalQ(cl, sum(proc.time()[1:2])), silent = TRUE)
+  if (inherits(out, "try-error")) return(NA_real_)
+  sum(unlist(out)) / 60
 }
 
 # Drop jobs already recorded in the checkpoint.
@@ -178,7 +230,7 @@ if (n_cores > 1L) {
     done <- done + length(chunks[[ci]])
     failed_so_far <- failed_so_far +
       sum(vapply(res[[ci]], function(d) any(d$block == "ERROR"), logical(1)))
-    progress_line(done, n_jobs, t0, failed_so_far)
+    progress_line(done, n_jobs, t0, failed_so_far, cluster_cpu_min(cl))
   }
   res <- unlist(res, recursive = FALSE)
 
