@@ -25,15 +25,15 @@ editor_options:
     authoritative record of what has been resolved. Only the *unfixed*
     remainder is listed here, renumbered.
 
-    **Group A has since grown, not shrunk.** Three of its six items
-    (3, 4 and 6) were found not by reading code but by the simulation
-    study, which measured *which* parameters were miscalibrated and made
-    the causes findable. A static audit had already been over the same
-    files and walked past all three. Their standing as of the full
-    R = 100 run (`dev/simstudy/PLAN.md` §12), most severe first:
+    **Group A has since grown, not shrunk.** Three of its six items (3,
+    4 and 6) were found not by reading code but by the simulation study,
+    which measured *which* parameters were miscalibrated and made the
+    causes findable. A static audit had already been over the same files
+    and walked past all three. Their standing as of the full R = 100 run
+    (`dev/simstudy/PLAN.md` §12), most severe first:
 
     | item | what it breaks | measured |
-    |------|----------------|----------|
+    |----|----|----|
     | 6 | Stage 2 detection rate `p` | coverage **0.103** where detection is genuinely low, vs 0.95 nominal |
     | 3 | Stage 1 collection covariates | **0.68-0.73**, in every one of the nine cells that estimates them |
     | 4 | species residual correlations | **0.74-0.77** in nine cells; masked (0.98) when the ordination is under-fitted |
@@ -43,12 +43,12 @@ editor_options:
 
     Items 3, 4 and 6 all change fitted values, so **`sampleresults.rda`
     cannot be regenerated until they are fixed** -- see the CRAN plan in
-    `AGENTS.md`. Cross-references elsewhere in
-    this document (groups C/D, the *MEE paper* section) use the
-    **current** numbering, not the original audit numbering. Line
-    numbers were verified against `e33fc0b` and re-checked against the
-    working tree on 27 July; those in the fixed-bug entries below point
-    at the *post-fix* code and so will not match the original audit.
+    `AGENTS.md`. Cross-references elsewhere in this document (groups
+    C/D, the *MEE paper* section) use the **current** numbering, not the
+    original audit numbering. Line numbers were verified against
+    `e33fc0b` and re-checked against the working tree on 27 July; those
+    in the fixed-bug entries below point at the *post-fix* code and so
+    will not match the original audit.
 
     Already fixed by `0abb104`, and so *not* listed below: the
     `simulateOccJSDMData(model = "occupancy")` `idx_z_k` bug -- that
@@ -356,8 +356,8 @@ editor_options:
         arm demonstrates.
 
         **Confirmed at scale (28 July, R = 100 x 10 scenarios), and far
-        worse than the base run suggested.** In `low_information` -- true
-        `p` in 0.1-0.3 against a prior mean of 0.833 -- coverage
+        worse than the base run suggested.** In `low_information` --
+        true `p` in 0.1-0.3 against a prior mean of 0.833 -- coverage
         collapses to **0.103** with bias **+0.49**, against 0.90-0.92 in
         every other cell. The single most severe result in the study,
         and it lands precisely in the low-detection regime the package
@@ -822,9 +822,9 @@ editor_options:
             announcement*, which currently points people at a GitHub
             file listing. A rendered reference and vignettes make a
             considerably stronger first impression for a beta release.
-        (c) *It gives the validation write-up a home.* The plain-language
-            guide to the test suite and the R = 100 results currently
-            lives as a Claude artifact
+        (c) *It gives the validation write-up a home.* The
+            plain-language guide to the test suite and the R = 100
+            results currently lives as a Claude artifact
             (<https://claude.ai/code/artifact/ad3d46eb-1fd4-49b5-b795-6b71474ef1d5>,
             private). As a pkgdown *article* it would sit with the
             package and be citable as supplementary material for the MEE
