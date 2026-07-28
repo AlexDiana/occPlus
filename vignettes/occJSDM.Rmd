@@ -275,7 +275,7 @@ convDiagfiltered <- convDiag |>
 ```
 
 A few coefficients for a few species fall just outside these thresholds.
-None is a cause for concern on its own (for all but two estimates,
+None is a cause for concern on its own (for all but four estimates,
 `Rhat` is still $\le 1.03$, and `ess` is still in the low hundreds), but
 if this list included much larger deviations, it would be worth
 increasing `niter` and/or `nthin` before trusting the affected
@@ -310,6 +310,7 @@ coefficients:
 ```{r}
 plotCollectionCovariates(fitmodel, idx_species = 1:10, 
                          covName = "X_theta.1")
+
 plotCollectionCovariates(fitmodel, idx_species = 1:10, 
                          covName = "X_theta.2")
 ```
@@ -850,3 +851,4 @@ Macher, J.-N. (2025). **Metacommunity Theory and Metabarcoding Reveal
 the Environmental, Spatial and Biotic Drivers of Meiofaunal Communities
 in Sandy Beaches**. *Molecular Ecology*, *34*(8), e17733.
 <https://doi.org/10.1111/mec.17733>
+
