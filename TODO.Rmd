@@ -19,11 +19,31 @@ editor_options:
     model, so each should be reproduced before it is fixed. Grouped by
     severity.
 
-    **Status as of 27 July 2026.** The audit originally listed 15 group
+    **Status as of 28 July 2026.** The audit originally listed 15 group
     A and 10 group B items; most have since been fixed and moved to
     **Fixed bugs** at the end of this document, which is now the
     authoritative record of what has been resolved. Only the *unfixed*
-    remainder is listed here, renumbered. Cross-references elsewhere in
+    remainder is listed here, renumbered.
+
+    **Group A has since grown, not shrunk.** Three of its six items
+    (3, 4 and 6) were found not by reading code but by the simulation
+    study, which measured *which* parameters were miscalibrated and made
+    the causes findable. A static audit had already been over the same
+    files and walked past all three. Their standing as of the full
+    R = 100 run (`dev/simstudy/PLAN.md` §12), most severe first:
+
+    | item | what it breaks | measured |
+    |------|----------------|----------|
+    | 6 | Stage 2 detection rate `p` | coverage **0.103** where detection is genuinely low, vs 0.95 nominal |
+    | 3 | Stage 1 collection covariates | **0.68-0.73**, in every one of the nine cells that estimates them |
+    | 4 | species residual correlations | **0.74-0.77** in nine cells; masked (0.98) when the ordination is under-fitted |
+    | 5 | reproducibility on Linux/Windows | not measurable here; blocks a reproducible refit |
+    | 2 | GP length-scale | never recovered; rails at the grid maximum |
+    | 1 | `sigma_h` | inert for fitted models; affects `predictNewSites()` only |
+
+    Items 3, 4 and 6 all change fitted values, so **`sampleresults.rda`
+    cannot be regenerated until they are fixed** -- see the CRAN plan in
+    `AGENTS.md`. Cross-references elsewhere in
     this document (groups C/D, the *MEE paper* section) use the
     **current** numbering, not the original audit numbering. Line
     numbers were verified against `e33fc0b` and re-checked against the
@@ -317,14 +337,6 @@ editor_options:
         | `Beta(5, 1)` as coded | 0.903     | **+0.050** |
         | `Beta(1, 1)` flat     | **0.944** | **-0.005** |
 
-**Confirmed at scale, and far worse than the base
-        run suggested.** In the `low_information` cell -- true `p` in
-        0.1-0.3 against the prior mean of 0.833 -- coverage collapses to
-        **0.103** with bias **+0.49**, against 0.90-0.92 in every other
-        cell. That is the single most severe result in the study, and it
-        lands precisely in the low-detection regime the package exists
-        to serve.
-
         Flattening the prior restores nominal coverage and removes the
         bias essentially completely. (6 replicates at reduced size, so
         the coverage figures carry real sampling error; the *bias*
@@ -342,6 +354,14 @@ editor_options:
         the feedback loop is real -- but it is *driven by* the prior,
         not independent of it, which is precisely what the flat-prior
         arm demonstrates.
+
+        **Confirmed at scale (28 July, R = 100 x 10 scenarios), and far
+        worse than the base run suggested.** In `low_information` -- true
+        `p` in 0.1-0.3 against a prior mean of 0.833 -- coverage
+        collapses to **0.103** with bias **+0.49**, against 0.90-0.92 in
+        every other cell. The single most severe result in the study,
+        and it lands precisely in the low-detection regime the package
+        exists to serve.
 
         **Also confirmed along the way:** the four-case counting in
         `sample_pq_cpp()` is sound. The oracle estimate using true `w`

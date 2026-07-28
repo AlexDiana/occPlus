@@ -310,7 +310,15 @@ Also: pooling coverage across species within a block buys precision, but those i
 
 4.  *Deferred.* Presentation of tier-3 results for the paper. Build the suite first; the summary object then feeds either a short pkgdown article or the manuscript directly. Nothing here forecloses that.
 
-5.  *Deferred.* SBC (§7).
+5.  *Deferred, but the case is now stronger.* **SBC** (§7). The full run
+    found two separate instances of a fixed truth conflicting with an
+    informative prior -- `sigma_b` reading 1.000 everywhere because it is
+    prior-dominated, and `p` collapsing to 0.103 where the true value sits
+    far into the tail of a `Beta(5, 1)`. Both are artefacts of choosing
+    truth independently of the prior. SBC draws truth *from* the prior and
+    so cannot produce them, which would separate "the sampler is wrong"
+    from "this truth disagrees with this prior" automatically rather than
+    by the hand-analysis those two took.
 
 ------------------------------------------------------------------------
 
