@@ -773,14 +773,61 @@ editor_options:
         alone, which is the near-term point of this work; and the open
         group A items shape it -- `sigma_h` (A.1) and `l_s` (A.2) are
         both excluded from coverage checks because neither is
-        recoverable, and the OpenMP RNG race (A.3) is why tier 1 asserts
+        recoverable, and the OpenMP RNG race (A.5) is why tier 1 asserts
         structure rather than numeric equality.
 
-        **One empirical question is open**, and the full run should
-        settle it: `beta_theta` and `resid_cor` came out at 0.78-0.80
-        and 0.76-0.79 across three independent seed sets, against a
-        nominal 0.95. Consistent enough that chance is unlikely, but R =
-        5 is too small to call. See `PLAN.md` §10.3.
+        ~~**One empirical question is open**, and the full run should
+        settle it.~~ **SETTLED 28 July.** The full R = 100 study ran all
+        ten cells (900 replicates, 0 failures) and found three distinct
+        defects, each now traced to code: `beta_theta` (group A item 3),
+        `resid_cor` (item 4) and `p` (item 6). Full table in `PLAN.md`
+        §12. The suite has therefore already paid for itself several
+        times over -- none of the three was visible to a static audit
+        that had been over the same files.
+
+    3.  **Stand up a pkgdown site.** Discussed 28 July; not started.
+
+        pkgdown turns the package into a static website -- function
+        reference, both vignettes, README, changelog -- and GitHub Pages
+        hosts it. `usethis::use_pkgdown_github_pages()` wires up both
+        plus an Action to rebuild on push. Roughly half an hour, plus
+        time shaping the reference index.
+
+        **Three reasons it earns its place:**
+
+        (a) *It closes a CRAN item.* `DESCRIPTION` has no `URL` or
+            `BugReports` field (CRAN plan item 10 in `AGENTS.md`). A
+            documentation site is a better `URL` than the bare repo.
+        (b) *It is a much better landing page for the listserv
+            announcement*, which currently points people at a GitHub
+            file listing. A rendered reference and vignettes make a
+            considerably stronger first impression for a beta release.
+        (c) *It gives the validation write-up a home.* The plain-language
+            guide to the test suite and the R = 100 results currently
+            lives as a Claude artifact
+            (<https://claude.ai/code/artifact/ad3d46eb-1fd4-49b5-b795-6b71474ef1d5>,
+            private). As a pkgdown *article* it would sit with the
+            package and be citable as supplementary material for the MEE
+            paper.
+
+        **Two practical constraints.**
+
+        The site would live at `alexdiana.github.io/occJSDM`, since the
+        repo is under Alex's account -- **Alex has to enable Pages**, it
+        is not a setting Doug can change.
+
+        And pkgdown builds every `@examples` block, so the **first build
+        will fail on the group B functions that error unconditionally**
+        (`predictNewSites()` among them). That is the same exposure
+        `\donttest{}` creates under `R CMD check`, which is exactly why
+        the CRAN plan sequences item 8 after the group B fixes. So do
+        this after group B, or expect to `@examples`-guard several
+        functions first.
+
+        **Sequencing caveat:** consider whether to publish a site while
+        group A items 3, 4 and 6 are open. The site would document
+        functions whose credible intervals are currently overconfident,
+        without saying so anywhere a reader would see.
 
 2.  Alex to dos
 
