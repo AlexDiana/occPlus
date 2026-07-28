@@ -134,7 +134,101 @@ editor_options:
         `idx_ls` varies, precisely so the test does not encode this
         defect. Revisit that test once this is fixed.
 
-    3.  **Non-thread-safe RNG remains in the hottest OpenMP loop**
+    3.  **The prior mean for collection-covariate slopes is 1, not 0.**
+        Found 28 July 2026 by the coverage study; **confirmed, with the
+        cleanest evidence in the whole audit.**
+
+        `R/runOccJSDM.R:718-722`:
+
+        ```
+        b_betatheta <- rep(1, ncov_theta)      # prior MEAN = 1, all coefs
+        B_betatheta <- diag(1, nrow = ncov_theta)
+        b_betatheta[1] <- prior_beta_theta     # only the intercept reset
+        ```
+
+        Every element of the prior mean is initialised to **1**, and only
+        element 1 -- the intercept -- is then overwritten with
+        `prior_beta_theta` (default 0). So every *actual covariate slope*
+        carries a prior centred on +1 with variance 1.
+
+        **Measured, R = 100.** Splitting `beta_theta` by coefficient:
+
+        | coefficient | prior mean | coverage | bias |
+        |----|----|----|----|
+        | intercept | 0 (overridden) | **0.937** | +0.073 |
+        | slope | **1** (not overridden) | **0.496** | +0.113 |
+
+        The one coefficient with a sensible prior covers correctly; the
+        one with prior mean 1 covers at barely half, with the positive
+        bias the pull predicts. True slopes average +0.01 (drawn from
+        {-1, 0, +1} by `R/simulateData.R:123`), so a prior at +1 drags
+        them up.
+
+        **Impact.** Any reported effect of a covariate on eDNA
+        *collection* is biased toward +1 and its credible interval is
+        roughly a 50% interval, not 95%. This is a headline Stage 1
+        output.
+
+        **Fix:** `rep(0, ncov_theta)`. The surrounding lines suggest the
+        indices were simply inverted -- a prior mean of ~1 on the
+        *intercept* (theta ~ 0.73 on the logit scale) with 0 on the
+        slopes would be a defensible design; what is coded is the
+        reverse. Worth confirming the intent with Alex rather than
+        assuming.
+
+        **Also here, latent:** `B_betatheta[1,1] <- prior_beta_theta_sd`
+        assigns a *standard deviation* into what is used as a
+        *covariance* matrix. Harmless at the default of 1 (1^2 = 1), but
+        wrong for any other value a user sets.
+
+    4.  **`reparamFactorModel()` breaks the identity that residual
+        covariance = `t(L) %*% L`, so reported species correlations are
+        inflated.** Found 28 July 2026 by the coverage study; confirmed
+        numerically.
+
+        `reparamFactorModel()` (`R/jsdmfun.R:48`) rewrites the stored `U`
+        and `L` each iteration as `L_new = diag(1/diag(R)) %*% R` and
+        `U_new = U %*% Q %*% diag(diag(R))`, where `L = QR`. That
+        **preserves `U %*% L`** -- verified to 4e-16 -- so the linear
+        predictor is untouched and the rotation is legitimate for
+        identifiability.
+
+        But `returnResidualCorrelationMatrix()` computes the correlation
+        as `cov2cor(t(L) %*% L)` from the *stored, reparameterised* `L`.
+        That identity only holds when `U` is standardised, and the
+        reparameterisation moves scale out of `U` into `L`: measured
+        `Var(U)` afterwards is `diag(0.23, 2.01)`, not the identity.
+
+        **Measured.** On a random `d = 2`, `S = 6` example the
+        correlation matrix changes by up to **0.61**, systematically
+        toward the extremes:
+
+        ```
+        +0.713 -> +0.926     -0.168 -> -0.780
+        -0.811 -> -0.958     +0.443 -> +0.875
+        ```
+
+        Inflated point estimates with correctly-sized intervals is
+        exactly what produces undercoverage, and `resid_cor` measured
+        **0.763** at R = 100.
+
+        **Impact.** `returnResidualCorrelationMatrix()` and
+        `plotResidualCorrelationMatrix()` overstate species
+        co-occurrence, pushing correlations toward +/-1. This is the
+        headline JSDM output and the basis of the ordination
+        interpretation.
+
+        **Fix, two options.** (a) Make the reparameterisation purely
+        orthogonal -- rotate by `Q` alone, dropping the
+        `diag(diag(R))` scaling. Then `L_new = t(Q) %*% L` gives
+        `t(L_new) %*% L_new = t(L) %*% L` and `Var(U_new) = I`, so both
+        the identifiability constraint and the covariance identity hold.
+        (b) Keep the current scaling and compute the correlation as
+        `t(L) %*% Var(U) %*% L`. (a) is simpler and preserves the
+        existing output contract; check with Alex which constraint the
+        `diag(diag(R))` scaling was meant to impose.
+
+    5.  **Non-thread-safe RNG remains in the hottest OpenMP loop**
         (residual of the original audit's A.6; the other half was fixed
         in `b7b6aa2` -- see Fixed bugs 10). `samplePGvariables()`
         (`src/jsdm.cpp:398`) is `#pragma omp parallel for collapse(2)`
@@ -732,7 +826,7 @@ the *MEE paper* testing item is meant to address.
     thread-safe path the audit described as "half-finished" is now wired
     up on that side. **The `samplePGvariables()` path
     (`src/jsdm.cpp:398`) is still affected** via `randinvg()`'s
-    `R::rnorm` call; that residual is tracked as **group A item 3**
+    `R::rnorm` call; that residual is tracked as **group A item 5**
     above. *(Also not recorded at the time; recovered 27 July.)*
 
 **Post-audit fixes:**

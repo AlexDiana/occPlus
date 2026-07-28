@@ -121,11 +121,11 @@ These are the things most likely to make the suite wrong or annoying. Each has b
 
 ### 5.1 Never assert exact numeric equality of fitted values in tier 1
 
-`TODO.Rmd` group A item 3 is still open: `randinvg()` (`src/jsdm.cpp:86`) draws from R's global RNG inside `samplePGvariables()`'s OpenMP loop. A fixed seed therefore **does not** reproduce across platforms — it is deterministic on stock macOS clang (no OpenMP) and racy on Linux/Windows.
+`TODO.Rmd` group A item 5 is still open: `randinvg()` (`src/jsdm.cpp:86`) draws from R's global RNG inside `samplePGvariables()`'s OpenMP loop. A fixed seed therefore **does not** reproduce across platforms — it is deterministic on stock macOS clang (no OpenMP) and racy on Linux/Windows.
 
 A tier-1 test asserting `expect_equal()` on posterior quantities would pass locally and fail intermittently on CRAN. That is the worst available failure mode. **Tier 1 assertions must be structural**: does it run, are dimensions right, is a block non-`NA`, does a value vary. Numeric recovery belongs in tiers 2–3, with tolerances.
 
-Revisit once group A item 3 is closed.
+Revisit once group A item 5 is closed.
 
 ### 5.2 Coverage assertions are stochastic and will flake if set tight
 
