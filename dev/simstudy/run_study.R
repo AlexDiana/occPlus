@@ -4,7 +4,10 @@
 #
 #   Rscript dev/simstudy/run_study.R [--R=100] [--cores=8] [--scenarios=a,b]
 #                                    [--out=dev/simstudy/results]
-#                                    [--nburn=1000] [--niter=1000]
+#                                    [--nburn=1000] [--niter=1000] [--resume]
+#
+# --resume picks up from the checkpoint written by a previous invocation with
+# the same --scenarios and --out, skipping replicates already completed.
 #
 # Replicates are parallelised across *processes*, which is free: each is an
 # independent dataset and fit, needing no package changes -- unlike the
@@ -33,6 +36,8 @@ out_dir  <- getopt("out", "dev/simstudy/results")
 which_sc <- getopt("scenarios", "")
 nburn    <- as.integer(getopt("nburn", "1000"))
 niter    <- as.integer(getopt("niter", "1000"))
+
+resume   <- any(args == "--resume")
 
 pkg_root <- normalizePath(getopt("pkg", "."), mustWork = TRUE)
 
@@ -78,6 +83,37 @@ run_one <- function(k) {
   out
 }
 
+# Checkpointing. Results used to exist only in the master's memory until the
+# run finished, so a job killed at hour ten lost ten hours of completed
+# replicates. Each chunk is now appended to a checkpoint file as it lands, and
+# a run started with --resume skips work already recorded there.
+#
+# Keyed on (scenario, replicate), which is safe because simstudy_replicate()
+# seeds deterministically from exactly that pair -- a resumed replicate is the
+# same replicate, not a fresh draw.
+dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
+
+ckpt_path <- file.path(out_dir, sprintf("checkpoint-%s.rds",
+                                        if (nzchar(which_sc))
+                                          substr(gsub("[^A-Za-z0-9]+", "-", which_sc), 1, 40)
+                                        else "all"))
+
+ckpt_load <- function() {
+  if (!file.exists(ckpt_path)) return(NULL)
+  out <- try(readRDS(ckpt_path), silent = TRUE)
+  if (inherits(out, "try-error")) {
+    # A checkpoint truncated by a hard kill must not abort the run.
+    message("  checkpoint unreadable, ignoring: ", ckpt_path)
+    return(NULL)
+  }
+  out
+}
+
+ckpt_append <- function(rows) {
+  prev <- ckpt_load()
+  saveRDS(rbind(prev, rows), ckpt_path)
+}
+
 # Progress reporting. Without this the run is silent until it finishes, which
 # for a multi-hour grid means no way to tell "working" from "wedged" and no
 # ETA -- a real shortcoming when the first full run overran its estimate by
@@ -97,6 +133,19 @@ progress_line <- function(done, total, t0, failed) {
     100 * frac, done, total, el, eta,
     if (failed > 0) sprintf(" | %d failed", failed) else ""))
   flush(stderr())
+}
+
+# Drop jobs already recorded in the checkpoint.
+done_rows <- if (resume) ckpt_load() else NULL
+if (!is.null(done_rows)) {
+  have <- unique(paste(done_rows$scenario, done_rows$replicate, sep = "\r"))
+  want <- paste(vapply(jobs$scenario_i, function(i) scenarios[[i]]$label, ""),
+                jobs$replicate, sep = "\r")
+  keep <- !(want %in% have)
+  message(sprintf("  resuming: %d of %d replicates already in %s",
+                  sum(!keep), length(keep), basename(ckpt_path)))
+  jobs <- jobs[keep, , drop = FALSE]
+  if (nrow(jobs) == 0L) message("  nothing left to run")
 }
 
 n_jobs <- nrow(jobs)
@@ -125,6 +174,7 @@ if (n_cores > 1L) {
 
   for (ci in seq_along(chunks)) {
     res[[ci]] <- parLapplyLB(cl, chunks[[ci]], run_one)
+    ckpt_append(do.call(rbind, res[[ci]]))
     done <- done + length(chunks[[ci]])
     failed_so_far <- failed_so_far +
       sum(vapply(res[[ci]], function(d) any(d$block == "ERROR"), logical(1)))
@@ -137,6 +187,7 @@ if (n_cores > 1L) {
   failed_so_far <- 0L
   for (k in seq_len(n_jobs)) {
     res[[k]] <- run_one(k)
+    ckpt_append(res[[k]])
     if (any(res[[k]]$block == "ERROR")) failed_so_far <- failed_so_far + 1L
     if (k %% 10L == 0L || k == n_jobs) progress_line(k, n_jobs, t0, failed_so_far)
   }
@@ -144,6 +195,8 @@ if (n_cores > 1L) {
 elapsed <- as.numeric(difftime(Sys.time(), t0, units = "mins"))
 
 rows <- do.call(rbind, res)
+# Include anything carried over from an earlier, interrupted run.
+if (!is.null(done_rows)) rows <- rbind(done_rows, rows)
 failed <- sum(rows$block == "ERROR", na.rm = TRUE)
 rows <- rows[rows$block != "ERROR", , drop = FALSE]
 summary_tbl <- simstudy_summarise(rows)
