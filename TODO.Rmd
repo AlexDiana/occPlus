@@ -760,32 +760,62 @@ editor_options:
         authoritative -- keep design detail there rather than
         duplicating it here, so the two cannot drift.
 
-        **Status: mostly built (27 July 2026).** Stages 1 and 3-5 are
-        committed; only the full R = 100 run remains.
+        **Status: BUILT AND RUN (28 July 2026).** All six stages
+        complete. The suite is committed and the full R = 100 study has
+        executed: 10 scenarios x 100 replicates, 900 fits, 0 failures,
+        474 min on 5 cores, 155,578 interval checks. Results in
+        `dev/simstudy/results/`, tabulated in `PLAN.md` §12.
 
         - **Tier 1** (`6d9526d`): 89 structural assertions in 7 s,
-          shipping to CRAN. `helper-fixtures.R`, `test-smoke-configs.R`,
-          `test-regression-bugs.R`, `test-api-contracts.R`.
-          `test-placeholder.R` deleted.
+          **ships to CRAN**. `helper-fixtures.R`,
+          `test-smoke-configs.R`, `test-regression-bugs.R`,
+          `test-api-contracts.R`. `test-placeholder.R` deleted.
         - **Tier 2** (`f63eeeb`): recovery canary, \~30 s,
-          `skip_on_cran()`, thresholds set from measurement.
-        - **Tier 3 + runner** (`f63eeeb`, `6123036`): env-gated study
-          plus `dev/simstudy/run_study.R`, smoke-tested end to end.
-        - **Remaining:** `Rscript dev/simstudy/run_study.R --cores=8`,
-          \~2.4 h on 8 cores.
+          `skip_on_cran()`, thresholds set from measurement over eight
+          seed sets.
+        - **Tier 3 + runner** (`f63eeeb`, `6123036`, `e0718f1`,
+          `32b56a2`): env-gated study plus `dev/simstudy/run_study.R`,
+          with checkpointing, `--resume`, `--caffeinate` and progress
+          reporting.
 
-        **It has already paid for itself.** Writing the tests found two
-        package bugs that reading the code had not: `sigma_s` never
-        sampled (**group A item 2**) and `predictNewSites()` still
-        lacking its `X_psi`/`X_s` defaults (**group B item 5**, which
-        also corrected Fixed bugs 18). It also measured the GP knot
-        floor that became **group B item 3**. Four assertions had to be
-        rewritten once run, because the premise was wrong in ways only
-        execution revealed -- `psi_output` is not produced by every
-        model type, `tau_output` is NA by design outside `continuous`,
-        PCR replicates are exchangeable so row-for-row equality is the
-        wrong bar, and `idx_ls` is constant for a reason unrelated to
-        the fix it appeared to test.
+        **What it found.** Four defects, three traced to specific lines:
+
+        | found by | defect |
+        |----|----|
+        | writing the tests | `sigma_s` never sampled (**group A item 2**) |
+        | writing the tests | `predictNewSites()` missing `X_psi`/`X_s` defaults (**group B item 5**; also corrected Fixed bugs 18) |
+        | writing the tests | GP knot floor (**group B item 3**) |
+        | the R = 100 run | collection-covariate prior (**group A item 3**), 0.68-0.73 in every cell |
+        | the R = 100 run | `reparamFactorModel()` (**group A item 4**), 0.74-0.77 in nine cells |
+        | the R = 100 run | Stage 2 detection prior (**group A item 6**), **0.103** where detection is low |
+
+        **None was visible to the static audit** that had already been
+        over the same files. That is the case for this work in one line.
+
+        Four test assertions also had to be rewritten once run, because
+        the premise was wrong in ways only execution revealed:
+        `psi_output` is not produced by every model type, `tau_output` is
+        `NA` by design outside `continuous`, PCR replicates are
+        exchangeable so row-for-row equality is the wrong bar, and
+        `idx_ls` is constant for a reason unrelated to the fix it
+        appeared to test. Written from code-reading alone, all four would
+        have encoded false expectations and one would have *masked*
+        group A item 2.
+
+        **What remains under this item:**
+
+        (a) **Re-run after group A items 3, 4 and 6 are fixed.** The
+            study is the evidence those fixes worked; without a second
+            run they rest on the same code-reading the first pass showed
+            to be unreliable. Cost is one command and a few hours.
+        (b) **Decide the replicate count for the paper.** R = 100 was
+            chosen to *detect* defects and did so decisively. Asserting
+            *nominal* coverage in print is a claim about the absence of a
+            small deviation and wants R = 200-500 (`PLAN.md` §9). The
+            runner takes `R` as an argument.
+        (c) **Decide how the results are presented** (`PLAN.md` open
+            item 4). Currently a private Claude artifact; a pkgdown
+            article is the obvious home -- see item 3.
 
         Two constraints from this document that the plan builds on, kept
         here because they are properties of the *bug list*, not of the
@@ -795,15 +825,6 @@ editor_options:
         both excluded from coverage checks because neither is
         recoverable, and the OpenMP RNG race (A.5) is why tier 1 asserts
         structure rather than numeric equality.
-
-        ~~**One empirical question is open**, and the full run should
-        settle it.~~ **SETTLED 28 July.** The full R = 100 study ran all
-        ten cells (900 replicates, 0 failures) and found three distinct
-        defects, each now traced to code: `beta_theta` (group A item 3),
-        `resid_cor` (item 4) and `p` (item 6). Full table in `PLAN.md`
-        §12. The suite has therefore already paid for itself several
-        times over -- none of the three was visible to a static audit
-        that had been over the same files.
 
     3.  **Stand up a pkgdown site.** Discussed 28 July; not started.
 
