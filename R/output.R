@@ -367,6 +367,7 @@ returnOccupancyGradient <- function(fitModel,
   })
 }
 
+
 #' plotOccupancyGradient
 #'
 #' Plot predicted occupancy probability across a covariate gradient.
@@ -509,6 +510,111 @@ plotSpeciesResponseCurve <- function(species_name,
     theme_minimal()
 
   return(p)
+}
+
+
+#' returnCovariateEffect
+#'
+#' Return predicted species response curve
+#'
+#' @details
+#'
+#'
+#' @param fitModel Output from the function runOccJSDM
+#' @param covName Character vector. Name(s) of the covariate(s) to evaluate
+#' @param idx_species Indexes of the species to include (leave out for all species)
+#' @param confidence Numeric scalar between 0 and 1. The width of the Bayesian
+#'   credible interval to compute (default is \code{0.95} for a 95\% interval).
+#'
+#' @export
+#' @import dplyr
+#' @import ggplot2
+#'
+returnCovariateEffect <- function(fitModel,
+                                  covName,
+                                  idx_species,
+                                  confidence = .95){
+
+  B_output <- fitModel$results_output$jsdm_output$B_output
+  B0_output <- fitModel$results_output$jsdm_output$B0_output
+  speciesNames <- fitModel$infos$speciesNames
+  sp_name <- speciesNames[idx_species]
+
+  B_output_vec <- apply(B_output, c(1,2), c)
+  B0_output_vec <- apply(B0_output, 1, c)
+
+  X_psi <- fitModel$X_psi
+  X0_psi <- fitModel$infos$X0_psi
+
+  link_model <- ifelse(fitModel$infos$jsdmModel == "continuous","identity","logit")
+
+  list_matrix <- fitModel$infos$list_X_psi_mat
+
+  returnCovariateEffect_base(
+    covName,
+    idx_species,
+    sp_name,
+    B0_output_vec,
+    B_output_vec,
+    list_matrix,
+    speciesNames,
+    X0 = X0_psi,
+    X = X_psi,
+    link = link_model
+  )
+
+}
+
+#' plotCovariateEffect
+#'
+#' Plot predicted species response curve
+#'
+#' @details
+#'
+#'
+#' @param fitModel Output from the function runOccJSDM
+#' @param covName Character vector. Name(s) of the covariate(s) to evaluate
+#' @param idx_species Indexes of the species to include (leave out for all species)
+#' @param confidence Numeric scalar between 0 and 1. The width of the Bayesian
+#'   credible interval to compute (default is \code{0.95} for a 95\% interval).
+#'
+#' @export
+#' @import dplyr
+#' @import ggplot2
+#'
+plotCovariateEffect <- function(fitModel,
+                                covNames,
+                                idx_species,
+                                confidence = .95){
+
+  B_output <- fitModel$results_output$jsdm_output$B_output
+  B0_output <- fitModel$results_output$jsdm_output$B0_output
+  speciesNames <- fitModel$infos$speciesNames
+  sp_name <- speciesNames[idx_species]
+
+  B_output_vec <- apply(B_output, c(1,2), c)
+  B0_output_vec <- apply(B0_output, 1, c)
+
+  X_psi <- fitModel$X_psi
+  X0_psi <- fitModel$infos$X0_psi
+
+  link_model <- ifelse(fitModel$infos$jsdmModel == "continuous","identity","logit")
+
+  list_matrix <- fitModel$infos$list_X_psi_mat
+
+  plot_list <- plotCovariateEffect_base(
+    idx_species,
+    covNames,
+    B0_output_vec,
+    B_output_vec,
+    list_matrix,
+    speciesNames,
+    X0 = X0_psi,
+    X = X_psi,
+    link = link_model
+  )
+
+  plot_list
 }
 
 #' returnBaselineOccupancyRates
@@ -1558,7 +1664,13 @@ predictNewSites <- function(fitModel,
   # create env cov matrix
   if(useEnvCov) {
 
-    X_psi <- transformCovariatesMatrix(X_psi, fitModel$infos$list_X_psi_mat, remove_intercept = T)
+    # X_psi <- transformCovariatesMatrix(X_psi, fitModel$infos$list_X_psi_mat, remove_intercept = T)
+
+    X_psi <- transform_new_covariates(
+      X_psi,
+      fitModel$infos$list_X_psi_mat,
+      remove_intercept = TRUE
+    )
 
   } else {
 
@@ -1633,7 +1745,6 @@ predictNewSites <- function(fitModel,
   pred_output
 
 }
-
 
 # SITE-SAMPLE SUMMARIES ----------
 

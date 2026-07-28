@@ -7,51 +7,64 @@ get_param <- function(params, key, default = 0) {
 }
 
 process_covariates <- function(data_info, covariates, group_by_col, n_obs,
-                               remove_intercept = FALSE) {
+                               remove_intercept = FALSE,
+                               spline_vars = F) {
 
   if (length(covariates) > 0) {
 
-  # Process the covariates
-  df <- data_info %>%
-    dplyr::group_by(!!rlang::sym(group_by_col)) %>%
-    dplyr::summarise(dplyr::across(dplyr::all_of(covariates), ~ dplyr::first(.x))) %>%
-    dplyr::select(-dplyr::all_of(group_by_col)) %>%
-    dplyr::mutate(dplyr::across(dplyr::where(~ !is.numeric(.x)), as.factor))
+    # Process the covariates
+    df <- data_info %>%
+      dplyr::group_by(!!rlang::sym(group_by_col)) %>%
+      dplyr::summarise(dplyr::across(dplyr::all_of(covariates), ~ dplyr::first(.x))) %>%
+      dplyr::select(-dplyr::all_of(group_by_col)) %>%
+      dplyr::mutate(dplyr::across(dplyr::where(~ !is.numeric(.x)), as.factor))
 
-  if (any(is.infinite(as.matrix(df)))) stop("Infinite values (Inf or -Inf) detected in covariates.")
-  if (any(is.nan(as.matrix(df)))) stop("NaN values detected in covariates.")
+    if (any(is.infinite(as.matrix(df)))) stop("Infinite values (Inf or -Inf) detected in covariates.")
+    if (any(is.nan(as.matrix(df)))) stop("NaN values detected in covariates.")
 
-  is_numeric <- sapply(df, is.numeric)
+    # old code
+    {
 
-  names_df <- colnames(df)
-
-  means_df <- sapply(df, function(x) if(is.numeric(x)) mean(x, na.rm = TRUE) else NA)
-  sd_df   <- sapply(df, function(x) if(is.numeric(x)) sd(x, na.rm = TRUE) else NA)
-
-  if (any(sd_df == 0, na.rm = TRUE)) {
-    zero_var_cols <- names_df[which(sd_df == 0)]
-    stop(paste("The following covariates have constant values:",
-               paste(zero_var_cols, collapse = ", ")))
-  }
-
-  cat_levels <- list()
-  for (col in 1:ncol(df)) {
-    if(is_numeric[col]){
-      cat_levels[[col]] <- NA
-    }else{
-      cat_levels[[col]] <- levels(as.factor(df[[col]]))
+      #     is_numeric <- sapply(df, is.numeric)
+      #
+      #     names_df <- colnames(df)
+      #
+      #     means_df <- sapply(df, function(x) if(is.numeric(x)) mean(x, na.rm = TRUE) else NA)
+      #     sd_df   <- sapply(df, function(x) if(is.numeric(x)) sd(x, na.rm = TRUE) else NA)
+      #
+      #     if (any(sd_df == 0, na.rm = TRUE)) {
+      #       zero_var_cols <- names_df[which(sd_df == 0)]
+      #       stop(paste("The following covariates have constant values:",
+      #                  paste(zero_var_cols, collapse = ", ")))
+      #     }
+      #
+      #     cat_levels <- list()
+      #     for (col in 1:ncol(df)) {
+      #       if(is_numeric[col]){
+      #         cat_levels[[col]] <- NA
+      #       }else{
+      #         cat_levels[[col]] <- levels(as.factor(df[[col]]))
+      #     }
+      #   }
+      #
+      #   list_matrix <- list(
+      #     "names_df" = names_df,
+      #     "mean_df" = means_df,
+      #     "sd_df" = sd_df,
+      #     "cat_levels" = cat_levels,
+      #     "is_numeric" = is_numeric
+      #   )
+      #
+      # out_matrix <- transformCovariatesMatrix(df, list_matrix, remove_intercept)
     }
-  }
 
-  list_matrix <- list(
-    "names_df" = names_df,
-    "mean_df" = means_df,
-    "sd_df" = sd_df,
-    "cat_levels" = cat_levels,
-    "is_numeric" = is_numeric
-  )
-
-  out_matrix <- transformCovariatesMatrix(df, list_matrix, remove_intercept)
+    list_X <- create_covariates_matrix(
+      df,
+      spline_vars = spline_vars,
+      remove_intercept = remove_intercept)
+    out_matrix <- list_X$X
+    list_matrix <- list_X$list_matrix
+    X0 <- list_X$X0
 
   } else {
 
@@ -62,10 +75,12 @@ process_covariates <- function(data_info, covariates, group_by_col, n_obs,
     }
 
     list_matrix <- NULL
+    X0 <- NULL
   }
 
   list("df" = out_matrix,
-       "list_matrix" = list_matrix)
+       "list_matrix" = list_matrix,
+       "X0" = X0)
 
 }
 
@@ -377,23 +392,22 @@ runOccJSDM <- function(data,
                        listPriors = list()){
 
   {
-    # data = occ_data_effort
-    # listParams = list(n_factors = 3)
-    # threshold = 1
-    # occCovariates = c("season_year")
-    # ordCovariates = c("z_prop_closed")
-    # spatCovariates <- NULL
-    # collCovariates = c("predator_season_year", "z_log_effort_m_total")
-    # MCMCparams = list(
-    #   nchain = 3,
-    #   nburn = 20000,
-    #   niter = 20000,
-    #   nthin = 1 )
-    # listPriors = list(
-    #   a_theta0 = 1,
-    #   b_theta0 = 100)
-    # listPriors = list()
-    # summarisedLatentPresences = T
+    listParams = list(n_factors = 3, splineVars = F)
+    threshold = 1
+    occCovariates = c( "X_psi.EnvCov.1", "X_psi.EnvCov.2", "X_psi.EnvCov.3",
+                       "X_psi.EnvCov.4", "X_psi.EnvCov.5" ,"X_psi.EnvCov.6")
+    collCovariates = c("X_theta.1","X_theta.2")
+    spatCovariates = c("Xs.1","Xs.2")
+    MCMCparams = list(
+      nchain = 2,
+      nburn = 200,
+      niter = 200,
+      nthin = 1 )
+    listPriors = list(
+      a_theta0 = 1,
+      b_theta0 = 100)
+    listPriors = list()
+    summarisedLatentPresences = T
   }
 
   # data structure infer
@@ -621,18 +635,23 @@ runOccJSDM <- function(data,
   # create covariates matrix
   {
 
+    splineVars <- get_param(listParams, "splineVars", F)
+
     # For occupancy covariates (group by Site, includes intercept)
     {
       list_X_psi <- process_covariates(data_info, occCovariates, "Site", n,
-                                  remove_intercept = TRUE)
+                                  remove_intercept = TRUE,
+                                  spline_vars = splineVars)
       X_psi <- list_X_psi$df
       list_Xpsi_mat <- list_X_psi$list_matrix
+      X0_psi <- list_X_psi$X0
     }
 
     # For the spatial field
     {
       list_Xs <- process_covariates(data_info, spatCovariates, "Site", n,
-                               remove_intercept = TRUE)
+                               remove_intercept = TRUE,
+                               spline_vars = F)
       Xs <- list_Xs$df
       list_Xs_mat <- list_Xs$list_matrix
     }
@@ -641,7 +660,8 @@ runOccJSDM <- function(data,
     {
       if(model %in% c("occupancy","two_stage")){
         list_X_theta <- process_covariates(data_info, collCovariates, "SiteSample",
-                                           N, remove_intercept = FALSE)
+                                           N, remove_intercept = FALSE,
+                                           spline_vars = F)
         X_theta <- list_X_theta$df
         list_X_theta_mat <- list_X_theta$list_matrix
       } else {
@@ -715,11 +735,11 @@ runOccJSDM <- function(data,
     b_q <- 20
 
     if(model %in% c("occupancy","two_stage")){
-      b_betatheta <- rep(1, ncov_theta)
-      B_betatheta <- diag(1, nrow = ncov_theta)
+      b_betatheta <- rep(0, ncov_theta)
+      B_betatheta <- diag(2, nrow = ncov_theta)
 
       b_betatheta[1] <- prior_beta_theta
-      B_betatheta[1,1] <- prior_beta_theta_sd
+      B_betatheta[1,1] <- prior_beta_theta_sd^2
     }
 
   }
@@ -1299,6 +1319,7 @@ runOccJSDM <- function(data,
     "ncov_theta" = ncov_theta,
     "ncov_psi" = ncov_psi,
     "OTU" = OTU,
+    "X0_psi" = X0_psi,
     "list_Xs" = list_Xs,
     "list_X_psi_mat" = list_Xpsi_mat,
     "list_Xs_mat" = list_Xs_mat,

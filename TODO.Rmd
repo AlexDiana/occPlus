@@ -13,6 +13,8 @@ editor_options:
 1.  Alex to dos
 
     1.  Allow for different primers per sample
+    
+    2. Trait matrix currently not allowing for categorical variables
 
     **Bugs found in a static audit of `R/` and `src/`, 25 July 2026.**
     Everything below was found by reading the code, not by running the
@@ -134,12 +136,10 @@ editor_options:
         `idx_ls` varies, precisely so the test does not encode this
         defect. Revisit that test once this is fixed.
 
-<<<<<<< HEAD
+
     3.  FIXED 
     
-        **Non-thread-safe RNG remains in the hottest OpenMP loop**
-=======
-    3.  **The prior mean for collection-covariate slopes is 1, not 0.**
+        **The prior mean for collection-covariate slopes is 1, not 0.**
         Found 28 July 2026 by the coverage study; **confirmed, with the
         cleanest evidence in the whole audit.**
 
@@ -239,7 +239,6 @@ editor_options:
             the `diag(diag(R))` scaling was meant to impose.
 
     5.  **Non-thread-safe RNG remains in the hottest OpenMP loop**
->>>>>>> c851f6ffac111520d9bc8de3995e236f076bf214
         (residual of the original audit's A.6; the other half was fixed
         in `b7b6aa2` -- see Fixed bugs 10). `samplePGvariables()`
         (`src/jsdm.cpp:398`) is `#pragma omp parallel for collapse(2)`
@@ -261,7 +260,9 @@ editor_options:
         existing `thread_local` engine, matching what `runif()` already
         does) rather than by disabling OpenMP.
 
-    6.  **The Stage 2 detection prior is too informative and too
+    6.  WE NEED INFORMATIVE PRIORS
+    
+        **The Stage 2 detection prior is too informative and too
         optimistic; it causes `p`'s undercoverage, and it is hard-coded
         so a user cannot work around it.** Found 28 July 2026 by the
         coverage study. **Originally filed as a *possible* bug on the
