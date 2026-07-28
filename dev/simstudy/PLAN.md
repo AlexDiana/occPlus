@@ -299,34 +299,17 @@ Also: pooling coverage across species within a block buys precision, but those i
 
 2.  ~~*OPEN.* Tier 2 failing vs advisory (§6.3).~~ **RESOLVED: it fails**, on measured thresholds -- see §6.3.
 
-3.  ~~*OPEN.* **`beta_theta` and `resid_cor` sit below nominal.**~~
-    **RESOLVED 28 July by the full run, and both traced to code.**
-    `beta_theta` undercovers in *every* cell (0.676-0.730) -- the flatness
-    across model types, primer counts and factor misspecification is the
-    signature of a structural cause, and it is `TODO.Rmd` group A item 3
-    (prior mean 1 instead of 0 on the collection slopes). `resid_cor` sits
-    at 0.74-0.77 in nine cells and is group A item 4
-    (`reparamFactorModel()` breaking `t(L) %*% L`). See §12.
+3.  ~~*OPEN.***`beta_theta` and `resid_cor` sit below nominal.**~~ **RESOLVED 28 July by the full run, and both traced to code.** `beta_theta` undercovers in *every* cell (0.676-0.730) -- the flatness across model types, primer counts and factor misspecification is the signature of a structural cause, and it is `TODO.Rmd` group A item 3 (prior mean 1 instead of 0 on the collection slopes). `resid_cor` sits at 0.74-0.77 in nine cells and is group A item 4 (`reparamFactorModel()` breaking `t(L) %*% L`). See §12.
 
 4.  *Deferred.* Presentation of tier-3 results for the paper. Build the suite first; the summary object then feeds either a short pkgdown article or the manuscript directly. Nothing here forecloses that.
 
-5.  *Deferred, but the case is now stronger.* **SBC** (§7). The full run
-    found two separate instances of a fixed truth conflicting with an
-    informative prior -- `sigma_b` reading 1.000 everywhere because it is
-    prior-dominated, and `p` collapsing to 0.103 where the true value sits
-    far into the tail of a `Beta(5, 1)`. Both are artefacts of choosing
-    truth independently of the prior. SBC draws truth *from* the prior and
-    so cannot produce them, which would separate "the sampler is wrong"
-    from "this truth disagrees with this prior" automatically rather than
-    by the hand-analysis those two took.
+5.  *Deferred, but the case is now stronger.* **SBC** (§7). The full run found two separate instances of a fixed truth conflicting with an informative prior -- `sigma_b` reading 1.000 everywhere because it is prior-dominated, and `p` collapsing to 0.103 where the true value sits far into the tail of a `Beta(5, 1)`. Both are artefacts of choosing truth independently of the prior. SBC draws truth *from* the prior and so cannot produce them, which would separate "the sampler is wrong" from "this truth disagrees with this prior" automatically rather than by the hand-analysis those two took.
 
 ------------------------------------------------------------------------
 
 ## 12. Results of the full run (28 July 2026)
 
-900 replicates, 10 scenarios, 0 failures, 474 min on 5 cores. 155,578
-individual interval checks. Coverage SE at R = 100 is 2.2 points, so treat
-anything in 0.93-0.97 as indistinguishable from nominal.
+900 replicates, 10 scenarios, 0 failures, 474 min on 5 cores. 155,578 individual interval checks. Coverage SE at R = 100 is 2.2 points, so treat anything in 0.93-0.97 as indistinguishable from nominal.
 
 | block | base | spat.isol | trait.isol | primers3 | low.info | d.under | d.over | sp20 | occ | binary |
 |----|----|----|----|----|----|----|----|----|----|----|
@@ -344,43 +327,21 @@ anything in 0.93-0.97 as indistinguishable from nominal.
 
 ### What holds
 
-`G` (fourth-corner), `q` (Stage 2 false positives), `B0` and `B` are at or
-near nominal in every cell except `low_information`. The quantities most
-likely to be reported in an ecology paper are trustworthy as they stand.
+`G` (fourth-corner), `q` (Stage 2 false positives), `B0` and `B` are at or near nominal in every cell except `low_information`. The quantities most likely to be reported in an ecology paper are trustworthy as they stand.
 
 ### What does not, and why
 
-1. **`beta_theta`, 0.676-0.730, every cell.** Flat across model type,
-   primer count, species count and factor misspecification -- structural,
-   not conditional. Cause: group A item 3, prior mean 1 on the collection
-   slopes. Note `low_information` is *better* (0.860), consistent with a
-   fixed prior pull mattering relatively less when the data are weak enough
-   that everything is uncertain.
+1.  **`beta_theta`, 0.676-0.730, every cell.** Flat across model type, primer count, species count and factor misspecification -- structural, not conditional. Cause: group A item 3, prior mean 1 on the collection slopes. Note `low_information` is *better* (0.860), consistent with a fixed prior pull mattering relatively less when the data are weak enough that everything is uncertain.
 
-2. **`resid_cor`, 0.74-0.77, nine of ten cells.** Cause: group A item 4,
-   `reparamFactorModel()` breaking the identity that residual covariance =
-   `t(L) %*% L`. **The exception is diagnostic**: `d_underfit` (truth 4
-   factors, fitted 2) *over*covers at 0.980, so under-fitting the ordination
-   widens the intervals enough to mask the bias. The defect's visible
-   severity therefore depends on the fitted factor dimension.
+2.  **`resid_cor`, 0.74-0.77, nine of ten cells.** Cause: group A item 4, `reparamFactorModel()` breaking the identity that residual covariance = `t(L) %*% L`. **The exception is diagnostic**: `d_underfit` (truth 4 factors, fitted 2) *over*covers at 0.980, so under-fitting the ordination widens the intervals enough to mask the bias. The defect's visible severity therefore depends on the fitted factor dimension.
 
-3. **`p` collapses to 0.103 in `low_information`**, bias +0.49, while
-   sitting at 0.90-0.92 elsewhere. That cell has true `p` in 0.1-0.3 against
-   the hard-coded `Beta(5, 1)` prior mean of 0.833. Cause: group A item 6.
-   This is the study's most severe single result and it lands precisely in
-   the low-detection regime the package exists to serve.
+3.  **`p` collapses to 0.103 in `low_information`**, bias +0.49, while sitting at 0.90-0.92 elsewhere. That cell has true `p` in 0.1-0.3 against the hard-coded `Beta(5, 1)` prior mean of 0.833. Cause: group A item 6. This is the study's most severe single result and it lands precisely in the low-detection regime the package exists to serve.
 
-4. **`low_information` is compromised across the board** -- `theta0` 0.477,
-   `B0` bias -0.93, `B` 0.854, `G` 0.880. When data are thin the priors
-   dominate, and several of those priors are wrong. Any user with a small or
-   low-detection dataset is most exposed to exactly the defects above.
+4.  **`low_information` is compromised across the board** -- `theta0` 0.477, `B0` bias -0.93, `B` 0.854, `G` 0.880. When data are thin the priors dominate, and several of those priors are wrong. Any user with a small or low-detection dataset is most exposed to exactly the defects above.
 
 ### Caveats that travel with this table
 
-`l_s` and `sigma_h` are absent because neither is recoverable (group A items
-1 and 2), so **no cell says anything about spatial range**. `sigma_b` reads
-1.000 everywhere because it is prior-dominated by construction (§5.3), not
-because it is well estimated. Differences below 2.2 points are noise.
+`l_s` and `sigma_h` are absent because neither is recoverable (group A items 1 and 2), so **no cell says anything about spatial range**. `sigma_b` reads 1.000 everywhere because it is prior-dominated by construction (§5.3), not because it is well estimated. Differences below 2.2 points are noise.
 
 ------------------------------------------------------------------------
 
