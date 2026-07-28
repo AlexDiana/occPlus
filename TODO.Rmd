@@ -21,16 +21,36 @@ editor_options:
     model, so each should be reproduced before it is fixed. Grouped by
     severity.
 
-    **Status as of 27 July 2026.** The audit originally listed 15 group
+    **Status as of 28 July 2026.** The audit originally listed 15 group
     A and 10 group B items; most have since been fixed and moved to
     **Fixed bugs** at the end of this document, which is now the
     authoritative record of what has been resolved. Only the *unfixed*
-    remainder is listed here, renumbered. Cross-references elsewhere in
-    this document (groups C/D, the *MEE paper* section) use the
-    **current** numbering, not the original audit numbering. Line
-    numbers were verified against `e33fc0b` and re-checked against the
-    working tree on 27 July; those in the fixed-bug entries below point
-    at the *post-fix* code and so will not match the original audit.
+    remainder is listed here, renumbered.
+
+    **Group A has since grown, not shrunk.** Three of its six items (3,
+    4 and 6) were found not by reading code but by the simulation study,
+    which measured *which* parameters were miscalibrated and made the
+    causes findable. A static audit had already been over the same files
+    and walked past all three. Their standing as of the full R = 100 run
+    (`dev/simstudy/PLAN.md` §12), most severe first:
+
+    | item | what it breaks | measured |
+    |----|----|----|
+    | 6 | Stage 2 detection rate `p` | coverage **0.103** where detection is genuinely low, vs 0.95 nominal |
+    | 3 | Stage 1 collection covariates | **0.68-0.73**, in every one of the nine cells that estimates them |
+    | 4 | species residual correlations | **0.74-0.77** in nine cells; masked (0.98) when the ordination is under-fitted |
+    | 5 | reproducibility on Linux/Windows | not measurable here; blocks a reproducible refit |
+    | 2 | GP length-scale | never recovered; rails at the grid maximum |
+    | 1 | `sigma_h` | inert for fitted models; affects `predictNewSites()` only |
+
+    Items 3, 4 and 6 all change fitted values, so **`sampleresults.rda`
+    cannot be regenerated until they are fixed** -- see the CRAN plan in
+    `AGENTS.md`. Cross-references elsewhere in this document (groups
+    C/D, the *MEE paper* section) use the **current** numbering, not the
+    original audit numbering. Line numbers were verified against
+    `e33fc0b` and re-checked against the working tree on 27 July; those
+    in the fixed-bug entries below point at the *post-fix* code and so
+    will not match the original audit.
 
     Already fixed by `0abb104`, and so *not* listed below: the
     `simulateOccJSDMData(model = "occupancy")` `idx_z_k` bug -- that
@@ -174,6 +194,16 @@ editor_options:
         roughly a 50% interval, not 95%. This is a headline Stage 1
         output.
 
+        **Confirmed across the whole grid (28 July, R = 100 x 10
+        scenarios).** `beta_theta` undercovers in **every cell that
+        estimates it** -- 0.676 (occupancy), 0.679 (3 primers), 0.693
+        (20 species), 0.709 / 0.714 (`d` over- and under-fitted), 0.721,
+        0.730, 0.717 (base). The flatness across model type, primer
+        count, species count and factor misspecification is what marks
+        it structural rather than conditional. `low_information` is the
+        one milder cell (0.860), consistent with a fixed prior pull
+        mattering relatively less when everything is uncertain anyway.
+
         **Fix:** `rep(0, ncov_theta)`. The surrounding lines suggest the
         indices were simply inverted -- a prior mean of \~1 on the
         *intercept* (theta \~ 0.73 on the logit scale) with 0 on the
@@ -226,6 +256,15 @@ editor_options:
         co-occurrence, pushing correlations toward +/-1. This is the
         headline JSDM output and the basis of the ordination
         interpretation.
+
+        **Confirmed across the grid, with one diagnostic exception.**
+        `resid_cor` sits at 0.739-0.768 in **nine of ten** scenarios.
+        The exception is `d_underfit` (truth 4 factors, fitted 2), which
+        *over*covers at **0.980** -- under-fitting the ordination widens
+        the intervals enough to hide the bias. So the defect's visible
+        severity depends on the fitted factor dimension, which matters
+        when judging a real fit: a model with too few factors will look
+        better calibrated than it is.
 
         **Fix, two options.** (a) Make the reparameterisation purely
         orthogonal -- rotate by `Q` alone, dropping the `diag(diag(R))`
@@ -322,6 +361,14 @@ editor_options:
         the feedback loop is real -- but it is *driven by* the prior,
         not independent of it, which is precisely what the flat-prior
         arm demonstrates.
+
+        **Confirmed at scale (28 July, R = 100 x 10 scenarios), and far
+        worse than the base run suggested.** In `low_information` --
+        true `p` in 0.1-0.3 against a prior mean of 0.833 -- coverage
+        collapses to **0.103** with bias **+0.49**, against 0.90-0.92 in
+        every other cell. The single most severe result in the study,
+        and it lands precisely in the low-detection regime the package
+        exists to serve.
 
         **Also confirmed along the way:** the four-case counting in
         `sample_pq_cpp()` is sound. The oracle estimate using true `w`
@@ -724,32 +771,62 @@ editor_options:
         authoritative -- keep design detail there rather than
         duplicating it here, so the two cannot drift.
 
-        **Status: mostly built (27 July 2026).** Stages 1 and 3-5 are
-        committed; only the full R = 100 run remains.
+        **Status: BUILT AND RUN (28 July 2026).** All six stages
+        complete. The suite is committed and the full R = 100 study has
+        executed: 10 scenarios x 100 replicates, 900 fits, 0 failures,
+        474 min on 5 cores, 155,578 interval checks. Results in
+        `dev/simstudy/results/`, tabulated in `PLAN.md` §12.
 
         - **Tier 1** (`6d9526d`): 89 structural assertions in 7 s,
-          shipping to CRAN. `helper-fixtures.R`, `test-smoke-configs.R`,
-          `test-regression-bugs.R`, `test-api-contracts.R`.
-          `test-placeholder.R` deleted.
+          **ships to CRAN**. `helper-fixtures.R`,
+          `test-smoke-configs.R`, `test-regression-bugs.R`,
+          `test-api-contracts.R`. `test-placeholder.R` deleted.
         - **Tier 2** (`f63eeeb`): recovery canary, \~30 s,
-          `skip_on_cran()`, thresholds set from measurement.
-        - **Tier 3 + runner** (`f63eeeb`, `6123036`): env-gated study
-          plus `dev/simstudy/run_study.R`, smoke-tested end to end.
-        - **Remaining:** `Rscript dev/simstudy/run_study.R --cores=8`,
-          \~2.4 h on 8 cores.
+          `skip_on_cran()`, thresholds set from measurement over eight
+          seed sets.
+        - **Tier 3 + runner** (`f63eeeb`, `6123036`, `e0718f1`,
+          `32b56a2`): env-gated study plus `dev/simstudy/run_study.R`,
+          with checkpointing, `--resume`, `--caffeinate` and progress
+          reporting.
 
-        **It has already paid for itself.** Writing the tests found two
-        package bugs that reading the code had not: `sigma_s` never
-        sampled (**group A item 2**) and `predictNewSites()` still
-        lacking its `X_psi`/`X_s` defaults (**group B item 5**, which
-        also corrected Fixed bugs 18). It also measured the GP knot
-        floor that became **group B item 3**. Four assertions had to be
-        rewritten once run, because the premise was wrong in ways only
-        execution revealed -- `psi_output` is not produced by every
-        model type, `tau_output` is NA by design outside `continuous`,
-        PCR replicates are exchangeable so row-for-row equality is the
-        wrong bar, and `idx_ls` is constant for a reason unrelated to
-        the fix it appeared to test.
+        **What it found.** Four defects, three traced to specific lines:
+
+        | found by | defect |
+        |----|----|
+        | writing the tests | `sigma_s` never sampled (**group A item 2**) |
+        | writing the tests | `predictNewSites()` missing `X_psi`/`X_s` defaults (**group B item 5**; also corrected Fixed bugs 18) |
+        | writing the tests | GP knot floor (**group B item 3**) |
+        | the R = 100 run | collection-covariate prior (**group A item 3**), 0.68-0.73 in every cell |
+        | the R = 100 run | `reparamFactorModel()` (**group A item 4**), 0.74-0.77 in nine cells |
+        | the R = 100 run | Stage 2 detection prior (**group A item 6**), **0.103** where detection is low |
+
+        **None was visible to the static audit** that had already been
+        over the same files. That is the case for this work in one line.
+
+        Four test assertions also had to be rewritten once run, because
+        the premise was wrong in ways only execution revealed:
+        `psi_output` is not produced by every model type, `tau_output` is
+        `NA` by design outside `continuous`, PCR replicates are
+        exchangeable so row-for-row equality is the wrong bar, and
+        `idx_ls` is constant for a reason unrelated to the fix it
+        appeared to test. Written from code-reading alone, all four would
+        have encoded false expectations and one would have *masked*
+        group A item 2.
+
+        **What remains under this item:**
+
+        (a) **Re-run after group A items 3, 4 and 6 are fixed.** The
+            study is the evidence those fixes worked; without a second
+            run they rest on the same code-reading the first pass showed
+            to be unreliable. Cost is one command and a few hours.
+        (b) **Decide the replicate count for the paper.** R = 100 was
+            chosen to *detect* defects and did so decisively. Asserting
+            *nominal* coverage in print is a claim about the absence of a
+            small deviation and wants R = 200-500 (`PLAN.md` §9). The
+            runner takes `R` as an argument.
+        (c) **Decide how the results are presented** (`PLAN.md` open
+            item 4). Currently a private Claude artifact; a pkgdown
+            article is the obvious home -- see item 3.
 
         Two constraints from this document that the plan builds on, kept
         here because they are properties of the *bug list*, not of the
@@ -757,14 +834,52 @@ editor_options:
         alone, which is the near-term point of this work; and the open
         group A items shape it -- `sigma_h` (A.1) and `l_s` (A.2) are
         both excluded from coverage checks because neither is
-        recoverable, and the OpenMP RNG race (A.3) is why tier 1 asserts
+        recoverable, and the OpenMP RNG race (A.5) is why tier 1 asserts
         structure rather than numeric equality.
 
-        **One empirical question is open**, and the full run should
-        settle it: `beta_theta` and `resid_cor` came out at 0.78-0.80
-        and 0.76-0.79 across three independent seed sets, against a
-        nominal 0.95. Consistent enough that chance is unlikely, but R =
-        5 is too small to call. See `PLAN.md` §10.3.
+    3.  **Stand up a pkgdown site.** Discussed 28 July; not started.
+
+        pkgdown turns the package into a static website -- function
+        reference, both vignettes, README, changelog -- and GitHub Pages
+        hosts it. `usethis::use_pkgdown_github_pages()` wires up both
+        plus an Action to rebuild on push. Roughly half an hour, plus
+        time shaping the reference index.
+
+        **Three reasons it earns its place:**
+
+        (a) *It closes a CRAN item.* `DESCRIPTION` has no `URL` or
+            `BugReports` field (CRAN plan item 10 in `AGENTS.md`). A
+            documentation site is a better `URL` than the bare repo.
+        (b) *It is a much better landing page for the listserv
+            announcement*, which currently points people at a GitHub
+            file listing. A rendered reference and vignettes make a
+            considerably stronger first impression for a beta release.
+        (c) *It gives the validation write-up a home.* The
+            plain-language guide to the test suite and the R = 100
+            results currently lives as a Claude artifact
+            (<https://claude.ai/code/artifact/ad3d46eb-1fd4-49b5-b795-6b71474ef1d5>,
+            private). As a pkgdown *article* it would sit with the
+            package and be citable as supplementary material for the MEE
+            paper.
+
+        **Two practical constraints.**
+
+        The site would live at `alexdiana.github.io/occJSDM`, since the
+        repo is under Alex's account -- **Alex has to enable Pages**, it
+        is not a setting Doug can change.
+
+        And pkgdown builds every `@examples` block, so the **first build
+        will fail on the group B functions that error unconditionally**
+        (`predictNewSites()` among them). That is the same exposure
+        `\donttest{}` creates under `R CMD check`, which is exactly why
+        the CRAN plan sequences item 8 after the group B fixes. So do
+        this after group B, or expect to `@examples`-guard several
+        functions first.
+
+        **Sequencing caveat:** consider whether to publish a site while
+        group A items 3, 4 and 6 are open. The site would document
+        functions whose credible intervals are currently overconfident,
+        without saying so anywhere a reader would see.
 
 2.  Alex to dos
 
