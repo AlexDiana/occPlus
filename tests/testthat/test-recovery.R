@@ -90,3 +90,45 @@ test_that("known-undercovered blocks have not got worse", {
   # R = 5, but a real regression would break through.
   expect_gt(min(watched$coverage), 0.55)
 })
+
+test_that("the M-ladder arms share a truth (PLAN.md 13.2 pairing)", {
+  skip_on_cran()
+  # The ladder arms differ only in how much data is collected, not in the
+  # process generating it, so they are seeded alike via `seed_label` and the
+  # comparison across arms is paired. This test pins down exactly how far that
+  # pairing extends, because the answer is not "all of it" and over-claiming
+  # it would misread the study.
+  #
+  # Paired across every arm: the whole JSDM layer, the latent occupancy state,
+  # and the Stage 2 rates. NOT paired across different M: beta_theta's slope
+  # rows, because simulateOccJSDMData() draws them at R/simulateData.R:128
+  # with sample(c(-1,1,0), ...) *after* building the N-sized X_theta, so the
+  # RNG stream has already diverged. Its intercept row is logit(theta_baseline)
+  # and does pair.
+  #
+  # If this test fails, someone has added a draw to draw_truth() that depends
+  # on M or K, which silently unpairs the ladder. Keep draw_truth()'s RNG
+  # consumption sized by P * S and S only.
+  sc <- simstudy_scenarios()
+  names(sc) <- vapply(sc, `[[`, character(1), "label")
+  skip_if(is.null(sc$M2) || is.null(sc$M20), "ladder arms not defined")
+
+  tru <- function(lab) {
+    s <- sc[[lab]]
+    simstudy_simulate(draw_truth(s, simstudy_seed_for(s, 1L)))$true_params
+  }
+  a <- tru("M2"); b <- tru("M20"); k <- tru("K30")
+
+  # whole JSDM layer, both against M20 (different N) and K30 (same N)
+  for (nm in c("B0", "B", "G", "A", "C", "L")) {
+    expect_equal(a$jsdmParams_true[[nm]], b$jsdmParams_true[[nm]], info = nm)
+    expect_equal(a$jsdmParams_true[[nm]], k$jsdmParams_true[[nm]], info = nm)
+  }
+  expect_equal(a$z_true, b$z_true)
+  expect_equal(a$p_true, b$p_true)
+  expect_equal(a$q_true, b$q_true)
+
+  # beta_theta: intercept row pairs, slopes do not (documented above)
+  expect_equal(a$beta_theta_true[1, ], b$beta_theta_true[1, ])
+  expect_equal(a$beta_theta_true, k$beta_theta_true)   # same N, fully paired
+})

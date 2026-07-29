@@ -835,6 +835,38 @@ samples. If `M20` fixes the three findings and `K30` does not, the
 mechanism is specifically Stage 1 identification. If both fix them, it
 is merely sample size, and the conclusion is much weaker.
 
+**The arms share a truth, so the ladder is paired.** `simstudy_seed_for()`
+honours a `seed_label` field, and all five arms set `seed_label =
+"mladder"`, so replicate *r* draws the same truth in every arm. The
+differences between arms then stop carrying the variance of independent
+truths -- which is precisely what a ladder reads.
+
+**How far the pairing extends, measured rather than assumed:**
+
+| Quantity | Paired across M? | |
+|---|---|---|
+| `B0`, `B`, `G`, `A`, `C`, `L`, `sigma_b`, `tau` | **yes** | the whole JSDM layer |
+| `z_true` | **yes** | latent occupancy |
+| `p_true`, `q_true`, `theta0`, `theta_baseline` | **yes** | Stage 2 rates and Stage 1 baseline |
+| `beta_theta` intercept row | **yes** | it is `logit(theta_baseline)` |
+| `beta_theta` slope rows | **no** | see below |
+| `w_true` | n/a | its dimension is `N x S`, so it cannot match |
+
+`beta_theta`'s slopes are drawn at `R/simulateData.R:128` with
+`sample(c(-1,1,0), ...)` *after* `simulateOccJSDMData()` has built the
+`N`-sized `X_theta`, so by then the stream has diverged and there is no
+`list_params` hook to inject them. The residual is bounded -- slope signs
+from a three-point set, with the intercept row paired -- and the estimand
+is unchanged, so the ladder stays unbiased for `beta_theta`, just noisier
+than for the blocks above. **B6 (`B0`) and B5 (`theta0`) get the full
+paired benefit; B4 (`beta_theta`) gets a partial one.** The `M20` vs
+`K30` control comparison is likewise unpaired for `beta_theta`, since
+those arms differ in `N`.
+
+`test-recovery.R` asserts all of this. It fails if anyone adds a draw to
+`draw_truth()` sized by `N`, `M` or `K`, which would silently unpair the
+ladder.
+
 Base cell only: all three findings are flat across the other nine cells,
 so one cell isolates the mechanism at a tenth of the cost.
 
@@ -900,9 +932,12 @@ Decided in advance, so this is a test rather than a fishing trip.
 No machinery change needed: `M` and `K` are already scenario fields, and
 `mk()` overrides `SIMSTUDY_BASE` by name.
 
-1.  Add the five arms to `simstudy_scenarios()` in `helper-simstudy.R`,
-    behind their own labels so `--scenarios=M2,M5,M10,M20,K30` selects
-    them and the ten production cells are untouched.
+1.  ~~Add the five arms to `simstudy_scenarios()`.~~ **Done**: `M2`,
+    `M5`, `M10`, `M20`, `K30`, each with `seed_label = "mladder"`. They
+    are inert for a full run, because the runner takes the whole list
+    only when `--scenarios` is empty -- so select them explicitly.
+    `simstudy_seed_for()` is the seed override; `simstudy_seed()` is
+    unchanged and still keys on the label for every other cell.
 2.  Sanity-run at `R = 4` across all five arms (\~10 min) to confirm the
     arms fit and the row counts are as expected, before committing the
     real run.

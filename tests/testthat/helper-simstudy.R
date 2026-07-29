@@ -70,7 +70,27 @@ simstudy_scenarios <- function() {
     mk("species_20",        S = 20L),
     mk("occupancy",         model = "occupancy"),
     mk("binary",            model = "binary")
-  )
+  ,
+
+    # --- M ladder (PLAN.md 13) -----------------------------------------
+    #
+    # Not production cells: these answer whether group B items 4-6 are code
+    # defects or Stage 1 under-identification. Select them explicitly with
+    # --scenarios=M2,M5,M10,M20,K30; they are otherwise inert because the
+    # runner takes the full list only when --scenarios is empty, so leaving
+    # them here would silently add 5 cells to every full run.
+    #
+    # `seed_label` makes all five share a truth at each replicate, so the
+    # comparison across arms is paired -- see simstudy_seed_for().
+    #
+    # K30 is the control: identical row count to M20 (12,000) but spent on
+    # PCR replicates instead of field samples. Without it, "everything
+    # improved" cannot be told from "more data helps".
+    mk("M2",  M = 2L,  K = 3L,  seed_label = "mladder"),
+    mk("M5",  M = 5L,  K = 3L,  seed_label = "mladder"),
+    mk("M10", M = 10L, K = 3L,  seed_label = "mladder"),
+    mk("M20", M = 20L, K = 3L,  seed_label = "mladder"),
+    mk("K30", M = 2L,  K = 30L, seed_label = "mladder"))
 }
 
 # --- Seam 1: how the true parameters are chosen --------------------------
@@ -353,7 +373,7 @@ simstudy_rescor_rows <- function(fit, sim, scenario, replicate) {
 #' Run one replicate end to end.
 simstudy_replicate <- function(scenario, replicate, MCMCparams = NULL,
                                statistic = statistic_coverage) {
-  seed <- simstudy_seed(scenario$label, replicate)
+  seed <- simstudy_seed_for(scenario, replicate)
   truth <- draw_truth(scenario, seed)
   sim <- simstudy_simulate(truth)
   fit <- if (is.null(MCMCparams)) simstudy_fit(sim, scenario) else
@@ -368,6 +388,29 @@ simstudy_replicate <- function(scenario, replicate, MCMCparams = NULL,
 #' ones before it.
 simstudy_seed <- function(label, replicate) {
   as.integer(sum(as.integer(charToRaw(label))) * 1000L + replicate)
+}
+
+#' Seed key for a scenario, honouring a shared-truth override.
+#'
+#' Normally the seed keys on the scenario label, so every cell gets its own
+#' datasets. A scenario may instead set `seed_label`, in which case all
+#' scenarios sharing that value draw from the same seed at each replicate.
+#'
+#' This exists for the M ladder (PLAN.md 13). Those arms differ only in how
+#' much data is collected -- M samples per site, or K PCR replicates -- not in
+#' the process generating it, so sharing a seed makes the comparison *paired*:
+#' the differences between arms stop carrying the variance of independent
+#' truths, which is exactly what a ladder is reading.
+#'
+#' `draw_truth()` supports this because its RNG consumption is independent of
+#' M and K: it draws only `p`, `q`, `theta0` and `theta_baseline`, sized by
+#' `P * S` and `S`. Anything sized by `N = sum(M_vec)` would desynchronise the
+#' stream and silently break the pairing. **If you add a draw to
+#' `draw_truth()`, keep it independent of M and K, or this override becomes a
+#' lie.** `test-regression-bugs.R` asserts the pairing holds.
+simstudy_seed_for <- function(scenario, replicate) {
+  key <- if (!is.null(scenario$seed_label)) scenario$seed_label else scenario$label
+  simstudy_seed(key, replicate)
 }
 
 #' Run R replicates of one scenario.
