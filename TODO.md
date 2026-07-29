@@ -515,7 +515,7 @@ reading the source. Suggest moving the genuinely dead functions to
     `loglik_sigma1()` (`:547`) is an unfinished stub whose entire body
     is `p[primerIdx[]]`. All are superseded by the `_cpp` versions.
 
-    DEPRECATED, BUT KEEP FOR REFERENCE
+    CLAUDE TO DEPRECATE, BUT KEEP FOR REFERENCE
 
 2.  `R/jsdmfun.R`: `sample_BCsL()` references undefined `U` / `gt` /
     `gts`; `sample_U()`, `sample_Br()` and `sample_BL_fixed()` reference
@@ -526,7 +526,7 @@ reading the source. Suggest moving the genuinely dead functions to
     `plotSpatialEffect()` reference a global `Xs_centers` and a
     nonexistent `returnSpatialEffect()`.
 
-    DEPRECATE THE SAMPLE FUNCTIONS NOT USED IN THE MCMC
+    CLAUDE TO DEPRECATE THE SAMPLE FUNCTIONS NOT USED IN THE MCMC
 
 3.  `R/output.R`: `plotReadIntensity()` reads
     `results_output$mu1_output` / `mu0_output` / `sigma1_output` /
@@ -534,7 +534,7 @@ reading the source. Suggest moving the genuinely dead functions to
     `runOccJSDM()` produces any more; `plotOccupancyStates()` references
     undefined `data_info` / `OTU`.
 
-    DEPRECATE BOTH
+    CLAUDE TO DEPRECATE BOTH
 
 4.  **Missing imports for code that *is* live**: `plotCovariateTrend()`
     (`R/jsdmfun.R:1552`) calls `pivot_longer()` and
