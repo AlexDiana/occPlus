@@ -15,11 +15,14 @@ editor_options:
     1.  Trait matrix currently not allowing for categorical variables
 
     2.  **Review the RNG seeding fix, and answer two questions it
-        raises.** Doug changed `src/` on 29 July 2026 -- `src/rng.h`
-        (new), `src/functions.cpp`, `src/jsdm.cpp`, `R/runOccJSDM.R` --
-        so flagging it rather than leaving it to surface in a diff.
-        Revert or rework it freely if you would rather do it another
-        way.
+        raises.** **Written by Claude** (AI agent, in a session with Doug) on
+        29 July 2026, not by Doug: `src/rng.h` (new),
+        `src/functions.cpp`, `src/jsdm.cpp`, `R/runOccJSDM.R`. Flagging
+        it rather than leaving it to surface in a diff, since it changes
+        files you own and you have not seen the design. Revert or rework
+        it freely. It is tested (see below) but it has had no human
+        review beyond Doug agreeing it should be fixed before the
+        simulation study is re-run.
 
         **What it fixes.** Pointing `randinvg()` at the `thread_local`
         engine correctly closed the OpenMP data race, but neither
@@ -46,7 +49,8 @@ editor_options:
         warranted, so it was left as your call.
 
         **Question 2: what does `R CMD config SHLIB_OPENMP_CXXFLAGS`
-        return on your machine?** On Doug's it is *empty*, so every
+        return on your machine?** On Doug's machine it is *empty*, so
+        every
         `#pragma omp` compiles to a no-op and the built `.so` contains
         no OpenMP runtime calls at all -- the package runs
         single-threaded there. If yours differs, your experience of both
