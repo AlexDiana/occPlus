@@ -755,7 +755,15 @@ runOccJSDM <- function(data,
 
     if(model %in% c("occupancy","two_stage")){
       b_betatheta <- rep(0, ncov_theta)
-      B_betatheta <- diag(2, nrow = ncov_theta)
+
+      # Slope prior variance, previously hard-coded. Exposed here so it can be
+      # tuned/tested (see TODO.md group B item 4, PLAN.md 13.8) without a
+      # source edit each time. Default of 2 is unchanged from before this
+      # override existed. ALEX TO REVIEW before treating a non-default value
+      # as a real fix rather than a diagnostic.
+      b_betatheta_slope_var <- ifelse(is.null(listPriors$b_betatheta_slope_var),
+                                      2, listPriors$b_betatheta_slope_var)
+      B_betatheta <- diag(b_betatheta_slope_var, nrow = ncov_theta)
 
       prior_beta_theta <- 0
       prior_beta_theta_sd <- 1

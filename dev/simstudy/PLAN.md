@@ -1025,3 +1025,43 @@ getting worse with high confidence (a 17-point monotone trend dwarfs the
 3.1% SE many times over), but per §13.2's own caveat, R = 50 cannot
 confirm that `theta0` has *reached* nominal -- an observed 0.944 is not
 distinguishable from a true 0.90. Do not close B5 on this run alone.
+
+------------------------------------------------------------------------
+
+## 13.8 Follow-up: tighter `beta_theta` prior at high M
+
+**Status: running.** Commissioned by Doug, 29 July 2026, directly off
+13.7's finding that `beta_theta` coverage worsens with M -- the
+signature of an overconfident interval rather than insufficient data,
+which the write-up pointed at `B_betatheta`'s slope variance.
+
+**That variance was hard-coded**, with no `listPriors` hook, unlike
+`p`/`q`/`theta0`. Added one: `listPriors$b_betatheta_slope_var`
+(`R/runOccJSDM.R`), defaulting to 2 -- the existing value -- so nothing
+changes unless a caller sets it. `ALEX TO REVIEW` before treating a
+non-default value as a real fix rather than a diagnostic; see `TODO.md`
+group B item 4.
+
+**Design:** two arms, `M10_tightprior` and `M20_tightprior`, repeating
+the worst two points on the ladder with `b_betatheta_slope_var = 0.5`
+(SD 0.71, against the default's 1.41). Same `seed_label = "mladder"` as
+the original ladder, so these pair not only against each other but
+against the *already-collected* `M10`/`M20` results -- no need to re-run
+the default-prior arms.
+
+**Verified before the real run**: refit one dataset under both priors
+with a short chain, holding data and seed fixed; the slope row's
+posterior spread shrank under the tighter prior (0.187 -> 0.179 SD at
+this toy configuration), confirming the override reaches the sampler.
+Tier 1/2 unaffected -- the new default preserves current behaviour
+exactly.
+
+**Reading it:** if coverage moves *toward* nominal at the tighter
+variance, the diagnosis holds and `B_betatheta`'s width is implicated. If
+it does not move, or moves the wrong way, the cause is elsewhere and the
+prior-variance hypothesis from 13.7 is wrong -- worth stating plainly
+either way, per the lesson already recorded about not forcing a real
+result into a box it does not fit.
+
+R = 50, for the same reason as 13.2: adequate to detect a move, not to
+confirm arrival at nominal.

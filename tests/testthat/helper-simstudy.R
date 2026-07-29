@@ -90,7 +90,26 @@ simstudy_scenarios <- function() {
     mk("M5",  M = 5L,  K = 3L,  seed_label = "mladder"),
     mk("M10", M = 10L, K = 3L,  seed_label = "mladder"),
     mk("M20", M = 20L, K = 3L,  seed_label = "mladder"),
-    mk("K30", M = 2L,  K = 30L, seed_label = "mladder"))
+    mk("K30", M = 2L,  K = 30L, seed_label = "mladder"),
+
+    # --- Tighter beta_theta prior at high M (PLAN.md 13.8) --------------
+    #
+    # The M ladder found beta_theta coverage falling *with* M (0.747 at M2
+    # to 0.579 at M20) while its bias stayed small and flat -- the
+    # signature of an overconfident interval, not insufficient data. The
+    # prime suspect is B_betatheta's slope variance, hard-coded to 2
+    # until runOccJSDM.R added a listPriors override for this test. These
+    # arms repeat M10 and M20 with that variance tightened to 0.5 (SD
+    # 0.71 against the default's 1.41).
+    #
+    # Same seed_label as the M10/M20 arms above: paired not only against
+    # each other but against the *original* M10/M20 results already on
+    # disk (dev/simstudy/results/simstudy-20260729-212525.rds), since
+    # nothing about the truth-generation changes here.
+    mk("M10_tightprior", M = 10L, K = 3L, seed_label = "mladder",
+                         listPriors = list(b_betatheta_slope_var = 0.5)),
+    mk("M20_tightprior", M = 20L, K = 3L, seed_label = "mladder",
+                         listPriors = list(b_betatheta_slope_var = 0.5)))
 }
 
 # --- Seam 1: how the true parameters are chosen --------------------------
@@ -181,6 +200,7 @@ simstudy_fit <- function(sim, scenario,
   suppressMessages(suppressWarnings(
     runOccJSDM(dat,
                listParams     = listParams,
+               listPriors     = scenario$listPriors %||% list(),
                occCovariates  = occCov,
                collCovariates = collCov,
                spatCovariates = spatCovariates,
