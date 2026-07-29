@@ -12,7 +12,7 @@ editor_options:
 
 1.  Alex to dos
 
-    2.  Trait matrix currently not allowing for categorical variables
+    1.  Trait matrix currently not allowing for categorical variables
 
     **A. Inference-affecting bugs (wrong numbers, silently)**
 
@@ -99,100 +99,80 @@ editor_options:
         `idx_ls` varies, precisely so the test does not encode this
         defect. Revisit that test once this is fixed.
 
-    2.  **Alex's note:** *"THIS IS NOT AN ISSUE FOR LOGISTIC MODELS (as
-        the covariance matrix is not recoverable anyway, only the
-        correlation one)"*.
-
-        **Agreed on the premise, but the measurement is of the
-        correlation, not the covariance -- so the objection does not
-        resolve it. Needs a second look.** In a logistic latent-variable
-        model the scale is indeed unidentified and only the correlation
-        is meaningful. The numbers below are `cov2cor()` output: already
-        correlations, and they still change by up to **0.612** under the
-        reparameterisation.
-
-        The reason `cov2cor()` does not absorb it: `diag(1/diag(R))`
-        rescales **per factor**, whereas `cov2cor()` normalises **per
-        species**. A per-factor rescaling is not a global scale change,
-        so it survives the normalisation and alters the correlations.
-
-        | pair | original | after reparam |
-        |------|----------|---------------|
-        | 1    | +0.713   | **+0.926**    |
-        | 2    | -0.811   | **-0.958**    |
-        | 3    | -0.168   | **-0.780**    |
-        | 4    | +0.443   | **+0.875**    |
-        | 5    | +0.585   | **+0.285**    |
-
-        Consistently pushed toward the extremes. `Var(U)` after the
-        reparameterisation is `diag(0.23, 2.01)`, not the identity,
-        which is the mechanism: the model's residual correlation is
-        `t(L) %*% L` only while `U` is standardised, and the
-        reparameterisation moves scale out of `U` into `L`.
-
-        The grid agrees: `resid_cor` covers at 0.74-0.77 in nine of ten
-        scenarios (`PLAN.md` §12). **If this is genuinely a non-issue,
-        the study is measuring something else and I would want to know
-        what** -- the truth there is `cov2cor(crossprod(L_true))` from
-        the simulator's own `L`, compared against the same function of
-        the stored `L`.
-
-        **`reparamFactorModel()` breaks the identity that residual
+    2.  **`reparamFactorModel()` breaks the identity that residual
         covariance = `t(L) %*% L`, so reported species correlations are
         inflated.** Found 28 July 2026 by the coverage study; confirmed
-        numerically.
+        numerically. **Disputed -- see Alex's note at the end of this
+        item.**
 
-        `reparamFactorModel()` (`R/jsdmfun.R:48`) rewrites the stored
-        `U` and `L` each iteration as `L_new = diag(1/diag(R)) %*% R`
-        and `U_new = U %*% Q %*% diag(diag(R))`, where `L = QR`. That
+        `reparamFactorModel()` (`R/jsdmfun.R:48`) rewrites the stored `U`
+        and `L` each iteration as `L_new = diag(1/diag(R)) %*% R` and
+        `U_new = U %*% Q %*% diag(diag(R))`, where `L = QR`. That
         **preserves `U %*% L`** -- verified to 4e-16 -- so the linear
         predictor is untouched and the rotation is legitimate for
         identifiability.
 
         But `returnResidualCorrelationMatrix()` computes the correlation
         as `cov2cor(t(L) %*% L)` from the *stored, reparameterised* `L`.
-        That identity only holds when `U` is standardised, and the
+        That identity holds only while `U` is standardised, and the
         reparameterisation moves scale out of `U` into `L`: measured
         `Var(U)` afterwards is `diag(0.23, 2.01)`, not the identity.
 
-        **Measured.** On a random `d = 2`, `S = 6` example the
-        correlation matrix changes by up to **0.61**, systematically
-        toward the extremes:
+        **Measured**, `d = 2`, `S = 6`. These are `cov2cor()` output --
+        already correlations, not covariances:
 
-        ```         
-        +0.713 -> +0.926     -0.168 -> -0.780
-        -0.811 -> -0.958     +0.443 -> +0.875
-        ```
+        | pair | original | after reparam |
+        |------|----------|---------------|
+        | 1 | +0.713 | **+0.926** |
+        | 2 | -0.811 | **-0.958** |
+        | 3 | -0.168 | **-0.780** |
+        | 4 | +0.443 | **+0.875** |
+        | 5 | +0.585 | **+0.285** |
 
+        Maximum change **0.612**, consistently toward the extremes.
         Inflated point estimates with correctly-sized intervals is
-        exactly what produces undercoverage, and `resid_cor` measured
-        **0.763** at R = 100.
+        exactly what produces undercoverage, and across the full grid
+        `resid_cor` covers at 0.74-0.77 in nine of ten scenarios
+        (`PLAN.md` §12). The exception is diagnostic: `d_underfit`
+        *over*covers at 0.980, so under-fitting the ordination widens the
+        intervals enough to mask the bias -- a model with too few factors
+        looks better calibrated than it is.
 
         **Impact.** `returnResidualCorrelationMatrix()` and
         `plotResidualCorrelationMatrix()` overstate species
-        co-occurrence, pushing correlations toward +/-1. This is the
-        headline JSDM output and the basis of the ordination
-        interpretation.
-
-        **Confirmed across the grid, with one diagnostic exception.**
-        `resid_cor` sits at 0.739-0.768 in **nine of ten** scenarios.
-        The exception is `d_underfit` (truth 4 factors, fitted 2), which
-        *over*covers at **0.980** -- under-fitting the ordination widens
-        the intervals enough to hide the bias. So the defect's visible
-        severity depends on the fitted factor dimension, which matters
-        when judging a real fit: a model with too few factors will look
-        better calibrated than it is.
+        co-occurrence. This is the headline JSDM output and the basis of
+        the ordination interpretation.
 
         **Fix, two options.** (a) Make the reparameterisation purely
         orthogonal -- rotate by `Q` alone, dropping the `diag(diag(R))`
-        scaling. Then `L_new = t(Q) %*% L` gives
-        `t(L_new) %*% L_new = t(L) %*% L` and `Var(U_new) = I`, so both
-        the identifiability constraint and the covariance identity hold.
+        scaling. Then `t(L_new) %*% L_new = t(L) %*% L` and
+        `Var(U_new) = I`, so both the identifiability constraint and the
+        covariance identity hold. (b) Keep the scaling and compute the
+        correlation as `t(L) %*% Var(U) %*% L`. (a) is simpler and
+        preserves the existing output contract.
 
-        (b) Keep the current scaling and compute the correlation as
-            `t(L) %*% Var(U) %*% L`. (a) is simpler and preserves the
-            existing output contract; check with Alex which constraint
-            the `diag(diag(R))` scaling was meant to impose.
+        ------------------------------------------------------------
+
+        **Alex's note:** *"THIS IS NOT AN ISSUE FOR LOGISTIC MODELS (as
+        the covariance matrix is not recoverable anyway, only the
+        correlation one)."*
+
+        **Response -- the premise is right but does not resolve it.** In
+        a logistic latent-variable model the scale is indeed unidentified
+        and only the correlation is meaningful. But the table above is
+        already correlations, and they still move by 0.612.
+        `cov2cor()` does not absorb the change because `diag(1/diag(R))`
+        rescales **per factor** while `cov2cor()` normalises **per
+        species** -- a per-factor rescaling is not a global scale change,
+        so it survives the normalisation.
+
+        **If it is nonetheless a non-issue, then the simulation study is
+        measuring the wrong thing and that needs identifying**: it
+        compares `cov2cor(crossprod(L_true))` from the simulator's own
+        `L` against the same function of the stored `L`. Either that
+        comparison is invalid, or the correlations really are inflated.
+        Worth settling before the `resid_cor` row of `PLAN.md` §12 is
+        quoted anywhere.
 
     3.  **Choose the informative priors for `p`, `q` and `theta0`.**
         Alex's note in this file: *"NEED TO CHOOSE THE INFORMATIVE
@@ -556,7 +536,7 @@ editor_options:
         **What it found.** Four defects, three traced to specific lines:
 
         | found by | defect |
-        |----|----|
+        |------------------------------------|------------------------------------|
         | writing the tests | `sigma_s` never sampled (**group A item 2**) |
         | writing the tests | `predictNewSites()` missing `X_psi`/`X_s` defaults (**group B item 5**; also corrected Fixed bugs 18) |
         | writing the tests | GP knot floor (**group B item 3**) |
