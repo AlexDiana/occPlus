@@ -501,8 +501,8 @@ editor_options:
     1.  **reproduce all Ecoletts results as a test of the package and
         decide whether to include in repo**
 
-    2.  **extensive testing on simulated datasets** -- **suite built
-        and the R = 100 study run; three things remain.** What exists is
+    2.  **extensive testing on simulated datasets** -- **suite built and
+        the R = 100 study run; three things remain.** What exists is
         summarised under *Completed* below; the authoritative
         specification and the results table are in
         `dev/simstudy/PLAN.md`.
@@ -510,8 +510,8 @@ editor_options:
         (a) **Re-run once group A items 1-3 are fixed.** This is the
             evidence the fixes worked. Without it they rest on the same
             code-reading that this exercise showed to be unreliable, and
-            the R = 100 table in `PLAN.md` §12 is already partly stale --
-            it predates Alex's `42198d9`, which corrected the
+            the R = 100 table in `PLAN.md` §12 is already partly stale
+            -- it predates Alex's `42198d9`, which corrected the
             collection-covariate prior, so `beta_theta` should improve
             markedly. One command, a few hours:
 
@@ -521,12 +521,12 @@ editor_options:
 
         (b) **Decide the replicate count for the paper.** R = 100 was
             chosen to *detect* defects and did so decisively. Asserting
-            *nominal* coverage in print is a claim about the absence of a
-            small deviation and wants R = 200-500 (`PLAN.md` §9). The
+            *nominal* coverage in print is a claim about the absence of
+            a small deviation and wants R = 200-500 (`PLAN.md` §9). The
             runner takes `R` as an argument.
 
-        (c) **Decide how the results are presented** (`PLAN.md` open item
-            4). Currently a private Claude artifact
+        (c) **Decide how the results are presented** (`PLAN.md` open
+            item 4). Currently a private Claude artifact
             (<https://claude.ai/code/artifact/ad3d46eb-1fd4-49b5-b795-6b71474ef1d5>);
             a pkgdown article is the obvious home -- see item 3.
 
@@ -925,22 +925,23 @@ verified against the source rather than the commit message.
 
 ### **Completed**
 
-Finished work, kept for context rather than as tasks. Bug fixes live under
-*Fixed bugs* above; this is everything else.
+Finished work, kept for context rather than as tasks. Bug fixes live
+under *Fixed bugs* above; this is everything else.
 
 1.  ~~**Purge `data/traitdata_caiwang.rdata` from git history.**~~
-    **DONE.** Purged via `git filter-repo` and force-pushed the rewritten
-    `main` to `origin`. All commit hashes from `11c5449` onward changed as
-    a result, so **Alex needed to re-clone or hard-reset**; that has since
-    happened.
+    **DONE.** Purged via `git filter-repo` and force-pushed the
+    rewritten `main` to `origin`. All commit hashes from `11c5449`
+    onward changed as a result, so **Alex needed to re-clone or
+    hard-reset**; that has since happened.
 
-2.  ~~**Port the model-diagnostics functions from the GLGS-eDNA repo.**~~
-    **DONE.** Alex's note: *"I ALREADY ADDED DIAGNOSTICS SO NOT NEEDED
-    ANYMORE"*. `computeRhat()`, `summarisePosterior()`, `plotTraceplot()`
-    and `returnConvergenceDiagnostics()` are in `R/diagnostics.R`; the
-    first two were later de-exported (`@noRd`) as redundant with
-    `returnConvergenceDiagnostics()` for user-facing purposes. A "Model
-    diagnostics" vignette section was added to `vignettes/occJSDM.Rmd`.
+2.  ~~**Port the model-diagnostics functions from the GLGS-eDNA
+    repo.**~~ **DONE.** Alex's note: *"I ALREADY ADDED DIAGNOSTICS SO
+    NOT NEEDED ANYMORE"*. `computeRhat()`, `summarisePosterior()`,
+    `plotTraceplot()` and `returnConvergenceDiagnostics()` are in
+    `R/diagnostics.R`; the first two were later de-exported (`@noRd`) as
+    redundant with `returnConvergenceDiagnostics()` for user-facing
+    purposes. A "Model diagnostics" vignette section was added to
+    `vignettes/occJSDM.Rmd`.
 
     **Not ported, and still available if wanted:**
     `compare_to_true()`/`plot_estimated_vs_true()`, which need
@@ -949,12 +950,12 @@ Finished work, kept for context rather than as tasks. Bug fixes live under
     redundant rather than outstanding.
 
 3.  ~~**Build the simulation test suite and run the coverage study.**~~
-    **DONE 28 July 2026**, except the three follow-ups still listed under
-    *MEE paper / Doug to dos 2*. Full specification and results:
+    **DONE 28 July 2026**, except the three follow-ups still listed
+    under *MEE paper / Doug to dos 2*. Full specification and results:
     `dev/simstudy/PLAN.md`. Provenance and lessons: `AGENTS.md`.
 
-    - **Tier 1** (`6d9526d`): 89 structural assertions, \~7 s, **ships to
-      CRAN**. `helper-fixtures.R`, `test-smoke-configs.R`,
+    - **Tier 1** (`6d9526d`): 89 structural assertions, \~7 s, **ships
+      to CRAN**. `helper-fixtures.R`, `test-smoke-configs.R`,
       `test-regression-bugs.R`, `test-api-contracts.R`.
       `test-placeholder.R` deleted.
     - **Tier 2** (`f63eeeb`): recovery canary, \~30 s, `skip_on_cran()`,
@@ -967,6 +968,6 @@ Finished work, kept for context rather than as tasks. Bug fixes live under
       `dev/simstudy/results/`, tabulated in `PLAN.md` §12.
 
     It found six defects -- three while the tests were being written,
-    three from the run -- none of which the static audit had caught. Four
-    of the six are now fixed (Fixed bugs 24-27 and group B); the rest are
-    group A items 1-3.
+    three from the run -- none of which the static audit had caught.
+    Four of the six are now fixed (Fixed bugs 24-27 and group B); the
+    rest are group A items 1-3.
