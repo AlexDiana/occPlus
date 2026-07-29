@@ -6,27 +6,7 @@
 
 // [[Rcpp::plugins(openmp)]]
 
-inline std::mt19937& get_rng() {
-  thread_local std::mt19937 rng(
-#ifdef _OPENMP
-      12345 + omp_get_thread_num()
-#else
-  12345
-#endif
-  );
-  return rng;
-}
-
-inline double runif() {
-  static thread_local std::uniform_real_distribution<double> dist(0.0,1.0);
-  return dist(get_rng());
-}
-
-
-inline double rnorm() {
-  static thread_local std::normal_distribution<double> dist(0.0, 1.0);
-  return dist(get_rng());
-}
+#include "rng.h"
 
 // inline double exprnd(double rate) {
 //   std::exponential_distribution<double> dist(rate);

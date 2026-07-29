@@ -222,62 +222,6 @@ editor_options:
         `@param listPriors`. Someone running a low-detection study needs
         to know to set `a_p`/`b_p`, and nothing currently tells them.
 
-    4.  **`set.seed()` does not control any of the C++ samplers, so
-        `runOccJSDM()` is not reproducible.** Found 29 July 2026 while
-        writing the regression test for Fixed bugs 26.
-
-        Fixed bugs 26 replaced `randinvg()`'s use of R's global RNG
-        inside an OpenMP loop with a `thread_local` engine, which
-        correctly closed the data race. But neither replacement engine
-        ever reads R's RNG state:
-
-        -   `get_rng()` (`src/functions.cpp:9-15`, `src/jsdm.cpp:9-15`)
-            is seeded from the literal `12345 + omp_get_thread_num()`.
-            This drives the Polya-Gamma sampler and every `runif()` /
-            `rnorm()` in both files.
-        -   `mvrnormArmaQuick_TS()` (`src/functions.cpp:224`) is seeded
-            from `std::random_device{}()`, i.e. OS entropy. It is the
-            draw inside `sample_beta_cpp_TS()`, which is what
-            `sample_betatheta_cpp_parallel()` calls under `#pragma omp
-            parallel for`.
-
-        Measured: two fits of the same fixture under the same
-        `set.seed(4242)` differ by up to 5.09 on `B0_output`.
-
-        **What this does and does not affect.** It does *not* bias the
-        posterior -- both are valid streams. Three real consequences:
-
-        (a) Users cannot reproduce a published fit. For a CRAN package
-            whose main entry point is an MCMC sampler this is close to
-            disqualifying, and it is the kind of thing a reviewer
-            checks first.
-        (b) The literal `12345` is per-process, not per-run, so in the
-            simulation study every worker process starts its
-            Polya-Gamma stream at the identical position. Replicates in
-            *different* workers share random numbers. That correlates
-            replicates and means the reported coverage SE of +-2.2% at
-            R = 100 is understated by an unknown amount. Worth stating
-            as a caveat in the MEE paper until it is fixed.
-        (c) `std::random_device` is not guaranteed to be
-            non-deterministic -- on some Windows toolchains it is a
-            fixed PRNG, which would give every thread the same seed and
-            hence perfectly correlated draws across the parallel loop.
-            Unverified here, but it is a portability risk that the
-            fix below removes for free.
-
-        **Fix.** Seed both engines from R at the top of the sampler:
-        draw a base seed with `R::unif_rand()` (inside `GetRNGstate()`
-        / `PutRNGstate()`, on the master thread, before any parallel
-        region), then seed thread `t` with a well-separated function of
-        it -- `std::seed_seq` on `{base, t}` rather than `base + t`, to
-        avoid adjacent-seed correlation. `set.seed()` then controls the
-        whole fit, and the study's replicates become genuinely
-        independent.
-
-        **Test.** `tests/testthat/test-regression-bugs.R` already has
-        the assertion, `skip()`ped with a pointer to this entry. Delete
-        the `skip()` line when this is fixed.
-
     **B. Crashes, unreachable code paths, and API bugs**
 
     1.  **Species-ordering bug shared by four plotting functions.**
@@ -434,6 +378,23 @@ editor_options:
     Ordered by expected speedup per unit of effort. Nothing here has
     been profiled -- worth running `profvis::profvis()` on a vignette-
     sized fit first to confirm where the time actually goes.
+
+    **Before profiling, check whether OpenMP is even on.** Measured 29
+    July 2026 on the macOS development machine: `R CMD config
+    SHLIB_OPENMP_CXXFLAGS` is *empty*, so the `$(SHLIB_OPENMP_CXXFLAGS)`
+    in `src/Makevars` expands to nothing, every `#pragma omp` compiles
+    to a no-op, and `nm -u src/occJSDM.so | grep -c '__kmpc\|_GOMP'`
+    returns 0. The package is running single-threaded here despite
+    `libomp.dylib` appearing in `otool -L` (pulled in transitively by
+    R's own libraries, not by us).
+
+    Consequences: the parallel sections are currently dead weight on
+    this machine, the thread-safety bug of Fixed bugs 26 could never
+    have manifested locally, and any timing measured here says nothing
+    about a Linux build where OpenMP *is* active. Worth confirming what
+    Alex's machine and CRAN's check farm do before investing in items 1
+    and 2 below -- the payoff differs completely between the two
+    cases.
 
     1.  **Parallelise over chains -- but use a PSOCK cluster, not
         `mclapply()`.** The `for (chain in 1:nchain)` loop
@@ -997,6 +958,64 @@ verified against the source rather than the commit message.
 
     **Only the wiring is closed.** What the default *should be* remains
     open and is a design decision, not a defect -- see group A item 3.
+
+28. **`set.seed()` did not control any of the C++ samplers, so
+    `runOccJSDM()` was not reproducible.** Found 29 July 2026 while
+    writing the regression test for Fixed bugs 26; fixed the same day.
+
+    Fixed bugs 26 replaced `randinvg()`'s use of R's global RNG inside
+    an OpenMP loop with `thread_local` engines, which correctly closed
+    the data race. But neither replacement engine ever read R's RNG
+    state: `get_rng()` was seeded from the literal `12345 +
+    omp_get_thread_num()`, and `mvrnormArmaQuick_TS()` from
+    `std::random_device{}()`. Measured before the fix: two fits of the
+    same fixture under the same `set.seed(4242)` differed by 5.09 on
+    `B0_output`.
+
+    Neither biased the posterior -- both are valid streams -- but users
+    could not reproduce a fit, and the literal `12345` was per *process*
+    rather than per run, so every simulation-study worker started its
+    Polya-Gamma stream at the same position and replicates at the same
+    position in different workers shared random numbers.
+
+    **The fix** (`src/rng.h`, new). Both translation units now share one
+    per-thread `mt19937`, seeded via `std::seed_seq` from a base seed
+    that `runOccJSDM()` draws from R with `sample.int()` and installs
+    through the new `setOccJSDMSeed()`. `set.seed()` therefore controls
+    the whole fit, and consecutive fits stay independent because R's RNG
+    advances between them. Three subtleties, each of which cost a
+    debugging round:
+
+    (a) A `thread_local` engine is constructed once per thread and would
+        keep its original seed for the life of the session, so a
+        generation counter triggers re-seeding when R installs a new
+        base seed.
+    (b) The generation must *not* be seed material. Mixing it in made
+        the same base seed yield a different stream on the second fit of
+        a session -- reproducible-looking in a fresh process, broken in
+        a suite.
+    (c) `std::normal_distribution` caches the second Box-Muller deviate,
+        and that cache survives `rng.seed()`. Without an explicit
+        `dist.reset()`, the first `rnorm()` of a fit could return a value
+        left over from the previous fit, so reproducibility depended on
+        the parity of normal draws earlier in the process. This is why
+        the test passed standalone and failed inside the suite.
+
+    `arma::randn()` elsewhere in the package was never affected:
+    RcppArmadillo sets `ARMA_RNG_ALT` to route Armadillo's RNG to R's,
+    so those draws already honoured `set.seed()`.
+
+    **Scope.** Reproducibility holds for a given thread count. Threads
+    derive separate streams, so if the package is ever built with
+    OpenMP actually enabled (it is not on the macOS dev machine -- see
+    group D), changing the thread count changes which stream produces
+    which element. Inherent to per-thread streams, not a defect.
+
+    **Tests.** `test-regression-bugs.R` covers same-seed equality,
+    different-seed inequality, and independence of consecutive fits.
+    Verified separately that the simulation harness gives identical
+    output for a repeated replicate and different output across
+    replicates.
 
 ### **Completed**
 

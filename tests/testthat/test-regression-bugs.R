@@ -241,31 +241,53 @@ test_that("Fixed bugs 25: collection-covariate priors are centred on 0", {
 })
 
 test_that("Fixed bugs 26: a fixed seed reproduces a fit", {
-  skip(paste("KNOWN OPEN BUG -- runOccJSDM() is not reproducible from set.seed().",
-             "See TODO.Rmd group A. Delete this skip() when it is fixed."))
-
   # Fixed bugs 26 replaced randinvg()'s use of R's global RNG inside an OpenMP
-  # loop with a thread_local engine. That closed the data race, but the
-  # replacement engines never read R's RNG state, so set.seed() still does not
-  # control the sampler:
+  # loop with thread_local engines, closing the data race. But those engines
+  # never read R's RNG state, so set.seed() still did not control the sampler
+  # (get_rng() was seeded from the literal 12345, mvrnormArmaQuick_TS() from
+  # std::random_device). runOccJSDM() now draws a base seed from R via
+  # setOccJSDMSeed(); see src/rng.h.
   #
-  #   functions.cpp:9-15, jsdm.cpp:9-15  get_rng() seeded from the literal
-  #                                      12345 + omp_get_thread_num()
-  #   functions.cpp:224                  mvrnormArmaQuick_TS() seeded from
-  #                                      std::random_device{}() -- OS entropy
+  # This is the one place tier 1 asserts numeric equality. The blanket ban in
+  # PLAN.md 5.1 exists *because* the sampler used to be irreproducible, so the
+  # test that it no longer is must necessarily be an equality test.
   #
-  # Measured: two fits under the same seed differ by up to 5.09 on B0_output.
-  #
-  # Left in place, and skipped rather than deleted, because it is the exact
-  # assertion that should pass once the engines are seeded from R. It is also
-  # the only place tier 1 may assert numeric equality: PLAN.md 5.1 bans that
-  # everywhere else precisely because of this race.
+  # Scope: reproducibility holds for a given thread count. Each thread derives
+  # its own stream from the base seed, so if this package is ever built with
+  # OpenMP actually enabled, changing the thread count changes which stream
+  # produces which element. That is inherent to per-thread streams, not a bug,
+  # but it does mean "same seed" is only half of the contract -- see the note
+  # in src/rng.h. (As built here, SHLIB_OPENMP_CXXFLAGS is empty and the
+  # pragmas compile to nothing, so the point is currently moot.)
   sim <- simulate_fixture(model = "two_stage")
   mc <- list(nchain = 2, nburn = 20, niter = 20, nthin = 1)
+
   set.seed(4242); a <- fit_fixture(sim, MCMCparams = mc)
   set.seed(4242); b <- fit_fixture(sim, MCMCparams = mc)
   expect_equal(a$results_output$jsdm_output$B0_output,
                b$results_output$jsdm_output$B0_output)
+  expect_equal(a$results_output$p_output, b$results_output$p_output)
+
+  # A different seed must give a different answer, or the test above would
+  # also pass if the sampler had simply stopped being random.
+  set.seed(9999); d <- fit_fixture(sim, MCMCparams = mc)
+  expect_false(isTRUE(all.equal(a$results_output$jsdm_output$B0_output,
+                               d$results_output$jsdm_output$B0_output)))
+})
+
+test_that("consecutive fits under one seed are independent", {
+  # The base seed is drawn with sample.int() rather than being a constant, so
+  # R's RNG advances between fits. Without that, every fit in a session would
+  # replay the same stream -- which is what the old literal 12345 did across
+  # *processes*, correlating the simulation study's replicates (PLAN.md 8).
+  sim <- simulate_fixture(model = "two_stage")
+  mc <- list(nchain = 2, nburn = 20, niter = 20, nthin = 1)
+
+  set.seed(777)
+  f1 <- fit_fixture(sim, MCMCparams = mc)
+  f2 <- fit_fixture(sim, MCMCparams = mc)
+  expect_false(isTRUE(all.equal(f1$results_output$jsdm_output$B0_output,
+                               f2$results_output$jsdm_output$B0_output)))
 })
 
 test_that("Fixed bugs 27: listPriors actually reaches the Stage 2 priors", {

@@ -897,6 +897,16 @@ runOccJSDM <- function(data,
   # run MCMC
   message("Running MCMC")
 
+  # Seed the C++ samplers from R's RNG. The samplers use per-thread mt19937
+  # engines rather than R's RNG (which is a single global and unsafe to call
+  # from inside the OpenMP regions), so they have to be seeded explicitly --
+  # without this, set.seed() has no effect on the fit. Drawing the seed here
+  # rather than using a constant also makes two consecutive fits in the same
+  # session independent. Chains deliberately share the draw: each continues the
+  # stream where the previous one stopped, so they differ from one another
+  # while the fit as a whole stays reproducible.
+  setOccJSDMSeed(sample.int(.Machine$integer.max, 1L))
+
   for (chain in 1:nchain) {
 
     # chain output

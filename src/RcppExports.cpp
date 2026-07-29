@@ -11,6 +11,16 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
+// setOccJSDMSeed
+void setOccJSDMSeed(unsigned int seed);
+RcppExport SEXP _occJSDM_setOccJSDMSeed(SEXP seedSEXP) {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< unsigned int >::type seed(seedSEXP);
+    setOccJSDMSeed(seed);
+    return R_NilValue;
+END_RCPP
+}
 // sample_z_cpp
 NumericMatrix sample_z_cpp(const NumericMatrix& w, const NumericMatrix& psi, const NumericMatrix& theta, const NumericVector& theta0, const IntegerVector& M, const IntegerVector& sumM);
 RcppExport SEXP _occJSDM_sample_z_cpp(SEXP wSEXP, SEXP psiSEXP, SEXP thetaSEXP, SEXP theta0SEXP, SEXP MSEXP, SEXP sumMSEXP) {
@@ -482,6 +492,7 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
+    {"_occJSDM_setOccJSDMSeed", (DL_FUNC) &_occJSDM_setOccJSDMSeed, 1},
     {"_occJSDM_sample_z_cpp", (DL_FUNC) &_occJSDM_sample_z_cpp, 6},
     {"_occJSDM_sample_w_cpp", (DL_FUNC) &_occJSDM_sample_w_cpp, 16},
     {"_occJSDM_sample_w_cim_cipp", (DL_FUNC) &_occJSDM_sample_w_cim_cipp, 15},

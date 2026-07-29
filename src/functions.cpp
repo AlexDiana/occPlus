@@ -6,26 +6,7 @@
 
 // [[Rcpp::plugins(openmp)]]
 
-inline std::mt19937& get_rng() {
-  thread_local std::mt19937 rng(
-#ifdef _OPENMP
-      12345 + omp_get_thread_num()
-#else
-  12345
-#endif
-  );
-  return rng;
-}
-
-inline double runif() {
-  static thread_local std::uniform_real_distribution<double> dist(0.0,1.0);
-  return dist(get_rng());
-}
-
-inline double rnorm() {
-  static thread_local std::normal_distribution<double> dist(0.0, 1.0);
-  return dist(get_rng());
-}
+#include "rng.h"
 
 // inline double exprnd(double rate) {
 //   std::exponential_distribution<double> dist(rate);
@@ -33,6 +14,22 @@ inline double rnorm() {
 // }
 
 using namespace Rcpp;
+
+//' Seed the package's C++ random number generators
+//'
+//' Sets the base seed from which every worker thread derives its own stream.
+//' Called by \code{runOccJSDM()} with a draw from R's RNG, which is what makes
+//' \code{set.seed()} control the sampler. Not intended to be called directly.
+//'
+//' @param seed a non-negative integer.
+//' @keywords internal
+// [[Rcpp::export]]
+void setOccJSDMSeed(unsigned int seed) {
+  occjsdm_rng_base_seed() = seed;
+  // Bump the generation so that threads whose engine was already constructed
+  // re-seed on their next draw instead of continuing their old stream.
+  occjsdm_rng_generation() += 1u;
+}
 
 // [[Rcpp::depends(RcppArmadillo)]]
 
@@ -219,14 +216,13 @@ static arma::vec mvrnormArmaQuick_TS(const arma::vec& mu, const arma::mat& chols
   int ncols = cholsigma.n_cols;
   arma::vec Y(ncols);
 
-  // Create a thread-local random engine and distribution
-  // thread_local ensures each thread has its own independent instance
-  thread_local std::mt19937 engine(std::random_device{}());
-  std::normal_distribution<double> dist(0.0, 1.0);
-
-  // Fill Y manually using the thread-safe C++ engine
+  // rnorm() is the shared per-thread engine from rng.h: thread-safe like the
+  // std::random_device engine it replaces, but seeded from R, so this draw is
+  // now reproducible under set.seed(). This is the draw inside
+  // sample_beta_cpp_TS(), which sample_betatheta_cpp_parallel() calls from
+  // inside `#pragma omp parallel for`.
   for(int i = 0; i < ncols; ++i) {
-    Y[i] = dist(engine);
+    Y[i] = rnorm();
   }
 
   return mu + cholsigma * Y;
