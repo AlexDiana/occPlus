@@ -1,13 +1,22 @@
 ---
 title: "TODO"
 output: html_document
+editor_options:
+  markdown:
+    wrap: 72
 ---
 
-<!-- Plain markdown. There is deliberately no `editor_options: markdown:
-     wrap:` block here: it instructs RStudio's visual editor to re-wrap and
-     re-canonicalise the whole file on every save, which produced diff churn
-     on every edit and, in 2242b34, silently corrupted a code span (`* 2`
-     became `- 2` in the logDetKuu note). Edit this file in Source mode. -->
+<!-- This file is edited in RStudio's Visual mode and is hard-wrapped at 72
+     columns. The wrap directive is per-document on purpose: AGENTS.md and
+     PLAN.md are NOT wrapped (44% and 39% of their lines exceed 72), so a
+     project-level setting would reformat both the first time they were
+     opened in Visual mode.
+
+     Anyone editing this file, human or agent: wrap prose at 72. Where a
+     paragraph gets rewrapped, an inline `code span` can land across the
+     boundary and be mangled -- in 2242b34 that turned `* 2` into `- 2` in
+     the logDetKuu note, silently asserting something false. Keep code
+     spans short, or phrase around them. -->
 
 ## functions to add
 

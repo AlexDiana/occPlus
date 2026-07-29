@@ -99,6 +99,33 @@ Not ported: `compare_to_true()`/`plot_estimated_vs_true()` from GLGS-eDNA, since
 - `plotCumulativeSpeciesDetections(fitModel, K, primer = 0, alpha = .95)` -- credible interval for cumulative species detected as a function of PCR replicates (K), via bootstrapped per-species Beta-distributed detection probabilities. No M-based (sample/visit-level) equivalent exists yet (TODO.md, MEE paper / Alex to dos).
 - Ordination is now more complete (as of Alex's `a9700ab` refactor): `returnOrdinationScores()`/`plotOrdinationScores()` (renamed from `returnOrdination()`) cover site factor scores, and new `returnFactorLoadings()`/`plotFactorLoadings()` cover species loading scores -- both exported with roxygen docs. The former TODO.md item calling for this has been removed accordingly.
 
+## Editing the planning docs
+
+**`TODO.md` is hard-wrapped at 72 columns. Wrap prose to 72 when editing it.**
+Doug edits it in RStudio's *Visual* mode, which rewrites the whole file to
+match `editor_options: markdown: wrap: 72` in its YAML on every save. Text
+that arrives unwrapped gets reflowed on the next open, producing a diff
+nobody authored.
+
+That is not merely cosmetic. In `2242b34` ("update line wrappings") a rewrap
+split an inline code span across the column boundary, escaped the opening
+backtick, ate the surrounding spaces, and turned `* 2` into `- 2` in a note
+about a Cholesky log-determinant -- where the factor of two was the entire
+point. The surviving sentence asserted something false and read as garbage.
+Restored in `006b16f`. **So: keep inline code spans short, or phrase around
+them, so they cannot land on the boundary.**
+
+Check before committing: `awk 'length>72' TODO.md`. A handful of hits is
+expected and fine -- URLs, long inline code, the `----` rule -- because
+neither RStudio nor pandoc can break those either. Prose lines over 72 are
+the ones to fix.
+
+**`AGENTS.md` and `PLAN.md` are *not* wrapped** (44% and 39% of their lines
+exceed 72) and should be left that way. This is why the wrap directive lives
+in `TODO.md`'s own YAML rather than in `occJSDM.Rproj`: a project-level
+setting would reformat both of these the first time either was opened in
+Visual mode.
+
 ## Git and build artifacts
 
 - **`src/*.o`/`src/*.so` tracking is fixed**: confirmed this session (`git ls-files 'src/*.o' 'src/*.so'` returns nothing) -- no longer tracked, despite the earlier note in this file claiming they were. Superseded.
