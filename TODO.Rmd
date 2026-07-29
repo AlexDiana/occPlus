@@ -148,10 +148,11 @@ editor_options:
             (`sd(SE) = 0.85`) instead of 1 leaves the likelihood
             monotone -- it still rises to the grid maximum. So the
             one-line fix this entry used to propose would not work.
-        (c) *`logDetKuu` is correct.*
-            \`sum(log(rcppeigen_get_diag(K_xx)))
-            - 2`matches the true log-determinant at all ten grid points;`rcppeigen_get_diag()\`
-              returns the **Cholesky** diagonal despite the name.
+        (c) *`logDetKuu` is correct.* Note the factor is `* 2`, not
+            `- 2`: `sum(log(rcppeigen_get_diag(K_xx))) * 2` matches the
+            true log-determinant at all ten grid points, as it should
+            for a Cholesky factor. `rcppeigen_get_diag()` returns the
+            **Cholesky** diagonal despite the name.
         (d) *Not an artefact of weak data.* Identical behaviour with
             `ds = 2` (real spatial signal) as with `ds = 0`.
 
@@ -1093,9 +1094,10 @@ verified against the source rather than the commit message.
     with bias +0.113, against true slopes averaging +0.01. Across the
     full grid `beta_theta` undercovered in **every** cell (0.676-0.730).
 
-    **The R = 100 coverage table (`PLAN.md` §12) predates this fix**, so
-    that row should improve substantially on a re-run. Confirming it is
-    the point of item (a) under *MEE paper / Doug to dos 2*.
+    **Confirmed by the 29 July re-run**: `beta_theta` improved in every
+    cell, to 0.709-0.771, with two-thirds of the bias removed. It is
+    still well short of nominal, so a second cause remains -- tracked as
+    group A item 4.
 
 26. ~~**Non-thread-safe RNG in the hottest OpenMP loop.**~~ **FIXED.**
     `randinvg()` (`src/jsdm.cpp:86`) now draws from the `thread_local`
