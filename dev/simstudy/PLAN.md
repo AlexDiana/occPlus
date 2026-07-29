@@ -838,10 +838,35 @@ is merely sample size, and the conclusion is much weaker.
 Base cell only: all three findings are flat across the other nine cells,
 so one cell isolates the mechanism at a tenth of the cost.
 
-`R = 50`, not 100. The gap under test is 0.77 against 0.95 -- 18 points,
-or about 6 SE at R = 50 (SE 3.1%). That is ample to see a return to
-nominal. Re-run the decisive arm at R = 100 only if a number lands
-ambiguously near 0.93.
+**`R = 50`, but only for the first stage, and the reason is asymmetric.**
+
+Detecting that the deviation *persists* is easy: testing 0.766 against
+nominal uses the null SE, `sqrt(0.95 * 0.05 / 50)` = 3.1%, so the
+18-point gap is about 6 SE.
+
+Confirming it has *recovered* is much harder, and R = 50 cannot do it.
+That claim needs an interval around the observed value, where the SE is
+`sqrt(p(1-p)/R)` at the observed p:
+
+| R | SE at p \~ 0.94 | 95% CI around an observed 0.94 |
+|---|---|---|
+| 50  | 3.4% | [0.87, 1.00] |
+| 100 | 2.4% | [0.89, 0.99] |
+| 200 | 1.7% | **[0.91, 0.97]** |
+
+At R = 50 an observed 0.94 is indistinguishable from a true 0.88, which
+is still meaningful undercoverage -- so "fixed" could not be told from
+"much better but still broken". This is §9's point restated: asserting
+the absence of a small deviation is a different and more expensive claim
+than detecting a large one.
+
+**So: two stages.** R = 50 across the ladder answers the question Doug
+actually asked -- *is `M` the lever?* -- because the answer is carried by
+the **shape across arms**, and a monotone rise over four arms is evidence
+no single point can supply. Then re-run only the decisive arm at
+**R = 200** if it lands high, since that is the one number that would
+appear in the paper. Roughly 1.9 h now and 2.4 h later, the second spent
+only if the first justifies it.
 
 ### 13.3 Cost (measured 29 July, not projected)
 
@@ -865,7 +890,7 @@ Decided in advance, so this is a test rather than a fishing trip.
 
 | Outcome | Reading | Action |
 |---------|---------|--------|
-| All three approach nominal as M rises; `K30` does not | Stage 1 under-identification. Not defects. | Close B4-B6 as "not a bug". Document the `M` requirement, and state it in the MEE paper -- it is a real limitation for `M = 2` eDNA designs. |
+| All three approach nominal as M rises; `K30` does not | Stage 1 under-identification. Not defects. | **Re-run the winning arm at R = 200 before closing anything** -- R = 50 cannot separate 0.94 from 0.88. Then close B4-B6 as "not a bug", document the `M` requirement, and state it in the MEE paper: it is a real limitation for `M = 2` eDNA designs. |
 | B4/B5 recover, B6's bias persists | Two causes. Stage 1 explains the coverage findings; `B0` is a separate regression. | Close B4/B5; keep B6 open and go after the `jsdmfun.R` rewrite. |
 | Nothing improves, even at M = 20 | Genuine code defects; `M` is not the lever. | Keep all three open. Next suspect is the widened `diag(2)` prior variance, which is the common edit behind B4 and B5. |
 | `M20` and `K30` improve equally | Sample size, not Stage 1. | Weak conclusion; the finding is that all three are information-sensitive. Re-think the design before spending more. |
