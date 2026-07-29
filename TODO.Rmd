@@ -15,19 +15,18 @@ editor_options:
     1.  Trait matrix currently not allowing for categorical variables
 
     2.  **Review the RNG seeding fix, and answer two questions it
-        raises.** **Written by Claude** (AI agent, in a session with Doug) on
-        29 July 2026, not by Doug: `src/rng.h` (new),
-        `src/functions.cpp`, `src/jsdm.cpp`, `R/runOccJSDM.R`. Flagging
-        it rather than leaving it to surface in a diff, since it changes
-        files you own and you have not seen the design. Revert or rework
-        it freely. It is tested (see below) but it has had no human
-        review beyond Doug agreeing it should be fixed before the
-        simulation study is re-run.
+        raises.** **Written by Claude** on 29 July 2026: `src/rng.h`
+        (new), `src/functions.cpp`, `src/jsdm.cpp`, `R/runOccJSDM.R`.
+        Flagging it rather than leaving it to surface in a diff, since
+        it changes files you own and you have not seen the design.
+        Revert or rework it freely. It is tested (see below) but it has
+        had no human review beyond Doug agreeing it should be fixed
+        before the simulation study is re-run.
 
         **What it fixes.** Pointing `randinvg()` at the `thread_local`
-        engine correctly closed the OpenMP data race, but neither
-        engine it left behind read R's RNG state (`get_rng()` was seeded
-        from the literal `12345 + omp_get_thread_num()`,
+        engine correctly closed the OpenMP data race, but neither engine
+        it left behind read R's RNG state (`get_rng()` was seeded from
+        the literal `12345 + omp_get_thread_num()`,
         `mvrnormArmaQuick_TS()` from `std::random_device{}()`), so
         `set.seed()` had no effect on the sampler. Two fits of the same
         data under one seed differed by 5.09 on `B0_output`. Not a bias
@@ -43,16 +42,15 @@ editor_options:
         Reproducibility currently holds *for a given thread count*.
         Threads derive separate streams, so with OpenMP genuinely
         active, changing the thread count changes which stream produces
-        which element. Making the fit invariant needs a different
-        scheme -- a counter-based RNG keyed on the element index rather
-        than the thread id. Doable, but a bigger change than the bug
+        which element. Making the fit invariant needs a different scheme
+        -- a counter-based RNG keyed on the element index rather than
+        the thread id. Doable, but a bigger change than the bug
         warranted, so it was left as your call.
 
         **Question 2: what does `R CMD config SHLIB_OPENMP_CXXFLAGS`
         return on your machine?** On Doug's machine it is *empty*, so
-        every
-        `#pragma omp` compiles to a no-op and the built `.so` contains
-        no OpenMP runtime calls at all -- the package runs
+        every `#pragma omp` compiles to a no-op and the built `.so`
+        contains no OpenMP runtime calls at all -- the package runs
         single-threaded there. If yours differs, your experience of both
         the thread-safety bug and of performance differs from his, and
         the answer decides whether the group D parallelism items are
@@ -1127,9 +1125,9 @@ under *Fixed bugs* above; this is everything else.
       env-gated study plus `dev/simstudy/run_study.R`, with
       checkpointing, `--resume`, `--caffeinate` and progress reporting.
     - **The run itself:** 10 scenarios x 100 replicates, 1000 fits, 0
-      failures, ~497 min on 5 cores, 155,578 interval checks. Run in two
-      parts: `base` alone (100 fits, 22.9 min, 27 July), then the other
-      9 cells (900 fits, 474 min, 28 July). Results in
+      failures, \~497 min on 5 cores, 155,578 interval checks. Run in
+      two parts: `base` alone (100 fits, 22.9 min, 27 July), then the
+      other 9 cells (900 fits, 474 min, 28 July). Results in
       `dev/simstudy/results/`, tabulated in `PLAN.md` §12.
 
     It found six defects -- three while the tests were being written,
