@@ -293,16 +293,16 @@ editor_options:
             removed Beta-approximation signature (`ab_p`, `K`, `primer`,
             `alpha`) instead of its actual arguments.
 
-    7.  **The two GAM covariate-effect functions have no `idx_species`
+    5.  **The two GAM covariate-effect functions have no `idx_species`
         default, so the obvious call fails.** `returnCovariateEffect()`
         and `plotCovariateEffect()` (added 29 July 2026) both declare
         `idx_species` with no default, so
         `returnCovariateEffect(fit, "X_psi.EnvCov.1")` errors instead
         of doing the natural thing. This is the same API gap as
-        `predictNewSites()` in item 5 above; fix both the same way, by
+        `predictNewSites()` in item 3 above; fix both the same way, by
         defaulting to all species.
 
-    8.  **`plotSpeciesResponseCurve()` is exported but has an internal
+    6.  **`plotSpeciesResponseCurve()` is exported but has an internal
         helper's signature.** It takes `species_name, target_cov,
         beta_mcmc_j, list_matrix, raw_df, n_points` -- raw MCMC pieces
         and a raw data frame, with no `fitModel` argument -- while
@@ -801,7 +801,7 @@ the *MEE paper* testing item is meant to address.
     were not**: `formals(predictNewSites)` shows `X_psi` and `X_s` still
     have no defaults at all, so `predictNewSites(fit, X_psi = X)` still
     fails on the missing `X_s` promise even when `useSpatial = FALSE`.
-    Residual tracked as **group B item 5**.
+    Residual tracked as **group B item 3**.
 
     Third entry in this list found to overstate a fix (with 16 and 20),
     which is the argument for the test suite: every one of these was
@@ -1016,6 +1016,30 @@ verified against the source rather than the commit message.
     Verified separately that the simulation harness gives identical
     output for a repeated replicate and different output across
     replicates.
+
+29. **The sparse-GP knot default no longer floors at 30 or crashes below
+    31 sites.** Filed 27 July 2026 (then group B item 3) after the
+    simulation study hit it; fixed by Alex in `42198d9`, unlogged.
+    Verified 29 July: `getDefaultSupportPoints()` (`R/jsdmfun.R:875`) is
+    now `min(floor(n * 0.2), n - 1)`. The old `max(30, floor(n * 0.2))`
+    fed `kmeans(X_s, centers = ps)` and so was a constant 30 for any
+    dataset below 150 sites -- roughly one knot per site at n = 31,
+    defeating the point of a sparse GP -- and errored outright below 31.
+    The `n - 1` cap is what removes the crash.
+
+30. **`ds = 0` no longer produces a null spatial field.** Filed 27 July
+    2026 (then group B item 4); fixed by Alex in `42198d9`, unlogged.
+    The simulator's cross-species spatial covariance used to collapse to
+    jitter at `ds = 0` -- measured `sd(spatField)` of 0.0019 against
+    ~1.0 at `ds = 2` -- so any scenario built at `ds = 0` was silently a
+    null-field test. Verified 29 July at seed 42: `sd(spatField)` is
+    0.598 at `ds = 0`, 0.467 at `ds = 1`, 0.678 at `ds = 2`. The study
+    grid still uses `ds = 2`, now by choice rather than necessity.
+
+    *Both of these were removed from group B by `42198d9` without a
+    Fixed-bugs entry, which is why they are recorded here late. The
+    check that caught it: `TODO.Rmd`'s group B numbering had a gap at 5
+    and 6.*
 
 ### **Completed**
 

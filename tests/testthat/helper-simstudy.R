@@ -17,13 +17,13 @@ SIMSTUDY_BASE <- list(
   model = "two_stage",
   n = 100L, S = 10L, M = 2L, P = 2L, K = 3L,
   g = 2L, gt = 2L, d = 2L,
-  # ds >= 1 is REQUIRED for a spatial field to exist at all. At ds = 0 the
-  # simulator's cross-species spatial covariance collapses to jitter
-  # (Sigma <- t(Lambda) %*% Lambda + diag(1e-5, S) with Lambda 0 x S), scaling
-  # the field by sqrt(1e-5) = 0.0032. Measured sd(spatField) at sigma_s = 0.5:
-  # 0.0019 at ds = 0 versus 1.01 at ds = 2. Every spatial cell would otherwise
-  # be testing against a null field -- the exact trap the audit flagged for
-  # Fixed bugs 7. See TODO.Rmd group B item 4.
+  # ds = 2 is now a choice, not a requirement. It used to be required: at
+  # ds = 0 the simulator's cross-species spatial covariance collapsed to
+  # jitter, giving sd(spatField) = 0.0019 against ~1.0 at ds = 2, so every
+  # spatial cell would have been testing against a null field. Fixed in
+  # 42198d9 (TODO.Rmd Fixed bugs 30); re-measured 29 July at seed 42, ds = 0
+  # now gives 0.598. Left at 2 so the grid keeps a clearly non-degenerate
+  # field and stays comparable with the 28 July run.
   ds = 2L,
   ncov_psi = 2L, ncov_theta = 1L,
   useSpatField = TRUE,
@@ -53,9 +53,9 @@ simstudy_scenarios <- function() {
     mk("spatial_isolated",  fit_traits = FALSE),
     mk("traits_isolated",   useSpatField = FALSE, n_supportpoints = NULL),
     mk("primers_3",         P = 3L),
-    # Low information: weak detection AND fewer sites. n_supportpoints must be
-    # set explicitly here or the default would crash below 31 sites
-    # (TODO.Rmd group B item 3).
+    # Low information: weak detection AND fewer sites. n_supportpoints is set
+    # explicitly; the default no longer crashes below 31 sites (TODO.Rmd Fixed
+    # bugs 29) but the study pins it regardless (PLAN.md 5.4).
     mk("low_information",   n = 40L, n_supportpoints = 8L,
                             p_range = c(0.1, 0.3),
                             theta_baseline_range = c(0.05, 0.2)),

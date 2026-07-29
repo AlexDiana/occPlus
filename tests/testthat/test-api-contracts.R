@@ -50,10 +50,12 @@ test_that("an unrecognised covariate name is rejected", {
 })
 
 test_that("n_supportpoints overrides the GP knot default", {
-  # The default, max(30, floor(n * 0.2)), crashes below 31 sites and is a flat
-  # 30 below 150 (TODO.Rmd group B item 3). The override is what makes small-n
-  # spatial fits possible at all, and the simulation study depends on it
-  # (PLAN.md 5.4), so it is worth a guard.
+  # The default used to be max(30, floor(n * 0.2)), which crashed below 31
+  # sites and was a flat 30 below 150. Fixed in 42198d9 -- it is now
+  # min(floor(n * 0.2), n - 1) (TODO.Rmd Fixed bugs 29) -- so this no longer
+  # guards a crash. Kept because the simulation study pins n_supportpoints
+  # rather than trusting any default (PLAN.md 5.4), and that override needs to
+  # keep working.
   sim <- simulate_fixture(model = "two_stage", n = 20L)
   expect_no_error(
     suppressMessages(suppressWarnings(

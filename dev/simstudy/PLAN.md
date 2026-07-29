@@ -154,7 +154,7 @@ The latent-factor model is invariant to rotation and sign. `reparamFactorModel()
 
 ### 5.4 The GP knot count must be pinned, not left to the default
 
-`getDefaultSupportPoints(n) <- max(30, floor(n * 0.2))` (`R/jsdmfun.R:480`) is a constant 30 for any dataset below 150 sites, and crashes below 31 (§10.1, and `TODO.Rmd` group B item 3).
+`getDefaultSupportPoints(n)` used to be `max(30, floor(n * 0.2))` — a constant 30 for any dataset below 150 sites, and a crash below 31 (§10.1). Fixed in `42198d9`; it is now `min(floor(n * 0.2), n - 1)` (`R/jsdmfun.R:875`, `TODO.Rmd` Fixed bugs 29). The study pins `n_supportpoints` anyway rather than trusting any default.
 
 Two consequences for the design, beyond the crash. The knot count would be **uncontrolled but not constant** across cells — identical for `n = 40` and `n = 140`, then suddenly proportional above 150 — so any difference attributed to `n` would be partly an artefact of the spatial approximation changing underneath. And at small `n` it approaches one knot per site, which is a qualitatively different (denser) approximation than at `n = 100`, precisely in the low-information cell where calibration is most at risk.
 
@@ -172,7 +172,7 @@ Two cores maximum (`_R_CHECK_LIMIT_CORES_`). Tier 3's replicate-level parallelis
 
 Base = `two_stage`, traits on, spatial on, `d = 2`, **`ds = 2`**, `n = 100`, `S = 10`, `M = 2`, `P = 2`, `K = 3`, `n_supportpoints = 20`.
 
-`ds >= 1` is required or there is no spatial field at all: at `ds = 0` the simulator's cross-species spatial covariance collapses to jitter and `sd(spatField)` is 0.0019 rather than \~1.0 (`TODO.Rmd` group B item 4). The grid used `ds = 0` until 27 July, which would have made every spatial cell a null-field test — the exact trap the audit flagged for Fixed bugs 7.
+`ds >= 1` *used to be* required or there was no spatial field at all: at `ds = 0` the simulator's cross-species spatial covariance collapsed to jitter, `sd(spatField)` = 0.0019 rather than \~1.0. The grid used `ds = 0` until 27 July, which made every spatial cell a null-field test — the exact trap the audit flagged for Fixed bugs 7. Fixed in `42198d9` (`TODO.Rmd` Fixed bugs 30); re-measured 29 July, `ds = 0` now gives 0.598. The grid stays at `ds = 2` by choice, for a clearly non-degenerate field and comparability with the 28 July run.
 
 Every spatial cell sets `n_supportpoints` explicitly (§10.1). Left to the default it is a constant 30 for any `n` below 150, so it would neither scale with `n` nor be a controlled factor — and below 31 sites it crashes outright.
 
@@ -301,7 +301,7 @@ Also: pooling coverage across species within a block buys precision, but those i
 
 1.  ~~*OPEN, blocking tier 3.***Minimum `n` for spatial cells.**~~ **RESOLVED 27 July 2026, and no longer blocking.** Measured: the floor is **31 unique locations** with default settings. `n <= 29` fails with `cannot take a sample larger than the population`, `n = 30` with `number of cluster centres must lie between 1 and nrow(x)`, `n >= 31` runs.
 
-    Cause: `getDefaultSupportPoints(n) <- max(30, floor(n * 0.2))` (`R/jsdmfun.R:480`) feeds `kmeans(X_s, centers = ps)`, and the hard-coded 30 wins for every dataset under 150 sites, so the knot count never scales down. Filed as a bug — **`TODO.Rmd` group B item 3** — since the default is also statistically wrong well before it crashes (30 knots for 31 sites is \~1 knot per site, defeating the point of a sparse GP).
+    Cause: `getDefaultSupportPoints(n) <- max(30, floor(n * 0.2))` (`R/jsdmfun.R:480`) feeds `kmeans(X_s, centers = ps)`, and the hard-coded 30 wins for every dataset under 150 sites, so the knot count never scales down. Filed as a bug and **since fixed** (`42198d9`, `TODO.Rmd` Fixed bugs 29) — the default was also statistically wrong well before it crashed (30 knots for 31 sites is \~1 knot per site, defeating the point of a sparse GP). Now `min(floor(n * 0.2), n - 1)`.
 
     **Consequence for this plan:** cell 5 must set `listParams$n_supportpoints` explicitly rather than relying on the default. Verified working at `n = 20` with 6 knots. Pinning the knot count is the right call for a study cell anyway — it stops the spatial approximation silently changing with `n` across scenarios, which would otherwise confound the low-information comparison. Apply the same reasoning to **every** spatial cell (1, 2, 4–10), not just cell 5: set `n_supportpoints` per scenario so it is a controlled factor rather than a function of `n`.
 
