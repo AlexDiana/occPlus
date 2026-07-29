@@ -29,7 +29,7 @@ The `threshold` argument to `runOccJSDM()` controls how `OTU` is interpreted: `t
 
 ## Known issues in existing code
 
-**THREE GROUP A (INFERENCE-AFFECTING) ITEMS REMAIN, as of 29 July 2026.** Down from six. Alex's 28-29 July pulls fixed three (`sigma_h`, the collection-covariate prior mean, the OpenMP RNG race) and wired a fourth; a fifth turned out not to be a defect at all. `TODO.Rmd`'s **Fixed bugs** section is the authoritative record. Currently open in group A:
+**SIX GROUP A (INFERENCE-AFFECTING) ITEMS REMAIN, as of 29 July 2026.** Three were open before the re-run; the 29 July R = 100 re-run added three more (items 4-6: `beta_theta`'s residual undercoverage, `theta0` overcovering, and `B0`'s doubled bias). Alex's 28-29 July pulls fixed three earlier ones and wired a fourth; a fifth turned out not to be a defect. Alex's 28-29 July pulls fixed three (`sigma_h`, the collection-covariate prior mean, the OpenMP RNG race) and wired a fourth; a fifth turned out not to be a defect at all. `TODO.Rmd`'s **Fixed bugs** section is the authoritative record. Currently open in group A:
 
 - **`sample_ls()` evaluates the wrong density, so the GP length-scale is never recovered** (TODO.Rmd A.1). Found 27 July while writing the tier-1 tests. `idx_ls` walks to the top of `l_s_grid` and stays there for every true `l_s` tried, across seeds. Biases every `useSpatField = TRUE` fit. **Note the diagnosis changed**: this was originally filed as "`sigma_s` is never sampled", with a proposed fix of sampling it. That diagnosis was wrong and the fix is disproven -- the defect is in the density being scored, which is a modelling change, not a parameter addition. See TODO.Rmd A.1 "What was ruled out".
 - **`reparamFactorModel()` breaks the identity that residual covariance = `t(L) %*% L`** (TODO.Rmd A.2), inflating reported species correlations. **Disputed by Alex** -- see "Open disagreement" under Current work status.
@@ -114,6 +114,18 @@ Not ported: `compare_to_true()`/`plot_estimated_vs_true()` from GLGS-eDNA, since
 `man/*.Rd` files are currently tracked and committed in git (not gitignored), despite an earlier commit (`dd158a9`, prior to this session) whose message claimed intent to "stop generating/tracking man/\*.Rd" -- that intent was never followed through in `.gitignore`. Regenerating docs via `devtools::document()` after adding/changing roxygen tags will produce `man/*.Rd` diffs that should be committed (or the gitignore situation resolved) deliberately.
 
 ## Current work status
+
+- **This session, later on July 29 2026: re-ran the full R = 100 study post-fix. 1000 fits, 10 cells, 0 failures, 285 min.** Results in `PLAN.md` §12; the pre-fix table is retained at §12.6.
+
+  **It is a paired comparison, which is the single most useful property of this run.** `draw_truth()` seeds on (scenario, replicate), so the simulated data and true values are bit-identical between the pre- and post-fix runs -- verified, `max|truth difference| = 0`. Every difference is attributable to the code, not to sampling variation between runs. **Do not change `simstudy_seed()`**: doing so forfeits comparability with both existing runs, and with it statements like "only 104 of 49,978 `resid_cor` decisions flipped".
+
+  **Scorecard.** `beta_theta` improved but is not fixed (0.719 -> 0.766, bias +0.112 -> +0.038): Alex's prior-mean correction was a real cause but not the only one, and the residue is still flat across every design axis. `resid_cor` is untouched (0.775 -> 0.777, 104/49,978 decisions flipped) -- that is `reparamFactorModel()`, unfixed and disputed, and the paired design makes the evidence much harder to dismiss than before. `p` is unchanged and correctly so: `low_information` at 0.109 is the cost of the identifiability constraint, not a defect.
+
+  **Two new findings, both filed as group A.** `B0`'s bias roughly doubled in nine of ten cells (-0.135 -> -0.228) while **coverage stayed at 0.943** -- invisible in the headline table, visible only in the bias column, which is the argument for tracking both. Nothing in the four fixes should move species intercepts; the likeliest candidate is the 421-line `jsdmfun.R` rewrite in the same pull. And `theta0` flipped from near-nominal to overcovering at 0.978-0.985, probably the widened `diag(2)` prior variance overshooting -- same edit as the `beta_theta` residue, so worth examining together.
+
+  **Timing correction.** 285 min for 1000 fits on 5 cores, flat throughput throughout. The 474 min recorded for the 28 July grid was wall time inflated by the laptop sleeping; its compute rate was the same ~4 fits/min. I had carried that inflated figure into `PLAN.md` as "measured, not projected" and built a ~8 h estimate on it -- wrong, and the kind of error that comes from reusing a number without re-reading the trace it came from. **Throughput is not a reliable throttling detector either**: cpu/wall stays flat under throttling, because a throttled core still accrues a CPU-second per wall-second. Only fits/min reveals it.
+
+  Also fixed this session: `plotCollectionRates()`, which errored on every input (Fixed bugs 31) and is called from an evaluated vignette chunk -- so the vignette has been unbuildable, a CRAN blocker. Filed for Alex's review as to-do item 3, alongside the RNG fix as item 2.
 
 - **This session (July 29 2026): augmented the test suite, then fixed the reproducibility bug it exposed.** 95 -> 112 tier-1 tests. No study re-run yet.
 

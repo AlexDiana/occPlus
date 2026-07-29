@@ -28,9 +28,9 @@ Six levels, cheapest first. Times are wall clock on Doug's machine and include \
 | Exactly what CRAN runs | `NOT_CRAN=false Rscript -e 'devtools::test()'` | \~16 s | tier 1 only |
 | Full package check | `Rscript -e 'devtools::check()'` | minutes | tests + examples + vignettes + `R CMD check` |
 | One study cell | `Rscript dev/simstudy/run_study.R --cores=5 --scenarios=base --caffeinate` | \~50 min | tier 3, one cell at R = 100 |
-| Full study | `Rscript dev/simstudy/run_study.R --cores=5 --caffeinate` | \~8 h | tier 3, all 10 cells at R = 100 |
+| Full study | `Rscript dev/simstudy/run_study.R --cores=5 --caffeinate` | \~4.75 h | tier 3, all 10 cells at R = 100 |
 
-Study times are **measured**, not projected: the grid took 474 min for 9 cells (900 fits, 0 failures) on 28 July, after `base` had been run on its own the day before (100 fits, 22.9 min). All 10 cells in one go is therefore \~497 min, i.e. the \~8 h in the table. An earlier version of this table said `--cores=8` and \~2.4 h, which was a guess and roughly 3x optimistic. On a fanless MacBook Air, 5 cores is the practical ceiling; use `--caffeinate` for anything over an hour, because a run that sleeps mid-way is easy to misread as thermal throttling (it was, once — check the cpu/wall ratio in the progress line, which makes sleep unmistakable). `--resume` picks a run back up from the last checkpoint.
+Study times are **measured**, not projected: the 29 July run did all 10 cells, 1000 fits, in **285 min** on 5 cores. Ignore the 474 min recorded for the 28 July grid — that wall time was inflated by the laptop sleeping mid-run; its compute rate was the same \~4 fits/min. Throughput is flat across the whole run, so the cost scales linearly in R. An earlier version of this table said `--cores=8` and \~2.4 h, which was a guess and roughly 3x optimistic. On a fanless MacBook Air, 5 cores is the practical ceiling; use `--caffeinate` for anything over an hour, because a run that sleeps mid-way is easy to misread as thermal throttling (it was, once — check the cpu/wall ratio in the progress line, which makes sleep unmistakable). `--resume` picks a run back up from the last checkpoint.
 
 **`devtools::test()` is the day-to-day command** — run it after any change to `R/` or `src/`. In RStudio, Cmd+Shift+T. `filter` is a regex on the filename minus the `test-` prefix; the tier-1 files are `smoke`, `regression` and `api`.
 
@@ -315,21 +315,72 @@ Also: pooling coverage across species within a block buys precision, but those i
 
 ------------------------------------------------------------------------
 
-## 12. Results of the full run (28 July 2026)
+## 12. Results of the full run (29 July 2026, post-fix)
 
-> **These results predate Alex's `42198d9`/`e60e3ad` (28-29 July), which fixed
-> three of the defects the study found.** The table below therefore describes
-> the *pre-fix* code. `sigma_h` is now sampled, the collection-covariate prior
-> mean is corrected to 0, and the OpenMP RNG hole is closed -- all of which
-> change fitted values, so the `beta_theta` row in particular should improve on
-> a re-run. Two findings are unaffected and still stand: `resid_cor`
-> (`reparamFactorModel()` unchanged) and `p` (the `Beta(5, 1)` *default*
-> unchanged, though the hyperparameters are now settable via `listPriors`).
->
-> **Re-running is the outstanding item** -- and it is now the evidence that
-> Alex's fixes worked, not merely a repeat.
+1000 replicates, 10 scenarios, 0 failures, **285 min** on 5 cores. 155,578 individual interval checks. Commit `8af22cd`. Coverage SE at R = 100 is 2.2 points, so treat anything in 0.93–0.97 as indistinguishable from nominal.
 
-1000 replicates, 10 scenarios, 0 failures, \~497 min on 5 cores. 155,578 individual interval checks. Run in two parts -- `base` on 27 July (100 fits, 22.9 min), the other 9 cells on 28 July (900 fits, 474 min) -- because `base` was run first to settle the open question in §10.3 before committing to the grid. Coverage SE at R = 100 is 2.2 points, so treat anything in 0.93-0.97 as indistinguishable from nominal.
+**This is a paired comparison with the 28 July pre-fix run.** `draw_truth()` seeds on (scenario, replicate), so the simulated data and true values are *bit-identical* between the two runs — verified, `max|truth difference| = 0`. Every difference below is attributable to the code, not to sampling variation between runs. That is a much stronger design than two independent runs would give, and it is worth preserving: **do not change `simstudy_seed()`**, or future runs lose comparability with these.
+
+| Block | base | spat | trait | prim3 | lowinfo | d-under | d-over | S=20 | occ | bin |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `B0` | 0.948 | 0.943 | 0.942 | 0.954 | **0.862** | 0.958 | 0.950 | 0.951 | 0.953 | 0.962 |
+| `B` | 0.947 | **0.883** | 0.916 | 0.942 | **0.826** | 0.936 | 0.939 | 0.933 | 0.947 | 0.952 |
+| `G` | 0.948 | -- | 0.945 | *0.975* | **0.840** | 0.953 | 0.955 | 0.925 | *0.970* | 0.938 |
+| `beta_theta` | **0.763** | **0.762** | **0.771** | **0.718** | *0.983* | **0.750** | **0.752** | **0.727** | **0.709** | -- |
+| `theta0` | *0.983* | *0.983* | *0.978* | *0.985* | **0.602** | *0.980* | *0.981* | *0.982* | *0.985* | -- |
+| `p` | 0.902 | 0.911 | 0.900 | 0.925 | **0.109** | 0.913 | 0.919 | 0.908 | -- | -- |
+| `q` | 0.945 | 0.947 | 0.949 | 0.937 | 0.911 | 0.946 | 0.943 | 0.950 | -- | -- |
+| `resid_cor` | **0.763** | **0.758** | **0.758** | **0.768** | **0.764** | *0.980* | **0.755** | **0.752** | **0.761** | **0.752** |
+| `sigma_b` | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* |
+
+**Bold = undercovers. Italic = overcovers. `--` = not estimated in that cell.**
+
+### 12.1 What the fixes changed
+
+Averaged over all cells, pre-fix → post-fix:
+
+| Block | Coverage | Bias | Verdict |
+|---|---|---|---|
+| `beta_theta` | 0.719 → **0.766** | +0.112 → **+0.038** | improved, not fixed |
+| `theta0` | 0.901 → 0.944 | −0.020 → −0.004 | moved, see 12.3 |
+| `resid_cor` | 0.775 → 0.777 | +0.006 → +0.002 | **unchanged** |
+| `p` | 0.821 → 0.827 | +0.087 → +0.086 | unchanged, as expected |
+| `B0` | 0.947 → 0.943 | −0.135 → **−0.228** | **bias doubled** |
+| `B`, `G`, `q` | ~0.92–0.94 | ~0 | stable |
+
+1.  **`beta_theta` improved but is not fixed.** Every cell gained 0.03–0.05, and two-thirds of the bias is gone. Alex's correction of the collection-covariate prior mean from 1 to 0 was a real cause — but not the only one, because 0.766 against nominal 0.95 is still far out. **This is now the clearest open target in group A.** Whatever remains is structural: it is flat across model type, primer count, species count and factor misspecification, exactly as the pre-fix version was.
+
+2.  **`resid_cor` is untouched, and the paired design makes that conclusive.** Only **104 of 49,978** coverage decisions flipped. Identical data, identical truth, coverage unmoved at 0.777. This is `reparamFactorModel()` (group A item 2), which is unfixed and currently disputed. The `d_underfit` exception persists exactly as before: *over*covering at 0.980, because under-fitting the ordination widens intervals enough to mask the bias.
+
+3.  **`p` is unchanged, and that is the correct outcome.** `low_information` sits at 0.109. The informative `Beta(5, 1)` is load-bearing for identifiability — `p` and `q` enter `sample_pq_cpp()` symmetrically, so the prior is what selects the mode (TODO.Rmd group A item 3). This cell measures the *cost of that constraint* when true `p` is 0.1–0.3. It is not a defect to be fixed by flattening the prior.
+
+### 12.2 New finding: `B0` bias roughly doubled
+
+Nine of ten cells moved more negative: base −0.113 → −0.208, `occupancy` −0.024 → −0.151, `primers_3` −0.031 → −0.151, `low_information` −0.931 → −1.056. Only `binary` moved the other way (−0.002 → +0.012).
+
+**Coverage does not reveal this** — it holds at 0.943 because the intervals are wide enough to absorb the shift. It is visible only in the bias column, which is the argument for tracking both.
+
+Nothing in the four fixes should move species intercepts this way. The likeliest candidate is the 421-line `jsdmfun.R` rewrite that shipped in the same pull (`42198d9`). Species intercepts are a headline quantity for a JSDM, so this needs a cause before the paper uses `B0`. An R = 8 probe on 29 July hinted at it; R = 100 confirms it.
+
+### 12.3 New finding: `theta0` now overcovers
+
+The all-cell average of 0.944 is misleading. Per cell it is **0.978–0.985 in nine cells** (was 0.938–0.959) and **0.602 in `low_information`** (was 0.477). So it moved from mildly under to distinctly over, except where information is thin.
+
+Overcoverage is the safe direction, but the pattern suggests the widened `diag(2)` prior variance on the collection coefficients overshot. Worth a look alongside item 1 above, since both trace to the same edit.
+
+### 12.4 What holds
+
+`q`, `B0`, `B` and `G` are at or near nominal in every cell except `low_information`. The quantities most likely to be reported in an ecology paper remain trustworthy — with the `B0` bias caveat in 12.2, which affects the point estimate rather than the interval.
+
+`low_information` is still compromised across the board (`theta0` 0.602, `p` 0.109, `B` 0.826, `G` 0.840, `B0` bias −1.06). Users with small or low-detection datasets remain the most exposed.
+
+### 12.5 Caveats that travel with this table
+
+`l_s` and `sigma_h` are absent because neither is recoverable (group A item 1), so **no cell says anything about spatial range**. `sigma_b` reads 1.000 everywhere because it is prior-dominated by construction (§5.3), not because it is well estimated. Differences below 2.2 points are noise.
+
+### 12.6 The superseded pre-fix table (28 July 2026)
+
+Kept because the *delta* is the evidence that the fixes worked, not the level. Run in two parts — `base` on 27 July (100 fits, 22.9 min), the other 9 cells on 28 July (900 fits, 474 min wall, inflated by the laptop sleeping mid-run).
 
 | block | base | spat.isol | trait.isol | primers3 | low.info | d.under | d.over | sp20 | occ | binary |
 |----|----|----|----|----|----|----|----|----|----|----|
@@ -342,26 +393,6 @@ Also: pooling coverage across species within a block buys precision, but those i
 | `resid_cor` | **0.763** | **0.758** | **0.757** | **0.768** | **0.764** | *0.980* | **0.739** | **0.752** | **0.761** | **0.746** |
 | `sigma_b` | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* |
 | `theta0` | 0.941 | 0.947 | 0.941 | 0.954 | **0.477** | 0.959 | 0.938 | 0.949 | 0.959 | -- |
-
-**Bold = undercovers. Italic = overcovers. `--` = not estimated in that cell.**
-
-### What holds
-
-`G` (fourth-corner), `q` (Stage 2 false positives), `B0` and `B` are at or near nominal in every cell except `low_information`. The quantities most likely to be reported in an ecology paper are trustworthy as they stand.
-
-### What does not, and why
-
-1.  **`beta_theta`, 0.676-0.730, every cell.** Flat across model type, primer count, species count and factor misspecification -- structural, not conditional. Cause: group A item 3, prior mean 1 on the collection slopes. Note `low_information` is *better* (0.860), consistent with a fixed prior pull mattering relatively less when the data are weak enough that everything is uncertain.
-
-2.  **`resid_cor`, 0.74-0.77, nine of ten cells.** Cause: group A item 4, `reparamFactorModel()` breaking the identity that residual covariance = `t(L) %*% L`. **The exception is diagnostic**: `d_underfit` (truth 4 factors, fitted 2) *over*covers at 0.980, so under-fitting the ordination widens the intervals enough to mask the bias. The defect's visible severity therefore depends on the fitted factor dimension.
-
-3.  **`p` collapses to 0.103 in `low_information`**, bias +0.49, while sitting at 0.90-0.92 elsewhere. That cell has true `p` in 0.1-0.3 against the hard-coded `Beta(5, 1)` prior mean of 0.833. Cause: group A item 6. This is the study's most severe single result and it lands precisely in the low-detection regime the package exists to serve.
-
-4.  **`low_information` is compromised across the board** -- `theta0` 0.477, `B0` bias -0.93, `B` 0.854, `G` 0.880. When data are thin the priors dominate, and several of those priors are wrong. Any user with a small or low-detection dataset is most exposed to exactly the defects above.
-
-### Caveats that travel with this table
-
-`l_s` and `sigma_h` are absent because neither is recoverable (group A items 1 and 2), so **no cell says anything about spatial range**. `sigma_b` reads 1.000 everywhere because it is prior-dominated by construction (§5.3), not because it is well estimated. Differences below 2.2 points are noise.
 
 ------------------------------------------------------------------------
 
