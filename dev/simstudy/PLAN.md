@@ -774,3 +774,132 @@ sleeping mid-run).
     but it means the re-run should be read for regressions from Alex's
     421-line `jsdmfun.R` rewrite as well as for the intended
     improvements.
+
+------------------------------------------------------------------------
+
+## 13. The M ladder: are B4-B6 defects, or Stage 1 under-identification?
+
+**Status: planned, not yet run.** Commissioned by Doug, 29 July 2026, as
+the next step on `TODO.md` group B items 4, 5 and 6, each of which is
+annotated CLAUDE TO RUN SIMULATION STUDY WITH M > 10 AND SEE IF IT FIXES
+IT.
+
+### 13.1 The hypothesis, and why one lever could explain three findings
+
+All three open findings sit downstream of the *field-collection* stage,
+and the grid has only ever been run at `M = 2` samples per site:
+
+- **B4**, `beta_theta` undercovering at 0.766, is a Stage 1 covariate
+  slope.
+- **B5**, `theta0` overcovering at 0.978-0.985, is the Stage 1
+  species-specific baseline.
+- **B6**, `B0` bias doubling to -0.228, is the occupancy intercept --
+  which is inferred *through* the latent collection state `w`, so it
+  inherits whatever Stage 1 gets wrong.
+
+At `M = 2` there are two Bernoulli collection draws per site-species,
+observed only indirectly through PCR detections, from which the sampler
+must identify a species baseline *and* covariate slopes *and* the latent
+`w` that `z` then depends on. That is very little information, and it is
+a plausible single cause for all three: weak identification inflates the
+prior's influence, which produces exactly the observed signature --
+slopes too confident, baselines too diffuse, and an occupancy intercept
+biased toward under-inferred occupancy (negative, as measured).
+
+**If true, this is not a bug.** It is a design requirement: the model
+needs `M` above some threshold before Stage 1 is identified. That is a
+documentation and paper item rather than a code fix, and an important
+one, because `M = 2` to `3` is entirely realistic in eDNA practice.
+
+### 13.2 Design
+
+A **ladder**, not a single M > 10 point. One high-M run answers "fixed
+or not"; a ladder answers "fixed, and from where" -- and distinguishes a
+deviation that decays smoothly toward nominal (information-limited) from
+one that plateaus at a non-nominal level (a real defect that more data
+cannot reach).
+
+| Arm | M | K | Rows | Purpose |
+|-----|---|---|------|---------|
+| `M2`  | 2  | 3  | 1200  | Reproduces the current base cell; internal check |
+| `M5`  | 5  | 3  | 3000  | Is the improvement already underway? |
+| `M10` | 10 | 3  | 6000  | Doug's threshold |
+| `M20` | 20 | 3  | 12000 | Comfortably past it |
+| `K30` | 2  | 30 | 12000 | **Control** -- matched rows, wrong stage |
+
+**`K30` is what makes the result interpretable.** Raising `M` raises the
+total observation count, so if everything improves, the naive reading
+"more data helps" is unfalsifiable. `K30` holds the row count identical
+to `M20` but spends it on PCR replicates -- Stage 2 -- instead of field
+samples. If `M20` fixes the three findings and `K30` does not, the
+mechanism is specifically Stage 1 identification. If both fix them, it
+is merely sample size, and the conclusion is much weaker.
+
+Base cell only: all three findings are flat across the other nine cells,
+so one cell isolates the mechanism at a tenth of the cost.
+
+`R = 50`, not 100. The gap under test is 0.77 against 0.95 -- 18 points,
+or about 6 SE at R = 50 (SE 3.1%). That is ample to see a return to
+nominal. Re-run the decisive arm at R = 100 only if a number lands
+ambiguously near 0.93.
+
+### 13.3 Cost (measured 29 July, not projected)
+
+Per fit at the study's `nburn = 1000 + niter = 1000`, extrapolated from a
+200-iteration timing on this machine:
+
+| M | s/fit | R = 50 on 5 cores |
+|---|-------|-------------------|
+| 2  | 40  | \~8 min  |
+| 5  | 64  | \~13 min |
+| 10 | 100 | \~20 min |
+| 20 | 179 | \~36 min |
+
+Plus `K30` at roughly the `M20` cost. **Total \~1.9 h.** Note the cost
+scales *sub*-linearly in rows -- M = 20 is 4.5x M = 2, not 10x -- because
+much of the per-iteration work is over species and sites, not samples.
+
+### 13.4 What each outcome means
+
+Decided in advance, so this is a test rather than a fishing trip.
+
+| Outcome | Reading | Action |
+|---------|---------|--------|
+| All three approach nominal as M rises; `K30` does not | Stage 1 under-identification. Not defects. | Close B4-B6 as "not a bug". Document the `M` requirement, and state it in the MEE paper -- it is a real limitation for `M = 2` eDNA designs. |
+| B4/B5 recover, B6's bias persists | Two causes. Stage 1 explains the coverage findings; `B0` is a separate regression. | Close B4/B5; keep B6 open and go after the `jsdmfun.R` rewrite. |
+| Nothing improves, even at M = 20 | Genuine code defects; `M` is not the lever. | Keep all three open. Next suspect is the widened `diag(2)` prior variance, which is the common edit behind B4 and B5. |
+| `M20` and `K30` improve equally | Sample size, not Stage 1. | Weak conclusion; the finding is that all three are information-sensitive. Re-think the design before spending more. |
+
+### 13.5 Implementation
+
+No machinery change needed: `M` and `K` are already scenario fields, and
+`mk()` overrides `SIMSTUDY_BASE` by name.
+
+1.  Add the five arms to `simstudy_scenarios()` in `helper-simstudy.R`,
+    behind their own labels so `--scenarios=M2,M5,M10,M20,K30` selects
+    them and the ten production cells are untouched.
+2.  Sanity-run at `R = 4` across all five arms (\~10 min) to confirm the
+    arms fit and the row counts are as expected, before committing the
+    real run.
+3.  `Rscript dev/simstudy/run_study.R --scenarios=M2,M5,M10,M20,K30 --R=50 --cores=5 --caffeinate`
+4.  Report coverage **and bias** for `beta_theta`, `theta0` and `B0`,
+    plus the remaining blocks to confirm nothing degrades.
+
+**Check first:** the `M2` arm should agree with the existing base cell
+(`beta_theta` 0.763, `theta0` 0.983, `B0` bias -0.208) within its SE.
+Its seeds differ -- `simstudy_seed()` keys on the label -- so it will not
+reproduce them exactly, but a disagreement beyond about 2 SE would mean
+the ladder is measuring something other than what it claims, and should
+be resolved before reading the rest.
+
+### 13.6 Caveats
+
+`M` and the number of *sites* are not interchangeable. This ladder holds
+`n = 100` fixed and varies samples per site, which is the quantity Stage
+1 is identified by. It says nothing about whether more sites would help,
+and should not be quoted as if it did.
+
+Raising `M` also raises the number of latent `w` states being sampled, so
+mixing may differ across arms. If a high-M arm shows worse mixing rather
+than better coverage, check `returnConvergenceDiagnostics()` before
+concluding anything about identification.
