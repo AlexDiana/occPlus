@@ -494,8 +494,6 @@ editor_options:
         variation partitioning (see Leibold et al., Cai et al.).
         Consider calling it **variation** partitioning.
 
-<!-- -->
-
 2.  Doug to dos
 
     1.  **reproduce all Ecoletts results as a test of the package and
