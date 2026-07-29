@@ -1065,3 +1065,42 @@ result into a box it does not fit.
 
 R = 50, for the same reason as 13.2: adequate to detect a move, not to
 confirm arrival at nominal.
+
+------------------------------------------------------------------------
+
+## 13.9 Results: tighter prior did not move `beta_theta` (30 July 2026)
+
+**Run:** 100 fits, R = 50, 97 min, 0 failures.
+
+| | M10 (var=2) | M10 (var=0.5) | M20 (var=2) | M20 (var=0.5) |
+|---|---|---|---|---|
+| `beta_theta` coverage | 0.603 | 0.600 | 0.579 | 0.578 |
+| `beta_theta` bias | +0.027 | +0.026 | +0.017 | +0.017 |
+
+**The hypothesis from 13.7 is disproved.** A 4x reduction in prior
+variance (SD 1.41 -> 0.71) moved coverage by 0.001-0.003 -- noise
+against the 3.1% SE. Every other block (`theta0`, `B0`, `B`, `G`, `q`,
+`resid_cor`) was likewise unmoved, confirming the change was isolated
+and had no side effects worth reporting. `B_betatheta`'s width is not
+what makes the interval overconfident.
+
+**A second candidate was checked and is also dead.** Before writing this
+up, checked whether added M-samples might be pseudo-replicated -- i.e.
+whether `X_theta` repeats within a site, which would make more M look
+like independent information without actually being any. It does not:
+`X_theta <- cbind(1, matrix(rnorm(N * ncov_theta), N, ncov_theta))`
+(`R/simulateData.R:126`) draws the covariate independently per *sample*,
+not per site. So the narrowing interval is not a design-matrix artefact
+either.
+
+**Where this leaves item 4.** Two plausible mechanisms are now ruled
+out: the prior is not too tight, and the covariate is not
+pseudo-replicated. The overconfidence has to come from somewhere in the
+likelihood or the sampler's variance computation for `beta_theta` --
+plausibly how the latent collection state `w` (or `z`) is aggregated
+across a site's M samples, or a genuine numerical issue in the
+Polya-Gamma update. That is a C++/sampler-level investigation, not
+another prior-tuning experiment, and is a job for whoever wrote
+`sample_beta_cpp_TS`/`sample_betatheta_cpp_parallel`, not a further
+simulation-study pass. Recorded in `TODO.md` rather than pursued further
+here.

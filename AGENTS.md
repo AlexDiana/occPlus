@@ -518,6 +518,57 @@ the gitignore situation resolved) deliberately.
 
 ## Current work status
 
+- **This session, 30 July 2026: tested the M-ladder's leading
+  hypothesis directly, and it failed.** Doug's follow-up to the M
+  ladder: re-run beta_theta at high M with a tighter slope prior,
+  since 13.7 pointed at B_betatheta's diag(2) variance as the likely
+  cause of coverage worsening with M. 100 fits, R = 50, 97 min, 0
+  failures (`PLAN.md` 13.8-13.9).
+
+  **Result: no effect.** Tightening the slope variance 4x (SD 1.41 ->
+  0.71) moved beta_theta coverage by 0.001-0.003 at both M10 and M20 --
+  noise against the 3.1% SE. Every other block was equally unmoved,
+  confirming the change was clean and isolated. The prior's width is
+  not what makes the interval overconfident.
+
+  **Checked a second candidate before writing this up, and it is also
+  dead**: whether the M samples at a site share a covariate value
+  (pseudo-replication), which would make added M look like independent
+  information without being any. `X_theta` is drawn independently per
+  sample, not per site (`R/simulateData.R:126`), so that is not it
+  either.
+
+  **Where this leaves item 4.** Two plausible mechanisms ruled out in
+  two days. The overconfidence has to be in the likelihood or the
+  sampler's variance computation for beta_theta -- how the latent
+  w/z state is aggregated across a site's M samples, or a numerical
+  issue in the Polya-Gamma update. That is a C++/sampler
+  investigation, filed for Alex rather than pursued further by more
+  simulation.
+
+  **Added a real capability along the way**:
+  `listPriors$b_betatheta_slope_var` (`R/runOccJSDM.R`), which did not
+  exist before -- this prior was hard-coded with no override, unlike
+  p/q/theta0. Default unchanged at 2, so nothing changes unless a
+  caller sets it. Verified it actually reaches the sampler before
+  trusting the null result: refit one dataset under both priors with a
+  short chain, holding data and seed fixed, and the slope posterior
+  spread shrank under the tighter setting. Also caught and fixed a bug
+  in my own first version of that test: it used `fit_fixture()`, which
+  never passes `collCovariates`, so the fixture fits an intercept-only
+  Stage 1 and there is no slope row for the override to touch --
+  `sd()` of an empty array is `NA`, and `NA >= NA` fails silently
+  rather than loudly. Fixed by building a custom `runOccJSDM()` call
+  with `collCovariates = "X_theta"`, matching what `simstudy_fit()`
+  already does.
+
+  **A negative result, stated plainly rather than reframed as
+  progress**: the cause of item 4 is not identified. Both experiments
+  ruled things out; neither found the answer. Worth recording as-is,
+  since the alternative -- searching for a way to call this an
+  advance -- would misrepresent where the investigation actually
+  stands.
+
 - **This session, later still on July 29 2026: ran the M ladder Doug
   commissioned for group B items 4-6.** 250 fits, R = 50, 189 min, 0
   failures. Validity check passed: the `M2` arm agrees with the

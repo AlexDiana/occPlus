@@ -371,11 +371,30 @@ editor_options:
     the signature of a real defect being *exposed* by more information,
     not resolved by it. More field samples make this worse, so the next
     step is not more data but finding what makes the interval
-    overconfident -- most likely the same `diag(2)` prior-variance
-    widening implicated in item 5 below, which may need revisiting
-    rather than extending.
+    overconfident.
 
-    ALEX TO REVIEW: this needs a different fix than "wait for more M".
+    **Tighter-prior result, 30 July 2026 (`PLAN.md` 13.9): disproved.**
+    Tested the `diag(2)` slope-variance hypothesis directly -- added a
+    `listPriors$b_betatheta_slope_var` override (`R/runOccJSDM.R`,
+    default unchanged at 2) and re-ran M10/M20 at variance 0.5 (SD 0.71
+    against the default's 1.41). Coverage moved by 0.001-0.003 --
+    noise. **The prior's width is not the cause.**
+
+    Also checked and ruled out: pseudo-replication in `X_theta`, i.e.
+    whether the M samples at a site share a covariate value, which
+    would make added M look like independent information without being
+    any. It does not -- `X_theta` is drawn independently per sample
+    (`R/simulateData.R:126`), not per site.
+
+    **So the overconfidence is in the likelihood or the sampler's
+    variance computation for `beta_theta`, not the prior.** Candidates:
+    how the latent `w`/`z` state is aggregated across a site's M
+    samples, or a numerical issue in the Polya-Gamma update
+    (`sample_beta_cpp_TS`/`sample_betatheta_cpp_parallel`,
+    `src/functions.cpp`). This needs someone who knows that code, not
+    another prior-tuning experiment.
+
+    ALEX TO INVESTIGATE: the sampler, not the prior.
 
 5.  **`theta0` now overcovers at 0.978-0.985, having been near
     nominal.** Measured by the same re-run (`PLAN.md` 12.3).

@@ -351,3 +351,37 @@ test_that("plotCollectionRates() rejects a model with no collection stage", {
   expect_error(plotCollectionRates(fixture_continuous()),
                "collection-stage")
 })
+
+test_that("listPriors$b_betatheta_slope_var actually reaches the sampler", {
+  # Added 29 July 2026 to test whether beta_theta's slope prior variance was
+  # the cause of coverage worsening with M (PLAN.md 13.7-13.9). It was not --
+  # tightening it moved coverage by noise -- but the override itself is a
+  # real, permanent capability (same pattern as Fixed bugs 27's a_p/b_p), so
+  # it gets the same "does it actually move the posterior" test they got.
+  #
+  # fit_fixture() never passes collCovariates, so it fits an intercept-only
+  # Stage 1 even though simulate_fixture()'s truth has a real slope
+  # covariate (beta_theta_true is 2 x S; the fitted beta_theta_output would
+  # be 1 x S x niter x nchain without collCovariates). b_betatheta_slope_var
+  # only has anything to act on if a slope row exists, so this test builds
+  # its own runOccJSDM() calls with collCovariates = "X_theta", matching
+  # what the simulation study's simstudy_fit() does.
+  sim <- simulate_fixture(model = "two_stage", P = 2L)
+  mc <- list(nchain = 2, nburn = 40, niter = 40, nthin = 1)
+  args <- list(sim$data_list,
+              listParams = list(n_factors = 2L, n_supportpoints = FIXTURE_KNOTS),
+              occCovariates = fixture_occ_covariates(),
+              collCovariates = "X_theta",
+              spatCovariates = fixture_spat_covariates(),
+              MCMCparams = mc)
+
+  fit_default <- suppressMessages(suppressWarnings(do.call(runOccJSDM, args)))
+  fit_tight <- suppressMessages(suppressWarnings(do.call(
+    runOccJSDM, utils::modifyList(args, list(listPriors = list(b_betatheta_slope_var = 0.05))))))
+
+  expect_equal(dim(fit_default$results_output$beta_theta_output)[1], 2L)
+
+  slope_default <- fit_default$results_output$beta_theta_output[2, , , , drop = FALSE]
+  slope_tight <- fit_tight$results_output$beta_theta_output[2, , , , drop = FALSE]
+  expect_lt(sd(slope_tight), sd(slope_default))
+})
