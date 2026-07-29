@@ -691,36 +691,12 @@ plotOccupancyRates <- function(fitModel,
     quantile(x, probs = confInt)
   }) %>%
     t %>%
-    as.data.frame %>%
-    mutate(Species = dimnames(psi0_output)[[2]])
+    as.data.frame
 
-  colnames(data_plot)[1:2] <- c("Min","Max")
+  names(data_plot) <- c("Min", "Max")
 
-  data_plot <- data_plot %>%
-    mutate(speciesOrder = order(Min)) %>%
-    filter(Species %in% speciesNames[idx_species])
-
-  speciesNameOrdered <- speciesNames[order(data_plot$Min)]
-
-  plot_occupancyrates <- data_plot %>%
-    ggplot(aes(x =  factor(Species, level = speciesNameOrdered),
-               ymin = Min,
-               ymax = Max)) + geom_errorbar() +
-    xlab("Species") +
-    # ylim(c(0,1)) +
-    ggtitle("Baseline Occupancy rates") +
-    theme_bw() +
-    ylim(c(0,1)) +
-    ylab("") +
-    theme(
-      axis.text = element_text(angle = 0,
-                               size = 8),
-      axis.title = element_text(size = 12, face = "bold"),
-      plot.title = element_text(hjust = .5,
-                                size = 15)
-    ) + coord_flip()
-
-  plot_occupancyrates
+  plotSpeciesRates(data_plot, idx_species, speciesNames) +
+    ggtitle("Baseline Occupancy rates")
 
 }
 
@@ -1011,19 +987,22 @@ plotFPTPStage2Rates <- function(fitModel,
 
   data_plot <- cbind(data_plot_p, data_plot_q) %>%
     mutate(Species = speciesNames) %>%
-    filter(Species %in% speciesNames[idx_species]) %>%
-    mutate(speciesOrder = order(p1))
+    filter(Species %in% speciesNames[idx_species])
+
+  # Order and label using the filtered subset that is actually plotted --
+  # computing order() on the filtered rows and then indexing the unfiltered
+  # speciesNames (as before) mismatches labels to bars for any idx_species
+  # other than a prefix 1:k (TODO.md group C item 1).
+  speciesNameOrdered <- data_plot$Species[order(data_plot$p1)]
 
   detectionRates <- data_plot %>%
     ggplot()  +
-    geom_errorbar(aes(x = factor(Species, level = speciesNames[speciesOrder]),
-                      # factor(Species, level = speciesNames[orderSpecies]),
+    geom_errorbar(aes(x = factor(Species, level = speciesNameOrdered),
                       ymin = p1,
                       ymax = p2,
                       color = "TP rate"), position = position_dodge(width = .15), # Use the SAME width as geom_col
                   width = .5) +
-    geom_errorbar(aes(x = factor(Species, level = speciesNames[speciesOrder]),
-                      # factor(Species, level = speciesNames[orderSpecies]),
+    geom_errorbar(aes(x = factor(Species, level = speciesNameOrdered),
                       ymin = q1,
                       ymax = q2,
                       color = "FP rate"), position = position_dodge(width = .15), # Use the SAME width as geom_col
@@ -1170,33 +1149,10 @@ plotStage1FPRates <- function(fitModel,
     t %>%
     as.data.frame
 
-  data_plot <- data_plot %>%
-    mutate(Species = speciesNames) %>%
-    mutate(speciesOrder = order(`2.5%`)) %>%
-    filter(Species %in% speciesNames[idx_species])
+  names(data_plot) <- c("Min", "Max")
 
-  orderSpecies <- order(data_plot$`2.5%`)
-
-  collectionRates <- data_plot %>%
-    ggplot(aes(x =  factor(Species, level = speciesNames[orderSpecies]),
-               ymin = `2.5%`,
-               ymax = `97.5%`)) +
-    geom_errorbar() +
-    xlab("Species") +
-    # ylim(c(0,1)) +
-    ggtitle("Stage 1 FP rates") +
-    theme_bw() +
-    # ylim(c(0,1)) +
-    ylab("") +
-    theme(
-      axis.text = element_text(angle = 0,
-                               size = 8),
-      axis.title = element_text(size = 12, face = "bold"),
-      plot.title = element_text(hjust = .5,
-                                size = 15)
-    ) + coord_flip()
-
-  collectionRates
+  plotSpeciesRates(data_plot, idx_species, speciesNames) +
+    ggtitle("Stage 1 FP rates")
 
 }
 
