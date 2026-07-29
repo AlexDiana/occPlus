@@ -133,11 +133,35 @@ test_that("Fixed bugs 1 and 11: row order of the input data does not matter", {
   expect_equal(fit_shuffled$X_theta, fit_sorted$X_theta)
 
   # The internal data_info must be canonical, i.e. independent of input order.
-  # check.attributes = FALSE deliberately: row.names are inherited from the
-  # caller's row order and are cosmetic. Asserting on them made this test fail
-  # against Alex's 42198d9 when nothing behavioural had changed -- the
-  # (Site, Sample, Primer) sequence, the covariate columns and both design
-  # matrices were all identical. Same over-strictness as the OTU check below.
+  #
+  # ignore_attr = TRUE covers row.names, and that exclusion was checked rather
+  # than assumed -- asserting on them made this test fail against Alex's
+  # 42198d9 when nothing behavioural had changed. What was verified:
+  #
+  #   * The (Site, Sample, Primer) sequence, the covariate columns and both
+  #     design matrices are identical between sorted and shuffled input.
+  #   * 150 of 320 row.names do differ, but only by the ordering of the K
+  #     replicates *within* a (Site, Sample, Primer) group -- the same set of
+  #     names, permuted inside each group.
+  #   * Critically, row.names are ORDER-DEPENDENT BUT PAIRING-PRESERVING.
+  #     Re-run with meaningful input names (SAMP001, SAMP002, ...) instead of
+  #     R's auto-disambiguated "38", "38.1", both sorted and shuffled input
+  #     kept every name attached to its own OTU counts. So a user who looks up
+  #     by name -- data_info["SAMP042", ], OTU["SAMP042", ] -- gets the right
+  #     row either way. Only the order in which rows appear differs.
+  #   * Nothing in the package reads these row.names. The only rownames()
+  #     reads in R/ are on data$traits (species lookup); elsewhere they are
+  #     assigned, never consulted.
+  #
+  # So this is not merely "cosmetic": the pairing that a user could rely on is
+  # intact, which is the property worth protecting. Do NOT re-tighten this to
+  # compare row.names -- it would fail on within-group replicate ordering,
+  # which is exchangeable (see the OTU note below) and carries no information.
+  #
+  # The case that WOULD break is positional joining, e.g.
+  # cbind(fit$infos$data_info, my_metadata) assuming the caller's row order.
+  # That breaks for sorted input too, since the fit always sorts internally,
+  # so it is neither caused by nor detectable from this test.
   expect_equal(fit_shuffled$infos$data_info, fit_sorted$infos$data_info,
                ignore_attr = TRUE)
 
