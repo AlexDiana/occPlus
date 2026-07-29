@@ -314,3 +314,40 @@ test_that("Fixed bugs 27: listPriors actually reaches the Stage 2 priors", {
   expect_gt(mean(fit_default$results_output$p_output, na.rm = TRUE),
             mean(fit_low$results_output$p_output, na.rm = TRUE))
 })
+
+test_that("Fixed bugs 31: plotCollectionRates() runs and labels the right bars", {
+  # plotCollectionRates() errored with "object 'Min' not found" for every
+  # input. plotSpeciesRates() had been extracted as a shared helper and never
+  # wired up: it read columns Min/Max while its only caller passed the
+  # "2.5%"/"97.5%" that quantile() produces, it filtered on a Species column
+  # the caller never created, and it referenced speciesNames as a free variable
+  # that exists in neither its arguments nor the namespace. Three independent
+  # breakages in one call path, so nothing had ever exercised it.
+  #
+  # Asserting the label-to-value pairing, not just absence of error: the helper
+  # also ordered on the full species set while filtering to a subset, which
+  # silently mismatches names to bars. That is the defect the other three rate
+  # plots still have (group B item 1), so this test is the template for those.
+  fit <- fixture_twostage()
+  nm <- fit$infos$speciesNames
+
+  expect_no_error(plotCollectionRates(fit))
+
+  idx <- c(3L, 1L)
+  d <- plotCollectionRates(fit, idx_species = idx)$data
+  expect_equal(nrow(d), length(idx))
+  expect_equal(as.character(d$Species), nm[idx])
+  expect_true(all(d$Min >= 0 & d$Max <= 1))
+  expect_true(all(d$Min <= d$Max))
+
+  # Values must follow the species, not the row position.
+  d_all <- plotCollectionRates(fit)$data
+  expect_equal(d$Min, d_all$Min[idx])
+})
+
+test_that("plotCollectionRates() rejects a model with no collection stage", {
+  # It used to fail with a subscript error out of beta_theta_output; a JSDM-only
+  # fit has no Stage 1 at all, so say so.
+  expect_error(plotCollectionRates(fixture_continuous()),
+               "collection-stage")
+})

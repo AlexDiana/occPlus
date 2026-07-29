@@ -805,28 +805,36 @@ plotCollectionCovariates <- function(fitModel,
 #' Plot the 95% credible interval of a per-species rate for a subset of species.
 #'
 #' @details
-#' Internal helper that plots error bars for a rate summarised in `data_plot`
-#' (expects columns `Species`, `2.5%`, and `97.5%`). Currently unused elsewhere
-#' in the package; `plotCollectionRates` reimplements this logic inline.
+#' Internal helper that plots error bars for a per-species rate. `data_plot`
+#' must have one row per species, in species order, with numeric columns `Min`
+#' and `Max` giving the interval bounds. Subsetting and labelling are done here
+#' rather than by the caller, so that the ordering is computed on exactly the
+#' rows that get plotted.
 #'
-#' @param data_plot A data frame with columns `Species`, `2.5%`, and `97.5%`
-#' @param orderSpecies Integer vector giving the plotting order of the species
-#' @param subset Indexes (into `orderSpecies`) of the species to display
+#' @param data_plot A data frame with one row per species and columns `Min`,
+#'   `Max`
+#' @param idx_species Indexes of the species to display
+#' @param speciesNames Character vector of all species names, in species order
+#'   (i.e. not pre-subset by `idx_species`)
 #'
 #' @return A ggplot object
 #'
 #' @noRd
 plotSpeciesRates <- function(data_plot,
-                             idx_species){
+                             idx_species,
+                             speciesNames){
 
-  data_plot <- data_plot %>%
-    mutate(speciesOrder = order(Min)) %>%
-    filter(Species %in% speciesNames[idx_species])
+  data_plot <- data_plot[idx_species, , drop = FALSE]
+  data_plot$Species <- speciesNames[idx_species]
 
-  speciesNameOrdered <- speciesNames[order(data_plot$Min)]
+  # Order on the subset that is actually plotted. Ordering the full set and
+  # then indexing the subset (or the reverse) mismatches labels to bars -- the
+  # defect in TODO.Rmd group B item 1, which the other three rate plots still
+  # have.
+  speciesNameOrdered <- data_plot$Species[order(data_plot$Min)]
 
   plot_speciesrates <- data_plot %>%
-    ggplot(aes(x =  factor(Species, level = speciesNameOrdered),
+    ggplot(aes(x =  factor(Species, levels = speciesNameOrdered),
                ymin = Min,
                ymax = Max)) + geom_errorbar() +
     xlab("Species") +
@@ -878,10 +886,18 @@ plotCollectionRates <- function(fitModel,
     idx_species <- 1:S
   }
 
-  speciesNames <- speciesNames[idx_species]
+  beta_theta_output <- fitModel$results_output$beta_theta_output
+  if(is.null(beta_theta_output)){
+    stop("plotCollectionRates() needs collection-stage parameters, which model '",
+         fitModel$infos$model, "' does not have. It applies to 'two_stage' and ",
+         "'occupancy' fits.")
+  }
 
-  samples_subset <- fitModel$results_output$beta_theta_output[1,,,]
-  samples_subset <- apply(samples_subset, 1, c)
+  # Row 1 of beta_theta is the collection-rate intercept, so this is the
+  # baseline rate with covariates at zero. drop = FALSE keeps the array 4-D so
+  # the apply() below behaves for S == 1.
+  samples_subset <- beta_theta_output[1, , , , drop = FALSE]
+  samples_subset <- apply(samples_subset, 2, c)
 
   data_plot <- apply(samples_subset, 2, function(x) {
     quantile(logistic(x), probs = c(0.025, 0.975))
@@ -889,8 +905,10 @@ plotCollectionRates <- function(fitModel,
     t %>%
     as.data.frame
 
+  # plotSpeciesRates() works in Min/Max; quantile() names these "2.5%"/"97.5%".
+  names(data_plot) <- c("Min", "Max")
 
-  plotSpeciesRates(data_plot, idx_species )+
+  plotSpeciesRates(data_plot, idx_species, speciesNames) +
     ggtitle("Collection rates")
 
 

@@ -1084,6 +1084,42 @@ verified against the source rather than the commit message.
     check that caught it: `TODO.Rmd`'s group B numbering had a gap at 5
     and 6.*
 
+31. **`plotCollectionRates()` errored on every input.** Reported by Doug
+    29 July 2026, fixed the same day. Failed with `object 'Min' not
+    found` for any `fitModel`, with or without `idx_species`.
+
+    `plotSpeciesRates()` (`R/output.R:819`) had been extracted as a
+    shared helper and never wired up to its only caller. Three
+    independent breakages in the same call path, which is why nothing
+    had ever run it successfully:
+
+    (a) the helper read columns `Min`/`Max`, while
+        `plotCollectionRates()` passed the `2.5%`/`97.5%` that
+        `quantile()` names;
+    (b) it filtered on a `Species` column the caller never created --
+        the code that built one is still there, commented out, from
+        before the extraction;
+    (c) it referenced `speciesNames` as a free variable, present in
+        neither its arguments nor the package namespace.
+
+    Its roxygen documented a third state again: columns `Species`,
+    `2.5%`, `97.5%`, and parameters `orderSpecies`/`subset` that the
+    signature does not have.
+
+    **Fixed** by giving the helper an explicit contract -- one row per
+    species with `Min`/`Max`, plus `idx_species` and the *unsubset*
+    `speciesNames` -- and doing the subsetting inside it, so the
+    ordering is computed on exactly the rows plotted. Also added a
+    clear error for models with no collection stage, which previously
+    fell through to a subscript failure.
+
+    **Note for group B item 1:** this fixes the species-ordering defect
+    for this function only. `plotOccupancyRates()`,
+    `plotFPTPStage2Rates()` and `plotStage1FPRates()` still order on the
+    full species set while indexing a filtered one. The test added here
+    asserts label-to-value pairing rather than mere absence of error,
+    and is the template for fixing those three.
+
 ### **Completed**
 
 Finished work, kept for context rather than as tasks. Bug fixes live
