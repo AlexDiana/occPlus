@@ -1169,6 +1169,21 @@ sample_sigmab <- function(B, Tr, G, A, C, a_sigmab, b_sigmab){
 
 }
 
+# sample variance of factor scores (U ~ N(0, sigma_h^2), iid across sites/factors)
+sample_sigmah <- function(U, a_sigmah, b_sigmah){
+
+  n <- nrow(U)
+  d <- ncol(U)
+
+  sumsq <- sum(U^2)
+  n_samples <- n * d
+
+  sqrt(
+    rinvgamma_cpp(a_sigmah + (n_samples / 2), b_sigmah + (sumsq / 2))
+  )
+
+}
+
 # sample variances of responses
 sample_tau <- function(z, eta, a_tau, b_tau){
 
@@ -1577,6 +1592,8 @@ update_jSDMcoef <- function(list_data,
     b_sigmab <- list_priors$b_sigmab
     a_sigmabs <- list_priors$a_sigmabs
     b_sigmabs <- list_priors$b_sigmabs
+    a_sigmah <- list_priors$a_sigmah
+    b_sigmah <- list_priors$b_sigmah
     a_l_s <- list_priors$a_l_s
     b_l_s <- list_priors$b_l_s
   }
@@ -1671,7 +1688,10 @@ update_jSDMcoef <- function(list_data,
     U, L)
   XB <- list_psiCoef$XB
   SE <- list_psiCoef$SE
-  U <- sample_U_cpp(k, L, XB, SE, Omega, model)
+  U <- sample_U_cpp(k, L, XB, SE, Omega, sigma_h, model)
+
+  # update variance of factor scores
+  sigma_h <- sample_sigmah(U, a_sigmah, b_sigmah)
 
   # sample spatial field scale
   if(ps > 0){

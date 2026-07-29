@@ -11,21 +11,9 @@ editor_options:
 **v0.1.0-beta** **Public release**
 
 1.  Alex to dos
-
-    1.  Allow for different primers per sample
     
     2. Trait matrix currently not allowing for categorical variables
 
-    **Bugs found in a static audit of `R/` and `src/`, 25 July 2026.**
-    Everything below was found by reading the code, not by running the
-    model, so each should be reproduced before it is fixed. Grouped by
-    severity.
-
-    **Status as of 28 July 2026.** The audit originally listed 15 group
-    A and 10 group B items; most have since been fixed and moved to
-    **Fixed bugs** at the end of this document, which is now the
-    authoritative record of what has been resolved. Only the *unfixed*
-    remainder is listed here, renumbered.
 
     **Group A has since grown, not shrunk.** Three of its six items (3,
     4 and 6) were found not by reading code but by the simulation study,
@@ -52,28 +40,10 @@ editor_options:
     in the fixed-bug entries below point at the *post-fix* code and so
     will not match the original audit.
 
-    Already fixed by `0abb104`, and so *not* listed below: the
-    `simulateOccJSDMData(model = "occupancy")` `idx_z_k` bug -- that
-    branch now correctly uses `idx_z_w` (`R/simulateData.R:197-199`),
-    while the `two_stage` branch rightly keeps `idx_z_k`.
-
     **A. Inference-affecting bugs (wrong numbers, silently)**
 
-    1.  **`sigma_h` is never sampled.** Initialised to 1
-        (`R/runOccJSDM.R:1009`) and passed through `update_jSDMcoef()`
-        unchanged, so `sigmah_output` is constant. `predictNewSites()`
-        uses it as the factor-score SD when simulating `U` at new sites
-        (`src/jsdm.cpp:487`), so predictions silently assume unit factor
-        variance.
 
-        **Trigger:** unconditional in the sense that it's always stuck
-        at 1, but inert for the original fit -- `U` at the training
-        sites is sampled under a hard-coded unit-variance prior
-        regardless of `sigma_h` (see above), so this bug is 100% dormant
-        unless `predictNewSites()` is used to extrapolate to new sites
-        with a nonzero number of factors.
-
-    2.  **`sample_ls()` evaluates the wrong density, so the GP
+    1.  **`sample_ls()` evaluates the wrong density, so the GP
         length-scale is never recovered and rails at the top of its
         grid.** Found 27 July 2026 while writing the test suite.
 
@@ -157,70 +127,9 @@ editor_options:
         defect. Revisit that test once this is fixed.
 
 
-    3.  FIXED 
+    2.  THIS IS NOT AN ISSUE FOR LOGISTIC MODELS (as the covariance matrix is not recoverable anyway, only the correlation one)
     
-        **The prior mean for collection-covariate slopes is 1, not 0.**
-        Found 28 July 2026 by the coverage study; **confirmed, with the
-        cleanest evidence in the whole audit.**
-
-        `R/runOccJSDM.R:718-722`:
-
-        ```         
-        b_betatheta <- rep(1, ncov_theta)      # prior MEAN = 1, all coefs
-        B_betatheta <- diag(1, nrow = ncov_theta)
-        b_betatheta[1] <- prior_beta_theta     # only the intercept reset
-        ```
-
-        Every element of the prior mean is initialised to **1**, and
-        only element 1 -- the intercept -- is then overwritten with
-        `prior_beta_theta` (default 0). So every *actual covariate
-        slope* carries a prior centred on +1 with variance 1.
-
-        **Measured, R = 100.** Splitting `beta_theta` by coefficient:
-
-        | coefficient | prior mean             | coverage  | bias   |
-        |-------------|------------------------|-----------|--------|
-        | intercept   | 0 (overridden)         | **0.937** | +0.073 |
-        | slope       | **1** (not overridden) | **0.496** | +0.113 |
-
-        The one coefficient with a sensible prior covers correctly; the
-        one with prior mean 1 covers at barely half, with the positive
-        bias the pull predicts. True slopes average +0.01 (drawn from
-        {-1, 0, +1} by `R/simulateData.R:123`), so a prior at +1 drags
-        them up.
-
-        **Impact.** Any reported effect of a covariate on eDNA
-        *collection* is biased toward +1 and its credible interval is
-        roughly a 50% interval, not 95%. This is a headline Stage 1
-        output.
-
-        **Confirmed across the whole grid (28 July, R = 100 x 10
-        scenarios).** `beta_theta` undercovers in **every cell that
-        estimates it** -- 0.676 (occupancy), 0.679 (3 primers), 0.693
-        (20 species), 0.709 / 0.714 (`d` over- and under-fitted), 0.721,
-        0.730, 0.717 (base). The flatness across model type, primer
-        count, species count and factor misspecification is what marks
-        it structural rather than conditional. `low_information` is the
-        one milder cell (0.860), consistent with a fixed prior pull
-        mattering relatively less when everything is uncertain anyway.
-
-        **Fix:** `rep(0, ncov_theta)`. The surrounding lines suggest the
-        indices were simply inverted -- a prior mean of \~1 on the
-        *intercept* (theta \~ 0.73 on the logit scale) with 0 on the
-        slopes would be a defensible design; what is coded is the
-        reverse. Worth confirming the intent with Alex rather than
-        assuming.
-
-        **Related:** group A item 6 records a second prior problem, on
-        the Stage 2 detection rate. That one is filed as *possible*
-        rather than confirmed; this one is not in doubt.
-
-        **Also here, latent:** `B_betatheta[1,1] <- prior_beta_theta_sd`
-        assigns a *standard deviation* into what is used as a
-        *covariance* matrix. Harmless at the default of 1 (1\^2 = 1),
-        but wrong for any other value a user sets.
-
-    4.  **`reparamFactorModel()` breaks the identity that residual
+        **`reparamFactorModel()` breaks the identity that residual
         covariance = `t(L) %*% L`, so reported species correlations are
         inflated.** Found 28 July 2026 by the coverage study; confirmed
         numerically.
@@ -277,29 +186,7 @@ editor_options:
             existing output contract; check with Alex which constraint
             the `diag(diag(R))` scaling was meant to impose.
 
-    5.  **Non-thread-safe RNG remains in the hottest OpenMP loop**
-        (residual of the original audit's A.6; the other half was fixed
-        in `b7b6aa2` -- see Fixed bugs 10). `samplePGvariables()`
-        (`src/jsdm.cpp:398`) is `#pragma omp parallel for collapse(2)`
-        and calls `rpg()` -\> `samplepg()` -\> `tinvgauss()`, whose
-        rejection branch calls `randinvg()` (`src/jsdm.cpp:86`), and
-        that still draws from R's global RNG via `R::rnorm(0.0, 1.0)` at
-        `:88`. The surrounding Polya-Gamma helpers were already
-        converted to the `thread_local std::mt19937` engine
-        (`get_rng()`/`runif()`, `src/jsdm.cpp:9-22`, in `53c38f1`), so
-        `randinvg()` is the one remaining hole on this path. R's RNG
-        state is global and not thread-safe, so wherever OpenMP is
-        actually active -- Linux and Windows/Rtools, but *not* stock
-        macOS clang, which is presumably why this has not shown up
-        locally -- this loop races.
-
-        **Trigger:** dormant on stock macOS clang (no OpenMP), live on
-        Linux/Windows. `samplePGvariables()` is the hottest kernel in
-        the sampler, so fix it properly (route `randinvg()` through the
-        existing `thread_local` engine, matching what `runif()` already
-        does) rather than by disabling OpenMP.
-
-    6.  WE NEED INFORMATIVE PRIORS
+    3.  NEED TO CHOOSE THE INFORMATIVE PRIORS
     
         **The Stage 2 detection prior is too informative and too
         optimistic; it causes `p`'s undercoverage, and it is hard-coded
@@ -325,16 +212,6 @@ editor_options:
             0.3-0.6 as the realistic eDNA regime. The shipped prior and
             the shipped example data disagree about what a plausible
             detection rate is.
-        (b) *All four are never read from `listPriors`*, although
-            `@param listPriors` documents them as supported -- setting
-            them silently does nothing, the same failure mode as
-            `prior_beta_psi` (Fixed bugs 14). Note `a_theta0`/`b_theta0`
-            on the two lines above *are* wired up, so this reads as an
-            omission. Because of this a user cannot work around (a)
-            without editing the package.
-        (c) *The documented defaults disagree with the code*: docs say
-            `a_p`/`b_p` default 10/1 (code 5/1) and `a_q`/`b_q` default
-            1/10 (code 1/20).
 
         **The experiment that settled it.** Same data, same seeds, only
         the prior changed:
@@ -344,40 +221,7 @@ editor_options:
         | `Beta(5, 1)` as coded | 0.903     | **+0.050** |
         | `Beta(1, 1)` flat     | **0.944** | **-0.005** |
 
-        Flattening the prior restores nominal coverage and removes the
-        bias essentially completely. (6 replicates at reduced size, so
-        the coverage figures carry real sampling error; the *bias*
-        reversal from +0.050 to -0.005 is unambiguous. The as-coded arm
-        reproduces the R = 100 base run, 0.899/+0.062, which validates
-        the comparison.)
-
-        **Why the effect is \~3x the prior's direct pull.** Computed
-        against oracle counts (using the *true* `w`), Beta(5,1) shifts
-        the Beta posterior by only **+0.017**; the observed bias is
-        +0.050 to +0.062. The difference is amplification through the
-        latent state: `p` is estimated only over replicates the sampler
-        believes have `w = 1`, a set enriched for positive reads, and a
-        higher `p` makes a `w = 1` with no read less plausible still. So
-        the feedback loop is real -- but it is *driven by* the prior,
-        not independent of it, which is precisely what the flat-prior
-        arm demonstrates.
-
-        **Confirmed at scale (28 July, R = 100 x 10 scenarios), and far
-        worse than the base run suggested.** In `low_information` --
-        true `p` in 0.1-0.3 against a prior mean of 0.833 -- coverage
-        collapses to **0.103** with bias **+0.49**, against 0.90-0.92 in
-        every other cell. The single most severe result in the study,
-        and it lands precisely in the low-detection regime the package
-        exists to serve.
-
-        **Also confirmed along the way:** the four-case counting in
-        `sample_pq_cpp()` is sound. The oracle estimate using true `w`
-        recovers `p` exactly (0.452 against a true 0.450), which
-        independently re-confirms the Fixed bugs 2 fix.
-
-        **Fix.** (b) and (c) are uncontroversial: wire the four
-        hyperparameters through from `listPriors` and make the docs
-        match. For (a), **Alex should choose the default** --
+        For (a), **Alex should choose the default** --
         `Beta(1,1)` was only a diagnostic, not a recommendation. The
         requirement is that the default not be sharply informative at
         0.83 when the package's own example data sits at 0.3-0.6.
@@ -413,100 +257,8 @@ editor_options:
             function users cannot call. Either re-export it or drop the
             `.Rd`.
 
-    3.  FIXED
-    
-        **The default GP knot count breaks every spatial fit below 31
-        sites, and is statistically wrong below \~150.**
-        `getDefaultSupportPoints(n) <- max(30, floor(n * 0.2))`
-        (`R/jsdmfun.R:480`) sets the number of support (inducing) points
-        for the sparse GP; it feeds `ps` (`R/runOccJSDM.R:697`), which
-        becomes `kmeans(X_s, centers = ps)` (`R/jsdmfun.R:353`), where
-        `X_s` has one row per *unique* spatial location. Asking for more
-        cluster centres than there are locations cannot work.
 
-        **Measured threshold** (`useSpatField = TRUE`, `spatCovariates`
-        supplied, defaults otherwise):
-
-        | sites | knots (`ps`) | result |
-        |----|----|----|
-        | \<= 29 | 30 | `cannot take a sample larger than the population when 'replace = FALSE'` |
-        | 30 | 30 | `number of cluster centres must lie between 1 and nrow(x)` |
-        | \>= 31 | 30 | runs |
-
-        **Two distinct problems.** (a) *The crash.* Below 31 unique
-        locations the fit dies during setup, before MCMC starts, with an
-        error naming neither the knot count nor the argument that
-        controls it -- a 25-site eDNA study with coordinates is an
-        entirely ordinary design. (b) *The default is inappropriate long
-        before it crashes.* The `max(30, ...)` means the hard-coded 30
-        wins for every dataset under 150 sites, so the knot count does
-        not scale down with `n` at all, and the `floor(n * 0.2)` branch
-        -- the part expressing the actual "20% of sites" intent -- is
-        unreachable for any small study. At `n = 31` that is 30 knots
-        for 31 sites, i.e. nearly one knot per site, which defeats the
-        purpose of a sparse GP approximation (fewer inducing points than
-        data points) and just adds bookkeeping to what is effectively a
-        full GP.
-
-        **Fix:** cap the count below the number of locations and let it
-        scale, e.g. `min(floor(n * 0.2), n - 1)` with a much smaller
-        absolute floor; and validate `n_supportpoints` against `ns` with
-        a message that names the argument.
-
-        **Workaround, already available:** `listParams$n_supportpoints`
-        overrides the default and works -- verified at `n = 20` with 6
-        knots, and at `n = 30`/`50`/`100`. This is why the simulation
-        study is *not* blocked by this item (`dev/simstudy/PLAN.md`
-        §10): its small-`n` cell sets `n_supportpoints` explicitly,
-        which it arguably should do regardless, so the knot count is
-        pinned rather than drifting with `n`.
-
-    4.  FIXED 
-    
-        **`simulateOccJSDMData(useSpatField = TRUE, ds = 0)` silently
-        generates no spatial field.** Found 27 July 2026 while
-        diagnosing group A item 2.
-
-        `R/jsdmfun.R:578-586` builds the cross-species spatial
-        covariance as
-
-        ```         
-        Lambda <- matrix(rnorm(ds * S), ds, S)
-        Sigma  <- t(Lambda) %*% Lambda + diag(10^(-5), nrow = S)
-        spatField <- t(chol(K_mat)) %*% Z %*% chol(Sigma)
-        ```
-
-        With `ds = 0`, `Lambda` is `0 x S` and `t(Lambda) %*% Lambda` is
-        all zeros, so `Sigma` collapses to the jitter `diag(1e-5)` and
-        the field is scaled by `sqrt(1e-5) = 0.0032`. **Measured**
-        `sd(spatField)`, with `sigma_s = 0.5` throughout: **0.0019 at
-        `ds = 0`**, versus 0.80 at `ds = 1`, 1.01 at `ds = 2`, 1.03 at
-        `ds = 3`.
-
-        So `useSpatField = TRUE` is silently a no-op unless `ds >= 1`.
-        Nothing warns, and the returned `spatField` is the right shape,
-        so a caller has no signal that the spatial term is absent.
-
-        **This is exactly the trap the original audit flagged for Fixed
-        bugs 7** -- "`useSpatField = TRUE` currently simulates data with
-        *no* spatial signal, so any coverage check of the spatial term
-        will silently pass against a null case". That entry was recorded
-        as fixed because the field is now added *before* the responses
-        are drawn, which was a real and separate bug. The field is still
-        \~0 whenever `ds = 0`, for this different reason.
-
-        **Fix:** either error/warn when `useSpatField = TRUE` and
-        `ds < 1`, or make `ds = 0` mean "shared spatial field across
-        species" rather than collapsing `Sigma` to jitter. The first is
-        a two-line guard; the second is a modelling decision.
-
-        Note also that `sigma_s` is not cleanly the field's marginal SD:
-        `Sigma = Lambda'Lambda` with `Lambda ~ N(0,1)` contributes its
-        own scale, so amplitude grows with `ds` (0.80 -\> 1.01 -\> 1.03
-        above for a fixed `sigma_s = 0.5`). Worth documenting whatever
-        the fix.
-
-    5.  **`predictNewSites()` still has no defaults for `X_psi` /
+    3.  **`predictNewSites()` still has no defaults for `X_psi` /
         `X_s`** (residual of the original audit's B.4; see Fixed bugs
         18, which wrongly recorded this half as done). Verified via
         `formals(predictNewSites)`: `fitModel`, `X_psi` and `X_s` all
@@ -520,16 +272,13 @@ editor_options:
         deliberately omits it rather than encoding the broken behaviour.
         Add the test with the fix.
 
-    6.  **Assorted smaller items.**
+    4.  **Assorted smaller items.**
 
         (a) `createDataIdx()` is called with `maxP`
             (`R/runOccJSDM.R:638`) for `model = "occupancy"` too, where
             `maxP` was never assigned -- it survives only because R's
             lazy evaluation never forces the promise; pass `NULL`
             explicitly.
-        (b) `c_imk <- as.numeric(y > 0)` (`:963`) drops the matrix
-            dimensions, harmless only because `c_imk` is overwritten at
-            `:1104` before first use.
         (c) `d <- get_param(listParams, "n_factors")` defaults to 0, and
             the cap at `:716` uses `ncol(OTU)`, which is `NULL` for a
             single-species vector `OTU` -- `if (d > NULL)` errors.
@@ -885,21 +634,19 @@ editor_options:
 
     1.  Design better model selection criterion (the one currently
         implemented, which is the same as HMSC, tend to overfit).
+        
+    2.  ability to analyse count data
 
-    2.  GAMs for JSDM
-
-    3.  ability to analyse count data
-
-    4.  scenario for source-sink inference (sites where env covariate
+    3.  scenario for source-sink inference (sites where env covariate
         coeffcients are negative but spatial covariate coefficients are
         positive), using an explicit source-sink simulation
 
-    5.  remove effect of space on environmental covariates. remove the
+    4.  remove effect of space on environmental covariates. remove the
         effect of unobserved environmental on observed environmental
         covariates and space. thus, adding factors (unobserved env
         covariates) doesn't change the effect of observed env covariates
 
-    6.  **site** variance partitioning to complement the **species**
+    5.  **site** variance partitioning to complement the **species**
         variation partitioning (see Leibold et al., Cai et al.).
         Consider calling it **variation** partitioning.
 

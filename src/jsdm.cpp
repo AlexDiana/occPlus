@@ -22,6 +22,12 @@ inline double runif() {
   return dist(get_rng());
 }
 
+
+inline double rnorm() {
+  static thread_local std::normal_distribution<double> dist(0.0, 1.0);
+  return dist(get_rng());
+}
+
 // inline double exprnd(double rate) {
 //   std::exponential_distribution<double> dist(rate);
 //   return dist(get_rng());
@@ -85,7 +91,9 @@ static double truncgamma() {
 
 static double randinvg(double mu) {
   // sampling
-  double u = R::rnorm(0.0,1.0);
+
+  // double u = R::rnorm(0.0,1.0);
+  double u = rnorm();
   double V = u*u;
   double out = mu + 0.5*mu * ( mu*V - (double)std::sqrt(4.0*mu*V + mu*mu * V*V) );
 
@@ -614,6 +622,7 @@ arma::mat sample_U_cpp(arma::mat& k,
                        arma::mat& XB,
                        arma::mat& XsBs,
                        arma::mat& Omega,
+                       double sigma_h,
                        std::string model) {
 
   int d = L.n_rows;
@@ -639,7 +648,7 @@ arma::mat sample_U_cpp(arma::mat& k,
     Rcpp::stop("Unknown model");
   }
 
-  arma::mat B_current = arma::eye(d,d);
+  arma::mat B_current = arma::eye(d,d) * sigma_h * sigma_h;
   arma::vec b_current(d, arma::fill::zeros);
 
   arma::mat transL = arma::trans(L);

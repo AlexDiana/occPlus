@@ -9,8 +9,8 @@ sample_w_cpp <- function(logy1, mu0, sigma0, mu1, sigma1, theta, theta0, p, q, M
     .Call(`_occJSDM_sample_w_cpp`, logy1, mu0, sigma0, mu1, sigma1, theta, theta0, p, q, M, K, sumL, sumM, sumK, maxL, z)
 }
 
-sample_w_cim_cipp <- function(y, y_NA, theta, theta0, p, q, M, K, sumL, sumM, sumK, maxL, z) {
-    .Call(`_occJSDM_sample_w_cim_cipp`, y, y_NA, theta, theta0, p, q, M, K, sumL, sumM, sumK, maxL, z)
+sample_w_cim_cipp <- function(y, y_NA, theta, theta0, p, q, M, K, sumL, sumM, sumK, P, primerId, maxL, z) {
+    .Call(`_occJSDM_sample_w_cim_cipp`, y, y_NA, theta, theta0, p, q, M, K, sumL, sumM, sumK, P, primerId, maxL, z)
 }
 
 sample_betatheta_cpp <- function(w, z, beta_theta, idx_z, X_theta, b_betatheta, B_betatheta) {
@@ -97,8 +97,8 @@ sampleB <- function(X, B, b, Omega, k) {
     .Call(`_occJSDM_sampleB`, X, B, b, Omega, k)
 }
 
-sample_U_cpp <- function(k, L, XB, XsBs, Omega, model) {
-    .Call(`_occJSDM_sample_U_cpp`, k, L, XB, XsBs, Omega, model)
+sample_U_cpp <- function(k, L, XB, XsBs, Omega, sigma_h, model) {
+    .Call(`_occJSDM_sample_U_cpp`, k, L, XB, XsBs, Omega, sigma_h, model)
 }
 
 XsBs <- function(A, B, X_s_centers) {
