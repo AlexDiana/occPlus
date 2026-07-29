@@ -63,6 +63,8 @@ editor_options:
     bug and of performance differs from his, and the answer decides
     whether the group D parallelism items are worth anything. See group
     D.
+    
+    ALEX TO REVIEW THE FIX
 
 2.  **Review the `plotCollectionRates()` fix, and decide how far to take
     it.** **Written by Claude** (AI agent, in a session with Doug) on 29
@@ -108,6 +110,8 @@ editor_options:
         implementation is still sitting in `plotCollectionRates()`,
         below the return. It predates the extraction and is now doubly
         dead.
+        
+        ALEX TO REVIEW TO FIX IT
 
 ## **B. Inference-affecting bugs (wrong numbers, silently) (Alex)**
 
@@ -190,6 +194,8 @@ editor_options:
     that `sample_ls()` is *reached* rather than that `idx_ls` varies,
     precisely so the test does not encode this defect. Revisit that test
     once this is fixed.
+    
+    ALEX TO CHECK
 
 2.  **`reparamFactorModel()` breaks the identity that residual
     covariance = `t(L) %*% L`, so reported species correlations are
@@ -276,6 +282,8 @@ editor_options:
     -- under-fitting the ordination widens the intervals enough to hide
     the bias, so the defect's visible severity depends on the fitted
     factor dimension. See `PLAN.md` 12.1.
+    
+    ALEX TO MAKE A DECISION
 
 3.  **Choose the informative priors for `p`, `q` and `theta0`.** Alex's
     note in this file: *"NEED TO CHOOSE THE INFORMATIVE PRIORS"*. **A
@@ -324,6 +332,8 @@ editor_options:
     **Whatever is chosen, document the tradeoff** under
     `@param listPriors`. Someone running a low-detection study needs to
     know to set `a_p`/`b_p`, and nothing currently tells them.
+    
+    ALEX RESPONSE: WE'LL ACCEPT THIS PRIOR AND THE BIAS
 
 4.  **`beta_theta` still undercovers at 0.766 after the prior-mean fix,
     so a second cause remains.** Measured by the 29 July R = 100 re-run
@@ -346,6 +356,8 @@ editor_options:
     **This is the clearest open target in group A**: it is the largest
     remaining deviation that is definitely a defect (unlike `p`, which
     is the identifiability constraint working as intended).
+    
+    RUN SIMULATION STUDY WITH M > 10 AND SEE IF IT FIXES IT
 
 5.  **`theta0` now overcovers at 0.978-0.985, having been near
     nominal.** Measured by the same re-run (`PLAN.md` 12.3).
@@ -360,6 +372,8 @@ editor_options:
     prior variance on the collection coefficients looks to have
     overshot. Worth examining the two together, since one change
     plausibly produced both.
+    
+    RUN SIMULATION STUDY WITH M > 10 AND SEE IF IT FIXES IT
 
 6.  **`B0` bias roughly doubled, and coverage does not show it.**
     Measured by the same re-run (`PLAN.md` 12.2). **Possible regression,
@@ -382,6 +396,8 @@ editor_options:
     hinted at it and R = 100 confirmed it, so it is not noise. **`B0` is
     a headline quantity for a JSDM -- this needs a cause before the MEE
     paper reports species intercepts.**
+    
+    RUN SIMULATION STUDY WITH M > 10 AND SEE IF IT FIXES IT
 
 ## **C. Crashes, unreachable code paths, and API bugs (Alex)**
 
@@ -395,6 +411,8 @@ editor_options:
     silently disappear. `plotCollectionRates()` also accepts
     `idx_species` and never uses it -- the filter is commented out at
     `:698`.
+    
+    ALEX: CLAUDE TO FIX IT
 
 2.  **`thinOutput()`: two of the three original defects remain**
     (residual of the original audit's B.2; see Fixed bugs 16). The crash
@@ -411,6 +429,8 @@ editor_options:
         (de-exported), but `man/thinOutput.Rd` still ships a `\usage`
         block for it, so the manual documents a function users cannot
         call. Either re-export it or drop the `.Rd`.
+        
+        ALEX TO DISABLE IT FOR NOW, BUT LET'S KEEP IT THERE
 
 3.  **`predictNewSites()` still has no defaults for `X_psi` / `X_s`**
     (residual of the original audit's B.4; see Fixed bugs 18, which
@@ -449,6 +469,8 @@ editor_options:
     (f) `computeSpeciesDetected()`'s roxygen still documents the removed
         Beta-approximation signature (`ab_p`, `K`, `primer`, `alpha`)
         instead of its actual arguments.
+        
+        ALEX WILL REVIEW THE ABOVE
 
 5.  **The two GAM covariate-effect functions have no `idx_species`
     default, so the obvious call fails.** `returnCovariateEffect()` and
@@ -458,6 +480,8 @@ editor_options:
     doing the natural thing. This is the same API gap as
     `predictNewSites()` in item 3 above; fix both the same way, by
     defaulting to all species.
+    
+    CLAUDE CAN FIX
 
 6.  **`plotSpeciesResponseCurve()` is exported but has an internal
     helper's signature.** It takes
@@ -470,6 +494,9 @@ editor_options:
     `NAMESPACE` and let `plotCovariateEffect()` call it internally.
     Until this is settled it is untestable, which is why the new smoke
     tests cover the other two GAM exports and not this one.
+    
+    
+    WAIT FOR ALEX
 
 ## **D. Dead and broken internal code (Alex)**
 
@@ -482,6 +509,8 @@ reading the source. Suggest moving the genuinely dead functions to
     reference undeclared globals (`M`, `sumM`, `n`, `z`, `w`, `y`);
     `loglik_sigma1()` (`:547`) is an unfinished stub whose entire body
     is `p[primerIdx[]]`. All are superseded by the `_cpp` versions.
+    
+    DEPRECATED, BUT KEEP JUST FOR REFERENCE
 
 2.  `R/jsdmfun.R`: `sample_BCsL()` references undefined `U` / `gt` /
     `gts`; `sample_U()`, `sample_Br()` and `sample_BL_fixed()` reference
@@ -491,12 +520,16 @@ reading the source. Suggest moving the genuinely dead functions to
     (it takes two); `returnSpatialEffectMean()` and
     `plotSpatialEffect()` reference a global `Xs_centers` and a
     nonexistent `returnSpatialEffect()`.
+    
+    DEPRECATE THE SAMPLE FUNCTION NOT USED IN THE MCMC
 
 3.  `R/output.R`: `plotReadIntensity()` reads
     `results_output$mu1_output` / `mu0_output` / `sigma1_output` /
     `sigma0_output` and `infos$maxexplogy1`, none of which
     `runOccJSDM()` produces any more; `plotOccupancyStates()` references
     undefined `data_info` / `OTU`.
+    
+    BOTH DEPRECATED
 
 4.  **Missing imports for code that *is* live**: `plotCovariateTrend()`
     (`R/jsdmfun.R:1552`) calls `pivot_longer()` and
@@ -505,6 +538,8 @@ reading the source. Suggest moving the genuinely dead functions to
     also ignores its own `df` argument and hard-codes `df = 5`.)
     `rnbinom()` (`R/jsdmfun.R:451`) and `dnbinom()` (`:594-595`) are
     likewise not imported from `stats`.
+
+    CLAUDE CAN FIX
 
 5.  **`sample_rnb()` cannot run as written** (new in `0abb104`,
     `R/jsdmfun.R:581-614`). Groundwork for the count-data item under
@@ -524,6 +559,8 @@ reading the source. Suggest moving the genuinely dead functions to
     which are not defined anywhere. The Metropolis step itself looks
     right -- the `log(r_star) - log(r_current)` Jacobian is the correct
     correction for a log-scale random walk under a flat prior on `r`.
+    
+    WORK IN PROGRESS FOR THE COUNTS
 
 ## **E. Draft of beta version listserv announcement (Doug)**
 
