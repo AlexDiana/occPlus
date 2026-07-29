@@ -8,7 +8,7 @@ editor_options:
 
 ## functions to add
 
-**v0.1.0-beta** **Public release**
+### **v0.1.0-beta** **Public release**
 
 1.  Alex to dos
 
@@ -22,7 +22,7 @@ editor_options:
     (`dev/simstudy/PLAN.md` §12), most severe first:
 
     | item | what it breaks | measured |
-    |----|----|----|
+    |------------------------|------------------------|------------------------|
     | 6 | Stage 2 detection rate `p` | coverage **0.103** where detection is genuinely low, vs 0.95 nominal |
     | 3 | Stage 1 collection covariates | **0.68-0.73**, in every one of the nine cells that estimates them |
     | 4 | species residual correlations | **0.74-0.77** in nine cells; masked (0.98) when the ordination is under-fitted |
@@ -39,12 +39,12 @@ editor_options:
     in the fixed-bug entries below point at the *post-fix* code and so
     will not match the original audit.
 
-    **Alex's pulls of 28-29 July (`e60e3ad` "Added GAMs", `42198d9`
+    **Alex's commits of 28-29 July (`e60e3ad` "Added GAMs", `42198d9`
     "Fixed many bugs", `59eb56b`).** Verified against the code rather
     than the commit messages, as the `b7b6aa2` experience recommends:
 
     | item | claim | verified state |
-    |----|----|----|
+    |-----------------|-----------------|--------------------------------------|
     | A.1 `sigma_h` | fixed | **FIXED** -- `sample_sigmah()` added (`R/jsdmfun.R:1173`) and called (`:1694`) |
     | A.3 `beta_theta` prior mean | fixed | **FIXED** -- now `rep(0, ncov_theta)`; prior variance also widened from `diag(1)` to `diag(2)` |
     | A.5 OpenMP RNG | fixed | **FIXED** -- `randinvg()` now uses the `thread_local` `rnorm()`; the `R::rnorm` line is commented out |
@@ -535,7 +535,7 @@ editor_options:
         covariate" subsection). A testthat test for `R/diagnostics.R` is
         still not done.
 
-**MEE paper**
+### **MEE paper**
 
 1.  Doug to dos
 
@@ -572,7 +572,7 @@ editor_options:
         **What it found.** Four defects, three traced to specific lines:
 
         | found by | defect |
-        |----|----|
+        |------------------------------------|------------------------------------|
         | writing the tests | `sigma_s` never sampled (**group A item 2**) |
         | writing the tests | `predictNewSites()` missing `X_psi`/`X_s` defaults (**group B item 5**; also corrected Fixed bugs 18) |
         | writing the tests | GP knot floor (**group B item 3**) |
