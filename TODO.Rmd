@@ -14,65 +14,6 @@ editor_options:
 
     2.  Trait matrix currently not allowing for categorical variables
 
-    **Group A has since grown, not shrunk.** Three of its six items (3,
-    4 and 6) were found not by reading code but by the simulation study,
-    which measured *which* parameters were miscalibrated and made the
-    causes findable. A static audit had already been over the same files
-    and walked past all three. Their standing as of the full R = 100 run
-    (`dev/simstudy/PLAN.md` §12), most severe first:
-
-    | item | what it breaks | measured |
-    |------------------------|------------------------|------------------------|
-    | 6 | Stage 2 detection rate `p` | coverage **0.103** where detection is genuinely low, vs 0.95 nominal |
-    | 3 | Stage 1 collection covariates | **0.68-0.73**, in every one of the nine cells that estimates them |
-    | 4 | species residual correlations | **0.74-0.77** in nine cells; masked (0.98) when the ordination is under-fitted |
-    | 5 | reproducibility on Linux/Windows | not measurable here; blocks a reproducible refit |
-    | 2 | GP length-scale | never recovered; rails at the grid maximum |
-    | 1 | `sigma_h` | inert for fitted models; affects `predictNewSites()` only |
-
-    Items 3, 4 and 6 all change fitted values, so **`sampleresults.rda`
-    cannot be regenerated until they are fixed** -- see the CRAN plan in
-    `AGENTS.md`. Cross-references elsewhere in this document (groups
-    C/D, the *MEE paper* section) use the **current** numbering, not the
-    original audit numbering. Line numbers were verified against
-    `e33fc0b` and re-checked against the working tree on 27 July; those
-    in the fixed-bug entries below point at the *post-fix* code and so
-    will not match the original audit.
-
-    **Alex's commits of 28-29 July (`e60e3ad` "Added GAMs", `42198d9`
-    "Fixed many bugs", `59eb56b`).** Verified against the code rather
-    than the commit messages, as the `b7b6aa2` experience recommends:
-
-    | item | claim | verified state |
-    |-----------------|-----------------|--------------------------------------|
-    | A.1 `sigma_h` | fixed | **FIXED** -- `sample_sigmah()` added (`R/jsdmfun.R:1173`) and called (`:1694`) |
-    | A.3 `beta_theta` prior mean | fixed | **FIXED** -- now `rep(0, ncov_theta)`; prior variance also widened from `diag(1)` to `diag(2)` |
-    | A.5 OpenMP RNG | fixed | **FIXED** -- `randinvg()` now uses the `thread_local` `rnorm()`; the `R::rnorm` line is commented out |
-    | A.6 Stage 2 priors | partly | **HALF FIXED** -- all four now read from `listPriors`, and the docs were corrected to match the code (5/1, 1/20). **The default is still `Beta(5, 1)`**, which is the half that causes the 0.103 coverage. |
-    | A.2 `sample_ls` density | -- | **NOT FIXED** -- still `sigma_s = 1` at the call site (`R/jsdmfun.R:1700`), still scoring `SE` as a GP draw |
-    | A.4 `reparamFactorModel` | -- | **NOT FIXED** -- still scales by `diag(diag(R_current))` (`R/jsdmfun.R:34`) |
-    | B.5 `predictNewSites` defaults | -- | **NOT FIXED** -- `X_psi`/`X_s` still have no defaults |
-
-    Also new: a **GAM feature** (`plotCovariateEffect()`,
-    `plotSpeciesResponseCurve()`, `returnCovariateEffect()`), which
-    discharges "GAMs for JSDM" under *Alex to dos*. Not yet covered by
-    any test.
-
-    **Consequence for the simulation study: the R = 100 results are now
-    partly stale.** A.1, A.3 and A.6's wiring all change fitted values,
-    so the coverage table in `dev/simstudy/PLAN.md` §12 describes the
-    *pre-pull* code. The `beta_theta` row in particular should now
-    improve. Re-running is the outstanding item (a) under *MEE paper /
-    Doug to dos 2* -- and it is now the way to confirm Alex's fixes
-    worked, which is precisely what that item exists for.
-
-    One test needed relaxing after the pull, and it was **my** test at
-    fault rather than Alex's code: the row-shuffle check asserted on
-    `data_info` including `row.names`, which are inherited from the
-    caller's row order and are cosmetic. Content, key sequence and both
-    design matrices were identical. Now compared with
-    `ignore_attr = TRUE`.
-
     **A. Inference-affecting bugs (wrong numbers, silently)**
 
     1.  **`sample_ls()` evaluates the wrong density, so the GP
@@ -158,8 +99,43 @@ editor_options:
         `idx_ls` varies, precisely so the test does not encode this
         defect. Revisit that test once this is fixed.
 
-    2.  THIS IS NOT AN ISSUE FOR LOGISTIC MODELS (as the covariance
-        matrix is not recoverable anyway, only the correlation one)
+    2.  **Alex's note:** *"THIS IS NOT AN ISSUE FOR LOGISTIC MODELS (as
+        the covariance matrix is not recoverable anyway, only the
+        correlation one)"*.
+
+        **Agreed on the premise, but the measurement is of the
+        correlation, not the covariance -- so the objection does not
+        resolve it. Needs a second look.** In a logistic latent-variable
+        model the scale is indeed unidentified and only the correlation
+        is meaningful. The numbers below are `cov2cor()` output: already
+        correlations, and they still change by up to **0.612** under the
+        reparameterisation.
+
+        The reason `cov2cor()` does not absorb it: `diag(1/diag(R))`
+        rescales **per factor**, whereas `cov2cor()` normalises **per
+        species**. A per-factor rescaling is not a global scale change,
+        so it survives the normalisation and alters the correlations.
+
+        | pair | original | after reparam |
+        |------|----------|---------------|
+        | 1 | +0.713 | **+0.926** |
+        | 2 | -0.811 | **-0.958** |
+        | 3 | -0.168 | **-0.780** |
+        | 4 | +0.443 | **+0.875** |
+        | 5 | +0.585 | **+0.285** |
+
+        Consistently pushed toward the extremes. `Var(U)` after the
+        reparameterisation is `diag(0.23, 2.01)`, not the identity,
+        which is the mechanism: the model's residual correlation is
+        `t(L) %*% L` only while `U` is standardised, and the
+        reparameterisation moves scale out of `U` into `L`.
+
+        The grid agrees: `resid_cor` covers at 0.74-0.77 in nine of ten
+        scenarios (`PLAN.md` §12). **If this is genuinely a non-issue,
+        the study is measuring something else and I would want to know
+        what** -- the truth there is `cov2cor(crossprod(L_true))` from
+        the simulator's own `L`, compared against the same function of
+        the stored `L`.
 
         **`reparamFactorModel()` breaks the identity that residual
         covariance = `t(L) %*% L`, so reported species correlations are
@@ -218,45 +194,53 @@ editor_options:
             existing output contract; check with Alex which constraint
             the `diag(diag(R))` scaling was meant to impose.
 
-    3.  NEED TO CHOOSE THE INFORMATIVE PRIORS
+    3.  **Choose the informative priors for `p`, `q` and `theta0`.**
+        Alex's note in this file: *"NEED TO CHOOSE THE INFORMATIVE
+        PRIORS"*. **A design task, not a bug** -- an earlier version of
+        this entry called the prior a defect, which was wrong.
 
-        **The Stage 2 detection prior is too informative and too
-        optimistic; it causes `p`'s undercoverage, and it is hard-coded
-        so a user cannot work around it.** Found 28 July 2026 by the
-        coverage study. **Originally filed as a *possible* bug on the
-        theory that part of the bias was inherent to a two-stage model
-        with both stages latent. That theory is now disproven** -- see
-        the experiment below. What remains is a straightforward defect
-        plus one design choice for Alex.
-
-        **The code** (`R/runOccJSDM.R:712-715`):
+        **An informative prior is required here, not optional.** `p` and
+        `q` enter the sampler perfectly symmetrically --
 
         ```         
-        a_p <- 5;  b_p <- 1        # Beta(5, 1), prior mean 0.833
-        a_q <- 1;  b_q <- 20       # Beta(1, 20), prior mean 0.048
+        p(l,s) = rbeta(a_p + [w=1 & detected], b_p + [w=1 & not detected])
+        q(l,s) = rbeta(a_q + [w=0 & detected], b_q + [w=0 & not detected])
         ```
 
-        **Three defects, all confirmed.**
+        -- and **no `p > q` constraint is enforced anywhere in the code**
+        (checked). The augmented likelihood is therefore invariant under
+        swapping *(collected, `p`)* with *(not collected, `q`)*: the
+        label-switching multimodality of false-positive occupancy
+        models. The only thing selecting the correct mode is the prior,
+        `Beta(5, 1)` pushing `p` high against `Beta(1, 20)` pushing `q`
+        low; `theta0` gets the same treatment at Stage 1. Flatten them
+        and the model is unidentified.
 
-        (a) *Beta(5, 1) biases `p` and wrecks its coverage.* Prior mean
-            0.833 asserts PCR detection is probably above 0.8, while
-            `data/sampledata.rda` was deliberately regenerated at `p` in
-            0.3-0.6 as the realistic eDNA regime. The shipped prior and
-            the shipped example data disagree about what a plausible
-            detection rate is.
+        **What the study measured, correctly interpreted.** In
+        `low_information` (true `p` in 0.1-0.3 against a prior mean of
+        0.833) `p` covers at **0.103** with bias **+0.49**, against
+        0.90-0.92 elsewhere. That is not a defect firing -- it is **the
+        cost of the identifiability constraint, quantified**, in the
+        regime where constraint and data disagree most.
 
-        **The experiment that settled it.** Same data, same seeds, only
-        the prior changed:
+        **The decision.** How informative should the default be?
 
-        | prior on `p`          | coverage  | bias       |
-        |-----------------------|-----------|------------|
-        | `Beta(5, 1)` as coded | 0.903     | **+0.050** |
-        | `Beta(1, 1)` flat     | **0.944** | **-0.005** |
+        - Too weak: the chain can flip to the mirror mode, which
+          presents as catastrophic nonsense rather than a warning.
+        - Too strong: low-detection studies -- the eDNA norm, and what
+          `data/sampledata.rda` was deliberately regenerated to
+          represent -- are biased upward by up to 0.5.
 
-        For (a), **Alex should choose the default** -- `Beta(1,1)` was
-        only a diagnostic, not a recommendation. The requirement is that
-        the default not be sharply informative at 0.83 when the
-        package's own example data sits at 0.3-0.6.
+        Worth informing with the Ji et al. (2025) posteriors, which are
+        real detection rates from the system the model was built for.
+
+        **Already settled, no decision needed** (Alex, `42198d9`): all
+        four hyperparameters now read from `listPriors`, so a user can
+        override them, and the documented defaults match the code.
+
+        **Whatever is chosen, document the tradeoff** under
+        `@param listPriors`. Someone running a low-detection study needs
+        to know to set `a_p`/`b_p`, and nothing currently tells them.
 
     **B. Crashes, unreachable code paths, and API bugs**
 
@@ -744,7 +728,7 @@ editor_options:
     >
     > Feedback, feature requests, and bug reports are very welcome.
 
-**Fixed bugs**
+### **Fixed bugs**
 
 This is the authoritative record of audit items that have been resolved.
 Items 1-10 were fixed in commit `b7b6aa2` (26 July 2026); items 11-20
