@@ -442,10 +442,10 @@ SBC. That is the method working (group A item 1), not a new bug.
 Measured on `sampledata` (100 sites, 10 species, 2 chains): **0.039 s
 per iteration**, so `nburn = 1000 + niter = 1000` is \~84 s per fit.
 
-|                   | Serial  | 5 cores        |
-|-------------------|---------|----------------|
-| One cell, R = 100 | \~2.3 h | \~28 min       |
-| 10 cells          | \~23 h  | **\~4.75 h**   |
+|                   | Serial  | 5 cores      |
+|-------------------|---------|--------------|
+| One cell, R = 100 | \~2.3 h | \~28 min     |
+| 10 cells          | \~23 h  | **\~4.75 h** |
 
 **Superseded by measurement**: the 29 July run did all 10 cells in 285
 min on 5 cores, i.e. \~4.75 h. The earlier \~2.5–3 h figure assumed 8
@@ -781,8 +781,8 @@ sleeping mid-run).
 
 **Status: planned, not yet run.** Commissioned by Doug, 29 July 2026, as
 the next step on `TODO.md` group B items 4, 5 and 6, each of which is
-annotated CLAUDE TO RUN SIMULATION STUDY WITH M > 10 AND SEE IF IT FIXES
-IT.
+annotated CLAUDE TO RUN SIMULATION STUDY WITH M \> 10 AND SEE IF IT
+FIXES IT.
 
 ### 13.1 The hypothesis, and why one lever could explain three findings
 
@@ -813,19 +813,19 @@ one, because `M = 2` to `3` is entirely realistic in eDNA practice.
 
 ### 13.2 Design
 
-A **ladder**, not a single M > 10 point. One high-M run answers "fixed
+A **ladder**, not a single M \> 10 point. One high-M run answers "fixed
 or not"; a ladder answers "fixed, and from where" -- and distinguishes a
 deviation that decays smoothly toward nominal (information-limited) from
 one that plateaus at a non-nominal level (a real defect that more data
 cannot reach).
 
-| Arm | M | K | Rows | Purpose |
-|-----|---|---|------|---------|
-| `M2`  | 2  | 3  | 1200  | Reproduces the current base cell; internal check |
-| `M5`  | 5  | 3  | 3000  | Is the improvement already underway? |
-| `M10` | 10 | 3  | 6000  | Doug's threshold |
-| `M20` | 20 | 3  | 12000 | Comfortably past it |
-| `K30` | 2  | 30 | 12000 | **Control** -- matched rows, wrong stage |
+| Arm   | M   | K   | Rows  | Purpose                                          |
+|-------|-----|-----|-------|--------------------------------------------------|
+| `M2`  | 2   | 3   | 1200  | Reproduces the current base cell; internal check |
+| `M5`  | 5   | 3   | 3000  | Is the improvement already underway?             |
+| `M10` | 10  | 3   | 6000  | Doug's threshold                                 |
+| `M20` | 20  | 3   | 12000 | Comfortably past it                              |
+| `K30` | 2   | 30  | 12000 | **Control** -- matched rows, wrong stage         |
 
 **`K30` is what makes the result interpretable.** Raising `M` raises the
 total observation count, so if everything improves, the naive reading
@@ -835,16 +835,16 @@ samples. If `M20` fixes the three findings and `K30` does not, the
 mechanism is specifically Stage 1 identification. If both fix them, it
 is merely sample size, and the conclusion is much weaker.
 
-**The arms share a truth, so the ladder is paired.** `simstudy_seed_for()`
-honours a `seed_label` field, and all five arms set `seed_label =
-"mladder"`, so replicate *r* draws the same truth in every arm. The
-differences between arms then stop carrying the variance of independent
-truths -- which is precisely what a ladder reads.
+**The arms share a truth, so the ladder is paired.**
+`simstudy_seed_for()` honours a `seed_label` field, and all five arms
+set `seed_label = "mladder"`, so replicate *r* draws the same truth in
+every arm. The differences between arms then stop carrying the variance
+of independent truths -- which is precisely what a ladder reads.
 
 **How far the pairing extends, measured rather than assumed:**
 
-| Quantity | Paired across M? | |
-|---|---|---|
+| Quantity | Paired across M? |   |
+|----|----|----|
 | `B0`, `B`, `G`, `A`, `C`, `L`, `sigma_b`, `tau` | **yes** | the whole JSDM layer |
 | `z_true` | **yes** | latent occupancy |
 | `p_true`, `q_true`, `theta0`, `theta_baseline` | **yes** | Stage 2 rates and Stage 1 baseline |
@@ -855,13 +855,13 @@ truths -- which is precisely what a ladder reads.
 `beta_theta`'s slopes are drawn at `R/simulateData.R:128` with
 `sample(c(-1,1,0), ...)` *after* `simulateOccJSDMData()` has built the
 `N`-sized `X_theta`, so by then the stream has diverged and there is no
-`list_params` hook to inject them. The residual is bounded -- slope signs
-from a three-point set, with the intercept row paired -- and the estimand
-is unchanged, so the ladder stays unbiased for `beta_theta`, just noisier
-than for the blocks above. **B6 (`B0`) and B5 (`theta0`) get the full
-paired benefit; B4 (`beta_theta`) gets a partial one.** The `M20` vs
-`K30` control comparison is likewise unpaired for `beta_theta`, since
-those arms differ in `N`.
+`list_params` hook to inject them. The residual is bounded -- slope
+signs from a three-point set, with the intercept row paired -- and the
+estimand is unchanged, so the ladder stays unbiased for `beta_theta`,
+just noisier than for the blocks above. **B6 (`B0`) and B5 (`theta0`)
+get the full paired benefit; B4 (`beta_theta`) gets a partial one.** The
+`M20` vs `K30` control comparison is likewise unpaired for `beta_theta`,
+since those arms differ in `N`.
 
 `test-recovery.R` asserts all of this. It fails if anyone adds a draw to
 `draw_truth()` sized by `N`, `M` or `K`, which would silently unpair the
@@ -870,7 +870,8 @@ ladder.
 Base cell only: all three findings are flat across the other nine cells,
 so one cell isolates the mechanism at a tenth of the cost.
 
-**`R = 50`, but only for the first stage, and the reason is asymmetric.**
+**`R = 50`, but only for the first stage, and the reason is
+asymmetric.**
 
 Detecting that the deviation *persists* is easy: testing 0.766 against
 nominal uses the null SE, `sqrt(0.95 * 0.05 / 50)` = 3.1%, so the
@@ -880,11 +881,11 @@ Confirming it has *recovered* is much harder, and R = 50 cannot do it.
 That claim needs an interval around the observed value, where the SE is
 `sqrt(p(1-p)/R)` at the observed p:
 
-| R | SE at p \~ 0.94 | 95% CI around an observed 0.94 |
-|---|---|---|
-| 50  | 3.4% | [0.87, 1.00] |
-| 100 | 2.4% | [0.89, 0.99] |
-| 200 | 1.7% | **[0.91, 0.97]** |
+| R   | SE at p \~ 0.94 | 95% CI around an observed 0.94 |
+|-----|-----------------|--------------------------------|
+| 50  | 3.4%            | [0.87, 1.00]                   |
+| 100 | 2.4%            | [0.89, 0.99]                   |
+| 200 | 1.7%            | **[0.91, 0.97]**               |
 
 At R = 50 an observed 0.94 is indistinguishable from a true 0.88, which
 is still meaningful undercoverage -- so "fixed" could not be told from
@@ -893,35 +894,36 @@ the absence of a small deviation is a different and more expensive claim
 than detecting a large one.
 
 **So: two stages.** R = 50 across the ladder answers the question Doug
-actually asked -- *is `M` the lever?* -- because the answer is carried by
-the **shape across arms**, and a monotone rise over four arms is evidence
-no single point can supply. Then re-run only the decisive arm at
-**R = 200** if it lands high, since that is the one number that would
+actually asked -- *is `M` the lever?* -- because the answer is carried
+by the **shape across arms**, and a monotone rise over four arms is
+evidence no single point can supply. Then re-run only the decisive arm
+at **R = 200** if it lands high, since that is the one number that would
 appear in the paper. Roughly 1.9 h now and 2.4 h later, the second spent
 only if the first justifies it.
 
 ### 13.3 Cost (measured 29 July, not projected)
 
-Per fit at the study's `nburn = 1000 + niter = 1000`, extrapolated from a
-200-iteration timing on this machine:
+Per fit at the study's `nburn = 1000 + niter = 1000`, extrapolated from
+a 200-iteration timing on this machine:
 
-| M | s/fit | R = 50 on 5 cores |
-|---|-------|-------------------|
-| 2  | 40  | \~8 min  |
-| 5  | 64  | \~13 min |
-| 10 | 100 | \~20 min |
-| 20 | 179 | \~36 min |
+| M   | s/fit | R = 50 on 5 cores |
+|-----|-------|-------------------|
+| 2   | 40    | \~8 min           |
+| 5   | 64    | \~13 min          |
+| 10  | 100   | \~20 min          |
+| 20  | 179   | \~36 min          |
 
 Plus `K30` at roughly the `M20` cost. **Total \~1.9 h.** Note the cost
-scales *sub*-linearly in rows -- M = 20 is 4.5x M = 2, not 10x -- because
-much of the per-iteration work is over species and sites, not samples.
+scales *sub*-linearly in rows -- M = 20 is 4.5x M = 2, not 10x --
+because much of the per-iteration work is over species and sites, not
+samples.
 
 ### 13.4 What each outcome means
 
 Decided in advance, so this is a test rather than a fishing trip.
 
 | Outcome | Reading | Action |
-|---------|---------|--------|
+|----|----|----|
 | All three approach nominal as M rises; `K30` does not | Stage 1 under-identification. Not defects. | **Re-run the winning arm at R = 200 before closing anything** -- R = 50 cannot separate 0.94 from 0.88. Then close B4-B6 as "not a bug", document the `M` requirement, and state it in the MEE paper: it is a real limitation for `M = 2` eDNA designs. |
 | B4/B5 recover, B6's bias persists | Two causes. Stage 1 explains the coverage findings; `B0` is a separate regression. | Close B4/B5; keep B6 open and go after the `jsdmfun.R` rewrite. |
 | Nothing improves, even at M = 20 | Genuine code defects; `M` is not the lever. | Keep all three open. Next suspect is the widened `diag(2)` prior variance, which is the common edit behind B4 and B5. |
@@ -947,10 +949,10 @@ No machinery change needed: `M` and `K` are already scenario fields, and
 
 **Check first:** the `M2` arm should agree with the existing base cell
 (`beta_theta` 0.763, `theta0` 0.983, `B0` bias -0.208) within its SE.
-Its seeds differ -- `simstudy_seed()` keys on the label -- so it will not
-reproduce them exactly, but a disagreement beyond about 2 SE would mean
-the ladder is measuring something other than what it claims, and should
-be resolved before reading the rest.
+Its seeds differ -- `simstudy_seed()` keys on the label -- so it will
+not reproduce them exactly, but a disagreement beyond about 2 SE would
+mean the ladder is measuring something other than what it claims, and
+should be resolved before reading the rest.
 
 ### 13.6 Caveats
 
@@ -959,7 +961,7 @@ be resolved before reading the rest.
 1 is identified by. It says nothing about whether more sites would help,
 and should not be quoted as if it did.
 
-Raising `M` also raises the number of latent `w` states being sampled, so
-mixing may differ across arms. If a high-M arm shows worse mixing rather
-than better coverage, check `returnConvergenceDiagnostics()` before
-concluding anything about identification.
+Raising `M` also raises the number of latent `w` states being sampled,
+so mixing may differ across arms. If a high-M arm shows worse mixing
+rather than better coverage, check `returnConvergenceDiagnostics()`
+before concluding anything about identification.
