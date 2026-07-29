@@ -56,6 +56,53 @@ editor_options:
         the answer decides whether the group D parallelism items are
         worth anything. See group D.
 
+    3.  **Review the `plotCollectionRates()` fix, and decide how far to
+        take it.** **Written by Claude** (AI agent, in a session with
+        Doug) on 29 July 2026, not by Doug. Touches `R/output.R` only.
+        Reverted or reworked freely; it has had no human review beyond
+        Doug reporting the error.
+
+        **What was broken.** The function errored on *every* input with
+        `object 'Min' not found`. `plotSpeciesRates()` had been
+        extracted as a shared helper and never wired up to its only
+        caller: it read columns `Min`/`Max` while the caller passed
+        `quantile()`'s `2.5%`/`97.5%`, filtered on a `Species` column
+        the caller never created, and referenced `speciesNames` as a
+        free variable that exists in neither its arguments nor the
+        namespace. Full detail in **Fixed bugs 31**.
+
+        **The part that matters most: the vignette calls this.**
+        `vignettes/occJSDM.Rmd:515` calls
+        `plotCollectionRates(fitmodel, idx_species = 1:10)` in a plain
+        evaluated chunk -- no `eval = FALSE`. So the vignette cannot
+        have been rebuilt since this broke, and `R CMD check` would have
+        failed on it. That makes it a CRAN blocker, not a cosmetic
+        plotting bug. **Worth rebuilding the vignette to confirm it now
+        passes**, and worth asking what else has gone stale in it for
+        the same reason.
+
+        **Three decisions.**
+
+        (a) **Is the helper's new contract the one you want?**
+            `plotSpeciesRates(data_plot, idx_species, speciesNames)`
+            now takes one row per species with `Min`/`Max` columns plus
+            the *unsubset* names, and does the subsetting itself, so
+            ordering is computed on exactly the rows plotted. If the
+            helper was meant to serve the other three rate plots, this
+            is the contract they would adopt -- so it should be a
+            shape you are happy with.
+        (b) **Do you want the other three fixed the same way?**
+            `plotOccupancyRates()`, `plotFPTPStage2Rates()` and
+            `plotStage1FPRates()` still order on the full species set
+            while indexing a filtered one, which silently mismatches
+            labels to bars (group B item 1). The test added for
+            `plotCollectionRates()` asserts label-to-value pairing
+            against an independent recomputation and is the template.
+        (c) **Delete the commented-out block?** The original inline
+            implementation is still sitting in `plotCollectionRates()`,
+            below the return. It predates the extraction and is now
+            doubly dead.
+
     **A. Inference-affecting bugs (wrong numbers, silently)**
 
     1.  **`sample_ls()` evaluates the wrong density, so the GP
@@ -1085,8 +1132,9 @@ verified against the source rather than the commit message.
     and 6.*
 
 31. **`plotCollectionRates()` errored on every input.** Reported by Doug
-    29 July 2026, fixed the same day. Failed with `object 'Min' not
-    found` for any `fitModel`, with or without `idx_species`.
+    29 July 2026, fixed the same day. Failed with
+    `object 'Min' not found` for any `fitModel`, with or without
+    `idx_species`.
 
     `plotSpeciesRates()` (`R/output.R:819`) had been extracted as a
     shared helper and never wired up to its only caller. Three
@@ -1109,9 +1157,9 @@ verified against the source rather than the commit message.
     **Fixed** by giving the helper an explicit contract -- one row per
     species with `Min`/`Max`, plus `idx_species` and the *unsubset*
     `speciesNames` -- and doing the subsetting inside it, so the
-    ordering is computed on exactly the rows plotted. Also added a
-    clear error for models with no collection stage, which previously
-    fell through to a subscript failure.
+    ordering is computed on exactly the rows plotted. Also added a clear
+    error for models with no collection stage, which previously fell
+    through to a subscript failure.
 
     **Note for group B item 1:** this fixes the species-ordering defect
     for this function only. `plotOccupancyRates()`,
