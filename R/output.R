@@ -367,6 +367,7 @@ returnOccupancyGradient <- function(fitModel,
   })
 }
 
+
 #' plotOccupancyGradient
 #'
 #' Plot predicted occupancy probability across a covariate gradient.
@@ -428,6 +429,193 @@ plotOccupancyGradient <- function(fitModel,
 
 }
 
+#' plotSpeciesResponseCurve
+#'
+#' Plot predicted species response curve
+#'
+#' @details
+#'
+#' @param fitModel Output from the function runOccJSDM
+#' @param covName Name of the covariate to vary (same name as in data$info)
+#' @param idx_species Indexes of the species to include (leave out for all species)
+#' @param n_grid Number of grid points spanning the covariate's range (default 40)
+#' @param confidence Confidence level of the credible interval, default .95
+#'
+#' @return A ggplot object
+#'
+#' @examples
+#' \dontrun{
+#' plotSpeciesResponseCurve(fitModel, covName = "X_psi.1")
+#' }
+#'
+#' @export
+#' @import dplyr
+#' @import ggplot2
+#'
+plotSpeciesResponseCurve <- function(species_name,
+                               target_cov,
+                               beta_mcmc_j,
+                               list_matrix,
+                               raw_df,
+                               n_points = 200) {
+
+  # 1. Create a grid for the target covariate across its original range
+  cov_seq <- seq(min(raw_df[[target_cov]], na.rm = TRUE),
+                 max(raw_df[[target_cov]], na.rm = TRUE),
+                 length.out = n_points)
+
+  # 2. Build a synthetic grid dataframe holding other covariates constant at their mean/mode
+  grid_df <- data.frame(matrix(ncol = length(list_matrix$names_df), nrow = n_points))
+  colnames(grid_df) <- list_matrix$names_df
+
+  for (col_name in list_matrix$names_df) {
+    if (col_name == target_cov) {
+      grid_df[[col_name]] <- cov_seq
+    } else if (list_matrix$is_numeric[[col_name]]) {
+      grid_df[[col_name]] <- list_matrix$mean_df[[col_name]] # Hold continuous at original mean
+    } else {
+      grid_df[[col_name]] <- list_matrix$cat_levels[[col_name]][1] # First factor level
+    }
+  }
+
+  # 3. Transform synthetic grid into X_pred using your saved function
+  # Note: set remove_intercept = FALSE if your MCMC beta vector includes the intercept
+  X_pred <- transform_new_covariates(grid_df, list_matrix, remove_intercept = FALSE)
+
+  # 4. Multiply X_pred by MCMC posterior draws for species j
+  # beta_mcmc_j is a matrix of size (N_draws x P_cols)
+  # posterior_fit will be (n_points x N_draws)
+  posterior_fit <- X_pred %*% t(beta_mcmc_j)
+
+  # If you are fitting Presence-Absence (Probit link), apply normal CDF:
+  # posterior_fit <- pnorm(posterior_fit)
+
+  # 5. Summarize mean response and 95% Credible Intervals across MCMC draws
+  plot_data <- data.frame(
+    x     = cov_seq,
+    mean  = apply(posterior_fit, 1, mean),
+    lower = apply(posterior_fit, 1, quantile, probs = 0.025),
+    upper = apply(posterior_fit, 1, quantile, probs = 0.975)
+  )
+
+  # 6. Plot using ggplot2
+  p <- ggplot(plot_data, aes(x = x, y = mean)) +
+    geom_ribbon(aes(ymin = lower, ymax = upper), fill = "skyblue", alpha = 0.4) +
+    geom_line(color = "blue", linewidth = 1) +
+    labs(
+      title = paste("Response of", species_name, "to", target_cov),
+      x = target_cov,
+      y = "Predicted Response (Linear Predictor / Probability)"
+    ) +
+    theme_minimal()
+
+  return(p)
+}
+
+
+#' returnCovariateEffect
+#'
+#' Return predicted species response curve
+#'
+#' @details
+#'
+#'
+#' @param fitModel Output from the function runOccJSDM
+#' @param covName Character vector. Name(s) of the covariate(s) to evaluate
+#' @param idx_species Indexes of the species to include (leave out for all species)
+#' @param confidence Numeric scalar between 0 and 1. The width of the Bayesian
+#'   credible interval to compute (default is \code{0.95} for a 95\% interval).
+#'
+#' @export
+#' @import dplyr
+#' @import ggplot2
+#'
+returnCovariateEffect <- function(fitModel,
+                                  covName,
+                                  idx_species,
+                                  confidence = .95){
+
+  B_output <- fitModel$results_output$jsdm_output$B_output
+  B0_output <- fitModel$results_output$jsdm_output$B0_output
+  speciesNames <- fitModel$infos$speciesNames
+  sp_name <- speciesNames[idx_species]
+
+  B_output_vec <- apply(B_output, c(1,2), c)
+  B0_output_vec <- apply(B0_output, 1, c)
+
+  X_psi <- fitModel$X_psi
+  X0_psi <- fitModel$infos$X0_psi
+
+  link_model <- ifelse(fitModel$infos$jsdmModel == "continuous","identity","logit")
+
+  list_matrix <- fitModel$infos$list_X_psi_mat
+
+  returnCovariateEffect_base(
+    covName,
+    idx_species,
+    sp_name,
+    B0_output_vec,
+    B_output_vec,
+    list_matrix,
+    speciesNames,
+    X0 = X0_psi,
+    X = X_psi,
+    link = link_model
+  )
+
+}
+
+#' plotCovariateEffect
+#'
+#' Plot predicted species response curve
+#'
+#' @details
+#'
+#'
+#' @param fitModel Output from the function runOccJSDM
+#' @param covName Character vector. Name(s) of the covariate(s) to evaluate
+#' @param idx_species Indexes of the species to include (leave out for all species)
+#' @param confidence Numeric scalar between 0 and 1. The width of the Bayesian
+#'   credible interval to compute (default is \code{0.95} for a 95\% interval).
+#'
+#' @export
+#' @import dplyr
+#' @import ggplot2
+#'
+plotCovariateEffect <- function(fitModel,
+                                covNames,
+                                idx_species,
+                                confidence = .95){
+
+  B_output <- fitModel$results_output$jsdm_output$B_output
+  B0_output <- fitModel$results_output$jsdm_output$B0_output
+  speciesNames <- fitModel$infos$speciesNames
+  sp_name <- speciesNames[idx_species]
+
+  B_output_vec <- apply(B_output, c(1,2), c)
+  B0_output_vec <- apply(B0_output, 1, c)
+
+  X_psi <- fitModel$X_psi
+  X0_psi <- fitModel$infos$X0_psi
+
+  link_model <- ifelse(fitModel$infos$jsdmModel == "continuous","identity","logit")
+
+  list_matrix <- fitModel$infos$list_X_psi_mat
+
+  plot_list <- plotCovariateEffect_base(
+    idx_species,
+    covNames,
+    B0_output_vec,
+    B_output_vec,
+    list_matrix,
+    speciesNames,
+    X0 = X0_psi,
+    X = X_psi,
+    link = link_model
+  )
+
+  plot_list
+}
 
 #' returnBaselineOccupancyRates
 #'
@@ -1476,7 +1664,13 @@ predictNewSites <- function(fitModel,
   # create env cov matrix
   if(useEnvCov) {
 
-    X_psi <- transformCovariatesMatrix(X_psi, fitModel$infos$list_X_psi_mat, remove_intercept = T)
+    # X_psi <- transformCovariatesMatrix(X_psi, fitModel$infos$list_X_psi_mat, remove_intercept = T)
+
+    X_psi <- transform_new_covariates(
+      X_psi,
+      fitModel$infos$list_X_psi_mat,
+      remove_intercept = TRUE
+    )
 
   } else {
 
@@ -1484,11 +1678,11 @@ predictNewSites <- function(fitModel,
 
   }
 
+  if(useSpatial & !isSpatFieldEstimated) stop("Cannot use spatial if it was not estimated initially")
+
   if(useSpatial & isSpatFieldEstimated & is.null(X_s)) {
     stop("No spatial locations present")
   }
-
-  if(useSpatial & !isSpatFieldEstimated) stop("Cannot use spatial if it was not estimated initially")
 
   # create spatial matrix
   if(useSpatial){
@@ -1551,7 +1745,6 @@ predictNewSites <- function(fitModel,
   pred_output
 
 }
-
 
 # SITE-SAMPLE SUMMARIES ----------
 

@@ -453,6 +453,8 @@ NumericMatrix sample_w_cim_cipp(const NumericMatrix& y,
                                 const IntegerVector& sumL,
                                 const IntegerVector& sumM,
                                 const IntegerVector& sumK,
+                                const IntegerVector& P,
+                                const IntegerVector& primerId,
                                 int maxL,
                                 const NumericMatrix& z) {
 
@@ -462,7 +464,10 @@ NumericMatrix sample_w_cim_cipp(const NumericMatrix& y,
 
   NumericMatrix w(N, S);
 
-  // Precompute logs for p and q
+  // Precompute logs for p and q. Rows here are indexed by *global* primer
+  // identity (1..maxL, the number of distinct primers in the whole dataset),
+  // not by a primer's position within a given sample's block, since P (the
+  // number of primers actually used) can differ across samples.
   NumericMatrix log_p(maxL, S), log_1p(maxL, S);
   NumericMatrix log_q(maxL, S), log_1q(maxL, S);
 
@@ -479,17 +484,20 @@ NumericMatrix sample_w_cim_cipp(const NumericMatrix& y,
     for (int i = 0; i < n; i++) {
       for (int m = 0; m < M[i]; m++) {
 
+        int nprimers = P[sumM[i] + m];
+
         // compute log p(w = 1)
         double log_p1 = 0.0;
-        for (int l = 0; l < maxL; l++) {
+        for (int l = 0; l < nprimers; l++) {
           int idxL = sumL[sumM[i] + m] + l;
+          int primerRow = primerId[idxL] - 1; // 0-based global primer identity
           for (int k = 0; k < K[idxL]; k++) {
 
             int idxK = sumK[idxL] + k;
 
             if(y_NA(idxK, s) == 0){
 
-              log_p1 += y(idxK, s) * log_p(l, s) + (1 - y(idxK, s)) * log_1p(l, s);
+              log_p1 += y(idxK, s) * log_p(primerRow, s) + (1 - y(idxK, s)) * log_1p(primerRow, s);
 
             }
 
@@ -498,14 +506,15 @@ NumericMatrix sample_w_cim_cipp(const NumericMatrix& y,
 
         // compute log p(w = 0)
         double log_p0 = 0.0;
-        for (int l = 0; l < maxL; l++) {
+        for (int l = 0; l < nprimers; l++) {
           int idxL = sumL[sumM[i] + m] + l;
+          int primerRow = primerId[idxL] - 1;
           for (int k = 0; k < K[idxL]; k++) {
             int idxK = sumK[idxL] + k;
 
             if(y_NA(idxK, s) == 0){
 
-              log_p0 += y(idxK, s) * log_q(l,s) + (1 - y(idxK, s)) * log_1q(l,s);
+              log_p0 += y(idxK, s) * log_q(primerRow,s) + (1 - y(idxK, s)) * log_1q(primerRow,s);
 
             }
           }

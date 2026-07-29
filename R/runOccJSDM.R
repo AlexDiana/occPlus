@@ -7,51 +7,64 @@ get_param <- function(params, key, default = 0) {
 }
 
 process_covariates <- function(data_info, covariates, group_by_col, n_obs,
-                               remove_intercept = FALSE) {
+                               remove_intercept = FALSE,
+                               spline_vars = F) {
 
   if (length(covariates) > 0) {
 
-  # Process the covariates
-  df <- data_info %>%
-    dplyr::group_by(!!rlang::sym(group_by_col)) %>%
-    dplyr::summarise(dplyr::across(dplyr::all_of(covariates), ~ dplyr::first(.x))) %>%
-    dplyr::select(-dplyr::all_of(group_by_col)) %>%
-    dplyr::mutate(dplyr::across(dplyr::where(~ !is.numeric(.x)), as.factor))
+    # Process the covariates
+    df <- data_info %>%
+      dplyr::group_by(!!rlang::sym(group_by_col)) %>%
+      dplyr::summarise(dplyr::across(dplyr::all_of(covariates), ~ dplyr::first(.x))) %>%
+      dplyr::select(-dplyr::all_of(group_by_col)) %>%
+      dplyr::mutate(dplyr::across(dplyr::where(~ !is.numeric(.x)), as.factor))
 
-  if (any(is.infinite(as.matrix(df)))) stop("Infinite values (Inf or -Inf) detected in covariates.")
-  if (any(is.nan(as.matrix(df)))) stop("NaN values detected in covariates.")
+    if (any(is.infinite(as.matrix(df)))) stop("Infinite values (Inf or -Inf) detected in covariates.")
+    if (any(is.nan(as.matrix(df)))) stop("NaN values detected in covariates.")
 
-  is_numeric <- sapply(df, is.numeric)
+    # old code
+    {
 
-  names_df <- colnames(df)
-
-  means_df <- sapply(df, function(x) if(is.numeric(x)) mean(x, na.rm = TRUE) else NA)
-  sd_df   <- sapply(df, function(x) if(is.numeric(x)) sd(x, na.rm = TRUE) else NA)
-
-  if (any(sd_df == 0, na.rm = TRUE)) {
-    zero_var_cols <- names_df[which(sd_df == 0)]
-    stop(paste("The following covariates have constant values:",
-               paste(zero_var_cols, collapse = ", ")))
-  }
-
-  cat_levels <- list()
-  for (col in 1:ncol(df)) {
-    if(is_numeric[col]){
-      cat_levels[[col]] <- NA
-    }else{
-      cat_levels[[col]] <- levels(as.factor(df[[col]]))
+      #     is_numeric <- sapply(df, is.numeric)
+      #
+      #     names_df <- colnames(df)
+      #
+      #     means_df <- sapply(df, function(x) if(is.numeric(x)) mean(x, na.rm = TRUE) else NA)
+      #     sd_df   <- sapply(df, function(x) if(is.numeric(x)) sd(x, na.rm = TRUE) else NA)
+      #
+      #     if (any(sd_df == 0, na.rm = TRUE)) {
+      #       zero_var_cols <- names_df[which(sd_df == 0)]
+      #       stop(paste("The following covariates have constant values:",
+      #                  paste(zero_var_cols, collapse = ", ")))
+      #     }
+      #
+      #     cat_levels <- list()
+      #     for (col in 1:ncol(df)) {
+      #       if(is_numeric[col]){
+      #         cat_levels[[col]] <- NA
+      #       }else{
+      #         cat_levels[[col]] <- levels(as.factor(df[[col]]))
+      #     }
+      #   }
+      #
+      #   list_matrix <- list(
+      #     "names_df" = names_df,
+      #     "mean_df" = means_df,
+      #     "sd_df" = sd_df,
+      #     "cat_levels" = cat_levels,
+      #     "is_numeric" = is_numeric
+      #   )
+      #
+      # out_matrix <- transformCovariatesMatrix(df, list_matrix, remove_intercept)
     }
-  }
 
-  list_matrix <- list(
-    "names_df" = names_df,
-    "mean_df" = means_df,
-    "sd_df" = sd_df,
-    "cat_levels" = cat_levels,
-    "is_numeric" = is_numeric
-  )
-
-  out_matrix <- transformCovariatesMatrix(df, list_matrix, remove_intercept)
+    list_X <- create_covariates_matrix(
+      df,
+      spline_vars = spline_vars,
+      remove_intercept = remove_intercept)
+    out_matrix <- list_X$X
+    list_matrix <- list_X$list_matrix
+    X0 <- list_X$X0
 
   } else {
 
@@ -62,25 +75,33 @@ process_covariates <- function(data_info, covariates, group_by_col, n_obs,
     }
 
     list_matrix <- NULL
+    X0 <- NULL
   }
 
   list("df" = out_matrix,
-       "list_matrix" = list_matrix)
+       "list_matrix" = list_matrix,
+       "X0" = X0)
 
 }
 
-createDataIdx <- function(n, M, P, K, twostage){
+createDataIdx <- function(n, M, P, K, twostage, primerId_p = NULL){
+  # P is now a vector with one entry per sample (length N = sum(M)), giving
+  # the number of primers actually used for that sample -- it no longer has
+  # to be constant across samples. primerId_p (length N2 = sum(P)) gives the
+  # *global* primer identity (an index into 1:length(primerNames)) for each
+  # (sample, primer) block, in the same order samples/primers are visited
+  # below; this is what lets p/q be looked up by actual primer identity
+  # rather than by a primer's position within a given sample's block.
 
   N <- sum(M)
   sumM <- c(0, cumsum(M)[-n])
   idx_z_w <- rep(NA, N)
 
   if(twostage){
-    N2 <- P * N
+    N2 <- sum(P)
     N3 <- sum(K)
-    sumP <- c(0, cumsum(rep(P, N))[-N])
+    sumP <- c(0, cumsum(P)[-N])
     sumK <- c(0, cumsum(K)[-N2])
-
 
     idx_z_p <- rep(NA, N2)
     idx_w_p <- rep(NA, N2)
@@ -106,14 +127,18 @@ createDataIdx <- function(n, M, P, K, twostage){
 
       if(twostage){
 
-        for (p in 1:P) {
+        sample_idx <- sumM[i] + m
+
+        for (pp in seq_len(P[sample_idx])) {
           idx_z_p[idx_p] <- i
 
-          for (k in 1:K[sumP[sumM[i] + m] + p]) {
+          primer_id <- if (!is.null(primerId_p)) primerId_p[idx_p] else pp
+
+          for (k in 1:K[sumP[sample_idx] + pp]) {
 
             idx_z_k[idx_k] <- idx_z
             idx_w_k[idx_k] <- idx_w
-            idx_p_k[idx_k] <- p
+            idx_p_k[idx_k] <- primer_id
 
             idx_k <- idx_k + 1
           }
@@ -321,11 +346,11 @@ create_waic_quantities <- function(n_obs){
 #' @param listPriors (Optional) list of prior hyperparameters. Currently
 #' supported: \code{a_p}/\code{b_p} (Beta prior shape parameters for the true
 #' positive lab stage rate,
-#' default \code{10}/\code{1}), \code{a_q}/\code{b_q} (Beta prior shape parameters
+#' default \code{5}/\code{1}), \code{a_q}/\code{b_q} (Beta prior shape parameters
 #' for the false positive
-#' lab stage rate, default \code{1}/\code{10})  and
+#' lab stage rate, default \code{1}/\code{20})  and
 #' \code{a_theta0}/\code{b_theta0} (Beta prior shape parameters for the
-#' false positive field stage rate, default \code{1}/\code{30}).
+#' false positive field stage rate, default \code{1}/\code{20}).
 #'
 #' @return A list with:
 #' \describe{
@@ -377,17 +402,16 @@ runOccJSDM <- function(data,
                        listPriors = list()){
 
   {
-    # data = occ_data_effort
-    # listParams = list(n_factors = 3)
+    # listParams = list(n_factors = 3, splineVars = F)
     # threshold = 1
-    # occCovariates = c("season_year")
-    # ordCovariates = c("z_prop_closed")
-    # spatCovariates <- NULL
-    # collCovariates = c("predator_season_year", "z_log_effort_m_total")
+    # occCovariates = c( "X_psi.EnvCov.1", "X_psi.EnvCov.2", "X_psi.EnvCov.3",
+    #                    "X_psi.EnvCov.4", "X_psi.EnvCov.5" ,"X_psi.EnvCov.6")
+    # collCovariates = c("X_theta.1","X_theta.2")
+    # spatCovariates = c("Xs.1","Xs.2")
     # MCMCparams = list(
-    #   nchain = 3,
-    #   nburn = 20000,
-    #   niter = 20000,
+    #   nchain = 2,
+    #   nburn = 200,
+    #   niter = 200,
     #   nthin = 1 )
     # listPriors = list(
     #   a_theta0 = 1,
@@ -566,16 +590,19 @@ runOccJSDM <- function(data,
           dplyr::summarise(P = n(),
                            .groups = "keep")
 
-        P <- P_df$P # this in theory allows for different primer per sample, but in practice later we don't
+        # P is now allowed to differ across samples: each sample can use a
+        # different subset (and number) of primers.
+        P <- P_df$P
         names(P) <- P_df$Sample
-        maxP <- P[1]
-        sumP <- c(0, cumsum(rep(maxP, N))[-N])
 
-        primerNames <- unique(data_info$Primer)
+        # primerNames is the *global* set of distinct primers across the
+        # whole dataset; p/q are indexed by primer identity (row into this
+        # vector), not by a primer's position within a given sample.
+        primerNames <- sort(unique(data_info$Primer))
+        maxP <- length(primerNames)
 
-        N2 <- maxP * N
-
-        if(!(all(P == P[1]))) stop("Cannot have different number of primers for each sample")
+        N2 <- sum(P)
+        sumP <- c(0, cumsum(P)[-N])
 
       } else {
         primerNames <- NULL
@@ -598,14 +625,22 @@ runOccJSDM <- function(data,
 
         N3 <- sum(K)
 
+        # global primer identity (index into primerNames) for each
+        # (Site, Sample, Primer) block -- data_K is at the same
+        # (Site, Sample, Primer) granularity and in the same order (both
+        # derived from the already Site/Sample/Primer-sorted data_info), so
+        # this aligns row-for-row with K/sumP.
+        primerId_p <- match(data_K$Primer, primerNames)
+
       } else {
         K <- NULL
+        primerId_p <- NULL
       }
 
     }
 
     if(model %in% c("occupancy","two_stage")){
-      list_idx <- createDataIdx(n, M, maxP, K, model == "two_stage")
+      list_idx <- createDataIdx(n, M, P, K, model == "two_stage", primerId_p = primerId_p)
       idx_z_w <- list_idx$idx_z_w
       idx_z_k <- list_idx$idx_z_k
       idx_w_p <- list_idx$idx_w_p
@@ -621,18 +656,23 @@ runOccJSDM <- function(data,
   # create covariates matrix
   {
 
+    splineVars <- get_param(listParams, "splineVars", F)
+
     # For occupancy covariates (group by Site, includes intercept)
     {
       list_X_psi <- process_covariates(data_info, occCovariates, "Site", n,
-                                  remove_intercept = TRUE)
+                                  remove_intercept = TRUE,
+                                  spline_vars = splineVars)
       X_psi <- list_X_psi$df
       list_Xpsi_mat <- list_X_psi$list_matrix
+      X0_psi <- list_X_psi$X0
     }
 
     # For the spatial field
     {
       list_Xs <- process_covariates(data_info, spatCovariates, "Site", n,
-                               remove_intercept = TRUE)
+                               remove_intercept = TRUE,
+                               spline_vars = F)
       Xs <- list_Xs$df
       list_Xs_mat <- list_Xs$list_matrix
     }
@@ -641,7 +681,8 @@ runOccJSDM <- function(data,
     {
       if(model %in% c("occupancy","two_stage")){
         list_X_theta <- process_covariates(data_info, collCovariates, "SiteSample",
-                                           N, remove_intercept = FALSE)
+                                           N, remove_intercept = FALSE,
+                                           spline_vars = F)
         X_theta <- list_X_theta$df
         list_X_theta_mat <- list_X_theta$list_matrix
       } else {
@@ -705,21 +746,21 @@ runOccJSDM <- function(data,
 
   # priors
   {
-    prior_beta_theta <- 0
-    prior_beta_theta_sd <- 1
     a_theta0 <- ifelse(is.null(listPriors$a_theta0), 1, listPriors$a_theta0)
-    b_theta0 <- ifelse(is.null(listPriors$b_theta0), 30, listPriors$b_theta0)
-    a_p <- 5
-    b_p <- 1
-    a_q <- 1
-    b_q <- 20
+    b_theta0 <- ifelse(is.null(listPriors$b_theta0), 20, listPriors$b_theta0)
+    a_p <- ifelse(is.null(listPriors$a_p), 5, listPriors$a_p)
+    b_p <- ifelse(is.null(listPriors$b_p), 1, listPriors$b_p)
+    a_q <- ifelse(is.null(listPriors$a_q), 1, listPriors$a_q)
+    b_q <- ifelse(is.null(listPriors$b_q), 20, listPriors$b_q)
 
     if(model %in% c("occupancy","two_stage")){
-      b_betatheta <- rep(1, ncov_theta)
-      B_betatheta <- diag(1, nrow = ncov_theta)
+      b_betatheta <- rep(0, ncov_theta)
+      B_betatheta <- diag(2, nrow = ncov_theta)
 
+      prior_beta_theta <- 0
+      prior_beta_theta_sd <- 1
       b_betatheta[1] <- prior_beta_theta
-      B_betatheta[1,1] <- prior_beta_theta_sd
+      B_betatheta[1,1] <- prior_beta_theta_sd^2
     }
 
   }
@@ -741,6 +782,7 @@ runOccJSDM <- function(data,
     X_s_centers <- list_Xs$X_s_centers
     X_tilde <- list_Xs$X_tilde
     X_s <- list_Xs$X_s
+    ps <- list_Xs$ps
 
     length_grid_ls <- 10
     l_s_grid <- seq(0.01, 0.3, length.out = length_grid_ls)
@@ -755,6 +797,7 @@ runOccJSDM <- function(data,
 
     a_sigmab <- 10; b_sigmab <- 1
     a_sigmabs <- 10; b_sigmabs <- 1
+    a_sigmah <- 10; b_sigmah <- 1
     a_tau <- 5; b_tau <- 5
     a_l_s <- 1; b_l_s <- 1
 
@@ -763,6 +806,8 @@ runOccJSDM <- function(data,
       "b_sigmab" = b_sigmab,
       "a_sigmabs" = a_sigmabs,
       "b_sigmabs" = b_sigmabs,
+      "a_sigmah" = a_sigmah,
+      "b_sigmah" = b_sigmah,
       "a_tau" = a_tau,
       "b_tau" = b_tau,
       "a_l_s" = a_l_s,
@@ -917,7 +962,7 @@ runOccJSDM <- function(data,
           }
         }
 
-        c_imk <- as.numeric(y > 0)
+        c_imk <- array(as.numeric(y > 0), dim = dim(y), dimnames = dimnames(y))
 
         p <- matrix(.9, maxP, S)
         q <- matrix(.05, maxP, S)
@@ -1045,7 +1090,7 @@ runOccJSDM <- function(data,
         if(threshold > 0){
 
           w <- sample_w_cim_cipp(y, y_NA, theta, theta0, p, q,
-                                 M, K, sumP, sumM, sumK, maxP, z)
+                                 M, K, sumP, sumM, sumK, P, primerId_p, maxP, z)
 
         }
       }
@@ -1298,6 +1343,7 @@ runOccJSDM <- function(data,
     "ncov_theta" = ncov_theta,
     "ncov_psi" = ncov_psi,
     "OTU" = OTU,
+    "X0_psi" = X0_psi,
     "list_Xs" = list_Xs,
     "list_X_psi_mat" = list_Xpsi_mat,
     "list_Xs_mat" = list_Xs_mat,

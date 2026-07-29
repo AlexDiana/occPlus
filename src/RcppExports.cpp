@@ -54,8 +54,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // sample_w_cim_cipp
-NumericMatrix sample_w_cim_cipp(const NumericMatrix& y, const NumericMatrix& y_NA, const NumericMatrix& theta, const NumericVector& theta0, const NumericMatrix& p, const NumericMatrix& q, const IntegerVector& M, const IntegerVector& K, const IntegerVector& sumL, const IntegerVector& sumM, const IntegerVector& sumK, int maxL, const NumericMatrix& z);
-RcppExport SEXP _occJSDM_sample_w_cim_cipp(SEXP ySEXP, SEXP y_NASEXP, SEXP thetaSEXP, SEXP theta0SEXP, SEXP pSEXP, SEXP qSEXP, SEXP MSEXP, SEXP KSEXP, SEXP sumLSEXP, SEXP sumMSEXP, SEXP sumKSEXP, SEXP maxLSEXP, SEXP zSEXP) {
+NumericMatrix sample_w_cim_cipp(const NumericMatrix& y, const NumericMatrix& y_NA, const NumericMatrix& theta, const NumericVector& theta0, const NumericMatrix& p, const NumericMatrix& q, const IntegerVector& M, const IntegerVector& K, const IntegerVector& sumL, const IntegerVector& sumM, const IntegerVector& sumK, const IntegerVector& P, const IntegerVector& primerId, int maxL, const NumericMatrix& z);
+RcppExport SEXP _occJSDM_sample_w_cim_cipp(SEXP ySEXP, SEXP y_NASEXP, SEXP thetaSEXP, SEXP theta0SEXP, SEXP pSEXP, SEXP qSEXP, SEXP MSEXP, SEXP KSEXP, SEXP sumLSEXP, SEXP sumMSEXP, SEXP sumKSEXP, SEXP PSEXP, SEXP primerIdSEXP, SEXP maxLSEXP, SEXP zSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -70,9 +70,11 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const IntegerVector& >::type sumL(sumLSEXP);
     Rcpp::traits::input_parameter< const IntegerVector& >::type sumM(sumMSEXP);
     Rcpp::traits::input_parameter< const IntegerVector& >::type sumK(sumKSEXP);
+    Rcpp::traits::input_parameter< const IntegerVector& >::type P(PSEXP);
+    Rcpp::traits::input_parameter< const IntegerVector& >::type primerId(primerIdSEXP);
     Rcpp::traits::input_parameter< int >::type maxL(maxLSEXP);
     Rcpp::traits::input_parameter< const NumericMatrix& >::type z(zSEXP);
-    rcpp_result_gen = Rcpp::wrap(sample_w_cim_cipp(y, y_NA, theta, theta0, p, q, M, K, sumL, sumM, sumK, maxL, z));
+    rcpp_result_gen = Rcpp::wrap(sample_w_cim_cipp(y, y_NA, theta, theta0, p, q, M, K, sumL, sumM, sumK, P, primerId, maxL, z));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -390,8 +392,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // sample_U_cpp
-arma::mat sample_U_cpp(arma::mat& k, arma::mat& L, arma::mat& XB, arma::mat& XsBs, arma::mat& Omega, std::string model);
-RcppExport SEXP _occJSDM_sample_U_cpp(SEXP kSEXP, SEXP LSEXP, SEXP XBSEXP, SEXP XsBsSEXP, SEXP OmegaSEXP, SEXP modelSEXP) {
+arma::mat sample_U_cpp(arma::mat& k, arma::mat& L, arma::mat& XB, arma::mat& XsBs, arma::mat& Omega, double sigma_h, std::string model);
+RcppExport SEXP _occJSDM_sample_U_cpp(SEXP kSEXP, SEXP LSEXP, SEXP XBSEXP, SEXP XsBsSEXP, SEXP OmegaSEXP, SEXP sigma_hSEXP, SEXP modelSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -400,8 +402,9 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< arma::mat& >::type XB(XBSEXP);
     Rcpp::traits::input_parameter< arma::mat& >::type XsBs(XsBsSEXP);
     Rcpp::traits::input_parameter< arma::mat& >::type Omega(OmegaSEXP);
+    Rcpp::traits::input_parameter< double >::type sigma_h(sigma_hSEXP);
     Rcpp::traits::input_parameter< std::string >::type model(modelSEXP);
-    rcpp_result_gen = Rcpp::wrap(sample_U_cpp(k, L, XB, XsBs, Omega, model));
+    rcpp_result_gen = Rcpp::wrap(sample_U_cpp(k, L, XB, XsBs, Omega, sigma_h, model));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -481,7 +484,7 @@ END_RCPP
 static const R_CallMethodDef CallEntries[] = {
     {"_occJSDM_sample_z_cpp", (DL_FUNC) &_occJSDM_sample_z_cpp, 6},
     {"_occJSDM_sample_w_cpp", (DL_FUNC) &_occJSDM_sample_w_cpp, 16},
-    {"_occJSDM_sample_w_cim_cipp", (DL_FUNC) &_occJSDM_sample_w_cim_cipp, 13},
+    {"_occJSDM_sample_w_cim_cipp", (DL_FUNC) &_occJSDM_sample_w_cim_cipp, 15},
     {"_occJSDM_sample_betatheta_cpp", (DL_FUNC) &_occJSDM_sample_betatheta_cpp, 7},
     {"_occJSDM_sample_betatheta_cpp_parallel", (DL_FUNC) &_occJSDM_sample_betatheta_cpp_parallel, 7},
     {"_occJSDM_sample_pq_cpp", (DL_FUNC) &_occJSDM_sample_pq_cpp, 10},
@@ -503,7 +506,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_occJSDM_convert_to_correlation", (DL_FUNC) &_occJSDM_convert_to_correlation, 4},
     {"_occJSDM_sampleBuniv", (DL_FUNC) &_occJSDM_sampleBuniv, 5},
     {"_occJSDM_sampleB", (DL_FUNC) &_occJSDM_sampleB, 5},
-    {"_occJSDM_sample_U_cpp", (DL_FUNC) &_occJSDM_sample_U_cpp, 6},
+    {"_occJSDM_sample_U_cpp", (DL_FUNC) &_occJSDM_sample_U_cpp, 7},
     {"_occJSDM_XsBs", (DL_FUNC) &_occJSDM_XsBs, 3},
     {"_occJSDM_KsBproduct", (DL_FUNC) &_occJSDM_KsBproduct, 3},
     {"_occJSDM_XtOmegaX_SoR", (DL_FUNC) &_occJSDM_XtOmegaX_SoR, 5},

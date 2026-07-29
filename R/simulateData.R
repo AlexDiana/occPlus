@@ -102,11 +102,16 @@ simulateOccJSDMData <- function(list_datasettings,
       N2 <- P * N
       N3 <- sum(K)
 
+      maxP <- P
+      P <- rep(P, N)
+
       sumM <- c(0, cumsum(M)[-n])
-      sumP <- c(0, cumsum(rep(P, N))[-N])
+      sumP <- c(0, cumsum(P)[-N])
       sumK <- c(0, cumsum(K)[-N2])
 
-      list_idx <- createDataIdx(n, M, P, K, model == "two_stage")
+
+      list_idx <- createDataIdx(n, M, P, K, model == "two_stage",
+                                primerId_p = rep(1:maxP, times = N))
       idx_z_w <- list_idx$idx_z_w
       idx_z_k <- list_idx$idx_z_k
       idx_w_p <- list_idx$idx_w_p
