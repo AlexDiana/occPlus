@@ -32,3 +32,5 @@ traitdata_caiwang.rdata
 interim_todo.Rmd
 data/sampledata_highp_highthetabaseline.rda
 data/sampleresults_highp_highthetabaseline.rda
+# Rendered from TODO.Rmd as a parse check; regenerable, never a deliverable.
+TODO.html

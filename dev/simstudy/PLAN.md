@@ -6,7 +6,7 @@ Plan for the "extensive testing on simulated datasets" item under *MEE paper / D
 
 | Stage | State |
 |----|----|
-| 1\. Fixtures + tier 1 | **done** (`6d9526d`) -- 89 assertions, 7 s |
+| 1\. Fixtures + tier 1 | **done** (`6d9526d`) -- 89 assertions, 7 s; 112 as of 29 July |
 | 2\. Spatial `n` floor | **done** (`41fb736`) -- floor is 31 sites |
 | 3\. `helper-simstudy.R` | **done** (`6123036`) -- validated at R = 8 |
 | 4\. Tier 2 canary | **done** (`f63eeeb`) -- \~30 s, `skip_on_cran()` |
@@ -27,8 +27,10 @@ Six levels, cheapest first. Times are wall clock on Doug's machine and include \
 | **Everything local** | `Rscript -e 'devtools::test()'` | \~45 s | tiers 1 + 2 |
 | Exactly what CRAN runs | `NOT_CRAN=false Rscript -e 'devtools::test()'` | \~16 s | tier 1 only |
 | Full package check | `Rscript -e 'devtools::check()'` | minutes | tests + examples + vignettes + `R CMD check` |
-| One study cell | `Rscript dev/simstudy/run_study.R --cores=8 --scenarios=base` | \~15 min | tier 3, one cell at R = 100 |
-| Full study | `Rscript dev/simstudy/run_study.R --cores=8` | \~2.4 h | tier 3, all 10 cells at R = 100 |
+| One study cell | `Rscript dev/simstudy/run_study.R --cores=5 --scenarios=base --caffeinate` | \~50 min | tier 3, one cell at R = 100 |
+| Full study | `Rscript dev/simstudy/run_study.R --cores=5 --caffeinate` | \~8 h | tier 3, all 10 cells at R = 100 |
+
+Study times are **measured**, not projected: the 28 July run took 474 min for all 10 cells (900 fits, 0 failures). An earlier version of this table said `--cores=8` and \~2.4 h, which was a guess and roughly 3x optimistic. On a fanless MacBook Air, 5 cores is the practical ceiling; use `--caffeinate` for anything over an hour, because a run that sleeps mid-way is easy to misread as thermal throttling (it was, once — check the cpu/wall ratio in the progress line, which makes sleep unmistakable). `--resume` picks a run back up from the last checkpoint.
 
 **`devtools::test()` is the day-to-day command** — run it after any change to `R/` or `src/`. In RStudio, Cmd+Shift+T. `filter` is a regex on the filename minus the `test-` prefix; the tier-1 files are `smoke`, `regression` and `api`.
 
@@ -121,11 +123,13 @@ These are the things most likely to make the suite wrong or annoying. Each has b
 
 ### 5.1 Never assert exact numeric equality of fitted values in tier 1
 
-`TODO.Rmd` group A item 5 is still open: `randinvg()` (`src/jsdm.cpp:86`) draws from R's global RNG inside `samplePGvariables()`'s OpenMP loop. A fixed seed therefore **does not** reproduce across platforms — it is deterministic on stock macOS clang (no OpenMP) and racy on Linux/Windows.
+**Tier 1 assertions must be structural**: does it run, are dimensions right, is a block non-`NA`, does a value vary. Numeric recovery belongs in tiers 2–3, with tolerances.
 
-A tier-1 test asserting `expect_equal()` on posterior quantities would pass locally and fail intermittently on CRAN. That is the worst available failure mode. **Tier 1 assertions must be structural**: does it run, are dimensions right, is a block non-`NA`, does a value vary. Numeric recovery belongs in tiers 2–3, with tolerances.
+**The original reason expired on 29 July 2026, and the rule survives it.** This rule was written because a fixed seed did not reproduce the sampler: `randinvg()` drew from R's global RNG inside an OpenMP loop, so a tier-1 `expect_equal()` on posterior quantities would have passed locally and flaked on CRAN. That is fixed (TODO.Rmd Fixed bugs 28) — `set.seed()` now controls the whole fit, verified across separate processes.
 
-Revisit once group A item 5 is closed.
+The rule stands anyway, for a different and more durable reason: **fitted values are not a contract**. Any legitimate change to a sampler, a prior default, or the order of draws moves every number, and a suite full of golden values turns each such change into a wall of failures that says nothing about correctness. Structural assertions survive those changes; numeric ones do not.
+
+The one sanctioned exception is `test-regression-bugs.R`'s reproducibility test, where equality *is* the property under test. Note its scope: reproducibility holds for a given thread count, since threads derive separate streams (see `src/rng.h`). This is currently moot — `SHLIB_OPENMP_CXXFLAGS` is empty on the dev machine, so the pragmas compile to no-ops — but it would bite on a Linux build.
 
 ### 5.2 Coverage assertions are stochastic and will flake if set tight
 
@@ -373,18 +377,12 @@ Also: pooling coverage across species within a block buys precision, but those i
 
 5.  Tier 3 + `run_study.R`.
 
-6.  **Full R = 100 run; inspect the table.** The only stage left.
+6.  **Full R = 100 run; inspect the table.** **Done 28 July 2026** -- all 10 cells, 900 replicates, 0 failures, 474 min on 5 cores. Results in `dev/simstudy/results/`, tabulated in §12. Found three undercovering blocks, each since traced to code; see §12 and TODO.Rmd group A.
 
-    ```         
-    Rscript dev/simstudy/run_study.R --cores=8
+    **A re-run is now owed, and it checks two things at once.** Alex's 28-29 July fixes (`sigma_h`, the collection-covariate prior mean, the Stage 2 prior wiring) all change fitted values, so §12 is stale on its own terms. Separately, the replicates in that run were not independent -- see the note under §8 -- so its error bars were understated. The re-run therefore measures whether the fixes worked *and* produces the first numbers with honest SEs.
+
+    ```
+    Rscript dev/simstudy/run_study.R --cores=5 --caffeinate
     ```
 
-    \~2.4 h on 8 cores (\~19 h serial), extrapolated from 10 s/replicate measured at reduced size. The runner has been smoke-tested end to end -- argument parsing, PSOCK cluster, worker setup, both artefacts, failure counting -- but never run at full size.
-
-    Two things to weigh first. **Cells 1 and 2 will be re-run** if `sigma_s` (open item 0) is fixed afterwards, so if that fix is near-term, waiting saves the duplication. And **one cell settles the open empirical question** at a tenth of the cost:
-
-    ```         
-    Rscript dev/simstudy/run_study.R --cores=8 --scenarios=base
-    ```
-
-    \~15 min on 8 cores, and enough to say whether the `beta_theta` / `resid_cor` undercoverage is real (§10.3).
+    Two cautions carried over from the first attempt. **Do not edit `run_study.R` while it is running** -- Rscript parses incrementally, and an earlier ten-hour run died on a torn read. Use `--resume` if it is interrupted. And an indicative post-fix probe at R = 8 showed `beta_theta` still undercovering at 0.775 with its bias halved, while `B0`'s bias *grew* fivefold to -0.529; R = 8 settles nothing, but it means the re-run should be read for regressions from Alex's 421-line `jsdmfun.R` rewrite as well as for the intended improvements.
