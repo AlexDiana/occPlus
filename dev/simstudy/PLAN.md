@@ -2,10 +2,12 @@
 
 Plan for the "extensive testing on simulated datasets" item under *MEE paper / Doug to dos* in `TODO.Rmd`. Drafted 27 July 2026.
 
+[Guide to the test suite](https://claude.ai/code/artifact/ad3d46eb-1fd4-49b5-b795-6b71474ef1d5 "Guide to the test suite")
+
 **Status as of 28 July 2026: complete. All stages built and the full R = 100 study has run.** Its results are in §12 and they identified four defects, three of which are now traced to specific lines of code. Sections marked *OPEN* still need a decision or a measurement.
 
 | Stage | State |
-|----|----|
+|------------------------------------|------------------------------------|
 | 1\. Fixtures + tier 1 | **done** (`6d9526d`) -- 89 assertions, 7 s; 112 as of 29 July |
 | 2\. Spatial `n` floor | **done** (`41fb736`) -- floor is 31 sites |
 | 3\. `helper-simstudy.R` | **done** (`6123036`) -- validated at R = 8 |
@@ -22,7 +24,7 @@ Building it surfaced four corrections to this plan and two package bugs; both ar
 Six levels, cheapest first. Times are wall clock on Doug's machine and include \~9 s of R startup and `load_all()` compilation, so the test work itself is correspondingly less.
 
 | Level | Command | Time | Covers |
-|----|----|----|----|
+|------------------|------------------|------------------|------------------|
 | One file, while iterating | `Rscript -e 'devtools::test(filter="regression")'` | \~11 s | one tier-1 file |
 | **Everything local** | `Rscript -e 'devtools::test()'` | \~45 s | tiers 1 + 2 |
 | Exactly what CRAN runs | `NOT_CRAN=false Rscript -e 'devtools::test()'` | \~16 s | tier 1 only |
@@ -68,7 +70,7 @@ The suite as specified below serves the first goal well and the second adequatel
 ## 2. Decisions settled
 
 | Question | Decision |
-|----|----|
+|------------------------------------|------------------------------------|
 | Vehicle | **testthat suite**, not a vignette or pkgdown article |
 | Does it ship to CRAN? | **Tier 1 yes**, tiers 2–3 no |
 | Replicates | **R = 100** per scenario |
@@ -88,7 +90,7 @@ What this gives up is *presentation*. Tests answer "does it pass?", not "here is
 ## 3. Tiers
 
 | Tier | Gate | Runtime | Runs on |
-|----|----|----|----|
+|------------------|------------------|------------------|------------------|
 | 1\. Regression + smoke | none | \< 30 s | every `check()`, including CRAN |
 | 2\. Recovery canary | `skip_on_cran()` | \~2 min | local + CI |
 | 3\. Coverage study | env var `OCCJSDM_SIMSTUDY` | 2.5–3 h | manual / nightly |
@@ -177,7 +179,7 @@ Base = `two_stage`, traits on, spatial on, `d = 2`, **`ds = 2`**, `n = 100`, `S 
 Every spatial cell sets `n_supportpoints` explicitly (§10.1). Left to the default it is a constant 30 for any `n` below 150, so it would neither scale with `n` nor be a controlled factor — and below 31 sites it crashes outright.
 
 | \# | Cell | Differs from base by | Buys |
-|----|----|----|----|
+|------------------|------------------|------------------|------------------|
 | 1 | base | — | Flagship config; *is* the traits×spatial interaction |
 | 2 | spatial isolated | traits off | `Bs` recovery unconfounded by trait terms (**not** `l_s` — see §5.3) |
 | 3 | traits isolated | spatial off | `G` (fourth-corner) recovery unconfounded by the GP |
@@ -322,7 +324,7 @@ Also: pooling coverage across species within a block buys precision, but those i
 **This is a paired comparison with the 28 July pre-fix run.** `draw_truth()` seeds on (scenario, replicate), so the simulated data and true values are *bit-identical* between the two runs — verified, `max|truth difference| = 0`. Every difference below is attributable to the code, not to sampling variation between runs. That is a much stronger design than two independent runs would give, and it is worth preserving: **do not change `simstudy_seed()`**, or future runs lose comparability with these.
 
 | Block | base | spat | trait | prim3 | lowinfo | d-under | d-over | S=20 | occ | bin |
-|---|---|---|---|---|---|---|---|---|---|---|
+|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|
 | `B0` | 0.948 | 0.943 | 0.942 | 0.954 | **0.862** | 0.958 | 0.950 | 0.951 | 0.953 | 0.962 |
 | `B` | 0.947 | **0.883** | 0.916 | 0.942 | **0.826** | 0.936 | 0.939 | 0.933 | 0.947 | 0.952 |
 | `G` | 0.948 | -- | 0.945 | *0.975* | **0.840** | 0.953 | 0.955 | 0.925 | *0.970* | 0.938 |
@@ -339,14 +341,14 @@ Also: pooling coverage across species within a block buys precision, but those i
 
 Averaged over all cells, pre-fix → post-fix:
 
-| Block | Coverage | Bias | Verdict |
-|---|---|---|---|
-| `beta_theta` | 0.719 → **0.766** | +0.112 → **+0.038** | improved, not fixed |
-| `theta0` | 0.901 → 0.944 | −0.020 → −0.004 | moved, see 12.3 |
-| `resid_cor` | 0.775 → 0.777 | +0.006 → +0.002 | **unchanged** |
-| `p` | 0.821 → 0.827 | +0.087 → +0.086 | unchanged, as expected |
-| `B0` | 0.947 → 0.943 | −0.135 → **−0.228** | **bias doubled** |
-| `B`, `G`, `q` | ~0.92–0.94 | ~0 | stable |
+| Block         | Coverage          | Bias                | Verdict                |
+|------------------|------------------|------------------|------------------|
+| `beta_theta`  | 0.719 → **0.766** | +0.112 → **+0.038** | improved, not fixed    |
+| `theta0`      | 0.901 → 0.944     | −0.020 → −0.004     | moved, see 12.3        |
+| `resid_cor`   | 0.775 → 0.777     | +0.006 → +0.002     | **unchanged**          |
+| `p`           | 0.821 → 0.827     | +0.087 → +0.086     | unchanged, as expected |
+| `B0`          | 0.947 → 0.943     | −0.135 → **−0.228** | **bias doubled**       |
+| `B`, `G`, `q` | \~0.92–0.94       | \~0                 | stable                 |
 
 1.  **`beta_theta` improved but is not fixed.** Every cell gained 0.03–0.05, and two-thirds of the bias is gone. Alex's correction of the collection-covariate prior mean from 1 to 0 was a real cause — but not the only one, because 0.766 against nominal 0.95 is still far out. **This is now the clearest open target in group A.** Whatever remains is structural: it is flat across model type, primer count, species count and factor misspecification, exactly as the pre-fix version was.
 
@@ -383,7 +385,7 @@ Overcoverage is the safe direction, but the pattern suggests the widened `diag(2
 Kept because the *delta* is the evidence that the fixes worked, not the level. Run in two parts — `base` on 27 July (100 fits, 22.9 min), the other 9 cells on 28 July (900 fits, 474 min wall, inflated by the laptop sleeping mid-run).
 
 | block | base | spat.isol | trait.isol | primers3 | low.info | d.under | d.over | sp20 | occ | binary |
-|----|----|----|----|----|----|----|----|----|----|----|
+|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|
 | `B` | 0.943 | 0.876 | 0.913 | 0.931 | **0.854** | 0.937 | 0.947 | 0.935 | 0.943 | 0.948 |
 | `B0` | 0.945 | 0.953 | 0.948 | 0.955 | 0.892 | 0.954 | 0.955 | 0.956 | 0.956 | 0.942 |
 | `beta_theta` | **0.717** | **0.730** | **0.721** | **0.679** | **0.860** | **0.714** | **0.709** | **0.693** | **0.676** | -- |
@@ -412,7 +414,7 @@ Kept because the *delta* is the evidence that the fixes worked, not the level. R
 
     **A re-run is now owed, and it checks two things at once.** Alex's 28-29 July fixes (`sigma_h`, the collection-covariate prior mean, the Stage 2 prior wiring) all change fitted values, so §12 is stale on its own terms. Separately, the replicates in that run were not independent -- see the note under §8 -- so its error bars were understated. The re-run therefore measures whether the fixes worked *and* produces the first numbers with honest SEs.
 
-    ```
+    ```         
     Rscript dev/simstudy/run_study.R --cores=5 --caffeinate
     ```
 
