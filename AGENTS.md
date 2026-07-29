@@ -518,6 +518,49 @@ the gitignore situation resolved) deliberately.
 
 ## Current work status
 
+- **This session, later still on July 29 2026: ran the M ladder Doug
+  commissioned for group B items 4-6.** 250 fits, R = 50, 189 min, 0
+  failures. Validity check passed: the `M2` arm agrees with the
+  existing base cell within noise. Results in `PLAN.md` 13.7.
+
+  **Not the clean story any of us expected.** `theta0` (item 5)
+  confirmed cleanly: overcoverage falls toward nominal as M rises
+  (0.986 -> 0.944), while the matched control (`K30`, same rows, wrong
+  stage) makes it worse (0.996) -- Stage 1 under-identification,
+  pending an R = 200 confirmation before closing. `B0` (item 6)
+  partially confirmed: bias collapses with M, but the control also
+  improves it somewhat, so the mechanism is not cleanly
+  Stage-1-specific.
+
+  **`beta_theta` (item 4) went the other way, and that is the
+  important result.** Coverage fell *monotonically* with M -- 0.747 ->
+  0.579 -- while bias stayed small and flat. Shrinking intervals
+  around a bias that is not shrinking is the signature of a real
+  defect being exposed by more information, not fixed by it. This
+  rules out under-identification as the explanation and points back at
+  the `diag(2)` prior-variance widening (Fixed bugs 25) as needing a
+  second look, not an extension.
+
+  **One finding the ladder was not built to answer**: `q` degrades
+  hard with `K` (0.945 -> 0.614 at `K30`), worse than any M arm. Filed
+  as group B item 7, with a hypothesis that it is the same
+  prior-driven cost-of-identifiability pattern as `beta_theta`,
+  sharpened by more PCR replicates.
+
+  **Two things worth carrying forward.** First, the outcome table I
+  wrote into `PLAN.md` 13.4 in advance had four boxes and the actual
+  result fit none of them cleanly -- it was a mixture across the three
+  items. Worth remembering that a real result can be more interesting
+  than any of the outcomes anticipated, and the write-up should say so
+  plainly rather than forcing it into the nearest box. Second, the
+  sample-size projections for the ladder's own runtime were off in the
+  same direction as the main study's: I estimated ~10 min for the R =
+  4 sanity pass and it was still running at 9 min with half the work
+  left, because the arms are heterogeneous (an M20 or K30 fit costs
+  4.5x an M2 fit) and the runner's chunk barrier makes every chunk
+  wait for its slowest job, holding effective speedup to ~3.7-3.8x
+  rather than the ~4.3x measured on the uniform 10-cell grid.
+
 - **This session, later on July 29 2026: re-ran the full R = 100 study
   post-fix. 1000 fits, 10 cells, 0 failures, 285 min.** Results in
   `PLAN.md` §12; the pre-fix table is retained at §12.6.

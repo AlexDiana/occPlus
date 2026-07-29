@@ -965,3 +965,63 @@ Raising `M` also raises the number of latent `w` states being sampled,
 so mixing may differ across arms. If a high-M arm shows worse mixing
 rather than better coverage, check `returnConvergenceDiagnostics()`
 before concluding anything about identification.
+
+
+------------------------------------------------------------------------
+
+## 13.7 Results (29 July 2026)
+
+**Run:** 250 fits, R = 50, 5 arms, 189 min, 0 failures. Validity check
+passed: the `M2` arm agrees with the existing base cell on all three
+targets (largest gap 0.016, against an SE of \~0.09 for the difference)
+-- the ladder is measuring what it claims.
+
+| | M2 | M5 | M10 | M20 | K30 (control) |
+|---|---|---|---|---|---|
+| `beta_theta` coverage | 0.747 | 0.655 | 0.603 | **0.579** | 0.706 |
+| `theta0` coverage     | 0.986 | 0.966 | 0.944 | 0.952 | 0.996 |
+| `B0` bias             | -0.160 | -0.025 | +0.002 | -0.028 | -0.091 |
+
+**None of the four outcomes in §13.4 fits.** The actual result is a
+mixture across the three items:
+
+**`theta0` (B5): clean confirmation.** Overcoverage falls from 0.986
+toward nominal as `M` rises (0.944 at `M10`), while `K30` -- matched row
+count, wrong stage -- makes it *worse* (0.996). This is exactly outcome
+1's signature: `M` is the lever, matched data volume elsewhere is not.
+**Close as Stage 1 under-identification, not a defect** -- pending the
+R = 200 confirmation §13.4 requires before closing anything.
+
+**`B0` (B6): partial confirmation.** Bias collapses from -0.160 to near
+zero at `M10`. But `K30` also improves it (-0.091), just less than `M10`
+or `M20` -- so the recovery is not cleanly Stage-1-specific; more data of
+either kind helps. Coverage stays 0.94-0.96 throughout in every arm,
+consistent with the original finding that coverage does not reveal this
+bias.
+
+**`beta_theta` (B4) goes the wrong way, and this is the important
+result.** Coverage falls *monotonically* with `M` -- 0.747 -> 0.579, a
+17-point drop across four points, far beyond the R = 50 noise floor --
+while bias stays small and flat (+0.02 to +0.05) throughout. Shrinking
+intervals around a bias that is not itself shrinking is the signature of
+a real defect being *exposed* by more information, not resolved by it.
+`K30` (0.706) beats every M arm above `M2`.
+
+**This rules out under-identification as the explanation for B4.**
+`beta_theta` needs a different next step than B5/B6: not "wait for more
+data" but "find what makes the interval overconfident". The prime
+suspect is the same `diag(2)` prior-variance widening implicated in B5
+(Fixed bugs 25) -- but if that edit was meant to fix things and B4 gets
+*worse* with more information, it may need to be revisited rather than
+extended.
+
+**Unplanned finding: `q` degrades hard with `K`.** 0.945 (`M2`) -> 0.614
+(`K30`), worse than any M arm, including `M20` (0.742) which shares `K30`'s
+row count. Not investigated here -- outside what this ladder was built to
+answer -- but worth its own entry; see `TODO.md`.
+
+**What this does not settle.** R = 50 detects that `beta_theta` is
+getting worse with high confidence (a 17-point monotone trend dwarfs the
+3.1% SE many times over), but per §13.2's own caveat, R = 50 cannot
+confirm that `theta0` has *reached* nominal -- an observed 0.944 is not
+distinguishable from a true 0.90. Do not close B5 on this run alone.

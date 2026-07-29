@@ -358,7 +358,24 @@ editor_options:
     remaining deviation that is definitely a defect (unlike `p`, which
     is the identifiability constraint working as intended).
 
-    CLAUDE TO RUN SIMULATION STUDY WITH M \> 10 AND SEE IF IT FIXES IT
+    **M-ladder result, 29 July 2026 (`PLAN.md` 13.7): the opposite of
+    the hypothesis, and this rules out under-identification.** Doug's
+    directive was to re-run at M \> 10 and see if it fixes this.
+    Coverage instead falls *monotonically* with M -- 0.747 at M2, 0.655
+    at M5, 0.603 at M10, **0.579 at M20** -- while bias stays small and
+    flat throughout (+0.02 to +0.05). The matched control (`K30`: same
+    row count as `M20`, spent on PCR replicates instead) covers at
+    0.706, beating every M arm above M2.
+
+    Shrinking intervals around a bias that is not itself shrinking is
+    the signature of a real defect being *exposed* by more information,
+    not resolved by it. More field samples make this worse, so the next
+    step is not more data but finding what makes the interval
+    overconfident -- most likely the same `diag(2)` prior-variance
+    widening implicated in item 5 below, which may need revisiting
+    rather than extending.
+
+    ALEX TO REVIEW: this needs a different fix than "wait for more M".
 
 5.  **`theta0` now overcovers at 0.978-0.985, having been near
     nominal.** Measured by the same re-run (`PLAN.md` 12.3).
@@ -374,7 +391,18 @@ editor_options:
     overshot. Worth examining the two together, since one change
     plausibly produced both.
 
-    CLAUDE TO RUN SIMULATION STUDY WITH M \> 10 AND SEE IF IT FIXES IT
+    **M-ladder result, 29 July 2026 (`PLAN.md` 13.7): confirms Stage 1
+    under-identification, not a defect.** Overcoverage falls from 0.986
+    at M2 toward nominal at M10 (0.944), while the matched control
+    (`K30`, same rows, wrong stage) makes it *worse* (0.996). M is the
+    lever and matched data volume elsewhere is not -- exactly the
+    pattern that distinguishes an information problem from a code
+    defect.
+
+    **Not yet closeable.** R = 50 confirms the deviation is real but
+    cannot confirm recovery: an observed 0.944 is not distinguishable
+    from a true 0.90 at this R (`PLAN.md` 13.2/13.4). Re-run the M10 or
+    M20 arm at R = 200 before closing this as "not a bug".
 
 6.  **`B0` bias roughly doubled, and coverage does not show it.**
     Measured by the same re-run (`PLAN.md` 12.2). **Possible regression,
@@ -398,7 +426,37 @@ editor_options:
     a headline quantity for a JSDM -- this needs a cause before the MEE
     paper reports species intercepts.**
 
-    CLAUDE TO RUN SIMULATION STUDY WITH M \> 10 AND SEE IF IT FIXES IT
+    **M-ladder result, 29 July 2026 (`PLAN.md` 13.7): partial
+    confirmation, mechanism ambiguous.** Bias collapses from -0.160 at
+    M2 to near zero at M10 (+0.002), which looks like item 5's clean
+    pattern. But the matched control (`K30`) also improves it (-0.091),
+    just less than M10/M20 do -- so the recovery is not cleanly
+    Stage-1-specific; more data of either kind helps somewhat. Coverage
+    stays 0.94-0.96 in every arm, consistent with the original finding
+    that coverage does not reveal this bias.
+
+    Still needs the `jsdmfun.R` rewrite investigated as a candidate
+    cause (see below), since the ladder does not rule it out -- it only
+    shows that *some* of the effect is an M/data-volume story.
+
+7.  **`q` (Stage 2 false positives) degrades hard as `K` rises.** Found
+    29 July 2026, as a side effect of the M-ladder run (`PLAN.md`
+    13.7) -- not something that run was built to look for.
+
+    Coverage: 0.945 at `M2` (K = 3) down to **0.614 at `K30`** (K = 30,
+    same total rows as `M20`). `M20` itself, which keeps K = 3 and
+    raises M instead, sits at 0.742 -- worse than `M2` but far better
+    than `K30`. So more PCR replicates make `q` less well calibrated,
+    not more, and the effect is bigger than the M-driven change in any
+    of items 4-6.
+
+    Not investigated beyond this measurement. Worth checking against
+    the same label-switching mechanism noted in item 3 above -- more
+    PCR replicates sharpen the posterior, and if the informative prior
+    is pulling `p`/`q` away from the true values by a fixed amount,
+    sharper intervals would show it as *worse* coverage, exactly as
+    seen here for `beta_theta` in item 4. If so this is not a new bug
+    but the same cost-of-identifiability story, extended to K.
 
 ## **C. Crashes, unreachable code paths, and API bugs (Alex)**
 
