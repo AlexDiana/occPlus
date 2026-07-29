@@ -14,6 +14,46 @@ editor_options:
 
     1.  Trait matrix currently not allowing for categorical variables
 
+    2.  **Review the RNG seeding fix, and answer two questions it
+        raises.** Doug changed `src/` on 29 July 2026 -- `src/rng.h`
+        (new), `src/functions.cpp`, `src/jsdm.cpp`, `R/runOccJSDM.R` --
+        so flagging it rather than leaving it to surface in a diff.
+        Revert or rework it freely if you would rather do it another
+        way.
+
+        **What it fixes.** Pointing `randinvg()` at the `thread_local`
+        engine correctly closed the OpenMP data race, but neither
+        engine it left behind read R's RNG state (`get_rng()` was seeded
+        from the literal `12345 + omp_get_thread_num()`,
+        `mvrnormArmaQuick_TS()` from `std::random_device{}()`), so
+        `set.seed()` had no effect on the sampler. Two fits of the same
+        data under one seed differed by 5.09 on `B0_output`. Not a bias
+        -- both are valid streams -- but users could not reproduce a
+        fit, and the literal seed was per *process*, so simulation-study
+        replicates at the same index in different workers shared random
+        numbers. Full detail, including three non-obvious traps for
+        anyone reworking it, is in **Fixed bugs 28**; the third
+        (`std::normal_distribution` caching the second Box-Muller
+        deviate across `rng.seed()`) is the one most likely to bite.
+
+        **Question 1: is thread-count invariance worth having?**
+        Reproducibility currently holds *for a given thread count*.
+        Threads derive separate streams, so with OpenMP genuinely
+        active, changing the thread count changes which stream produces
+        which element. Making the fit invariant needs a different
+        scheme -- a counter-based RNG keyed on the element index rather
+        than the thread id. Doable, but a bigger change than the bug
+        warranted, so it was left as your call.
+
+        **Question 2: what does `R CMD config SHLIB_OPENMP_CXXFLAGS`
+        return on your machine?** On Doug's it is *empty*, so every
+        `#pragma omp` compiles to a no-op and the built `.so` contains
+        no OpenMP runtime calls at all -- the package runs
+        single-threaded there. If yours differs, your experience of both
+        the thread-safety bug and of performance differs from his, and
+        the answer decides whether the group D parallelism items are
+        worth anything. See group D.
+
     **A. Inference-affecting bugs (wrong numbers, silently)**
 
     1.  **`sample_ls()` evaluates the wrong density, so the GP
