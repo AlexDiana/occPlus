@@ -11,9 +11,8 @@ editor_options:
 **v0.1.0-beta** **Public release**
 
 1.  Alex to dos
-    
-    2. Trait matrix currently not allowing for categorical variables
 
+    2.  Trait matrix currently not allowing for categorical variables
 
     **Group A has since grown, not shrunk.** Three of its six items (3,
     4 and 6) were found not by reading code but by the simulation study,
@@ -45,7 +44,7 @@ editor_options:
     than the commit messages, as the `b7b6aa2` experience recommends:
 
     | item | claim | verified state |
-    |------|-------|----------------|
+    |----|----|----|
     | A.1 `sigma_h` | fixed | **FIXED** -- `sample_sigmah()` added (`R/jsdmfun.R:1173`) and called (`:1694`) |
     | A.3 `beta_theta` prior mean | fixed | **FIXED** -- now `rep(0, ncov_theta)`; prior variance also widened from `diag(1)` to `diag(2)` |
     | A.5 OpenMP RNG | fixed | **FIXED** -- `randinvg()` now uses the `thread_local` `rnorm()`; the `R::rnorm` line is commented out |
@@ -75,7 +74,6 @@ editor_options:
     `ignore_attr = TRUE`.
 
     **A. Inference-affecting bugs (wrong numbers, silently)**
-
 
     1.  **`sample_ls()` evaluates the wrong density, so the GP
         length-scale is never recovered and rails at the top of its
@@ -160,9 +158,9 @@ editor_options:
         `idx_ls` varies, precisely so the test does not encode this
         defect. Revisit that test once this is fixed.
 
+    2.  THIS IS NOT AN ISSUE FOR LOGISTIC MODELS (as the covariance
+        matrix is not recoverable anyway, only the correlation one)
 
-    2.  THIS IS NOT AN ISSUE FOR LOGISTIC MODELS (as the covariance matrix is not recoverable anyway, only the correlation one)
-    
         **`reparamFactorModel()` breaks the identity that residual
         covariance = `t(L) %*% L`, so reported species correlations are
         inflated.** Found 28 July 2026 by the coverage study; confirmed
@@ -221,7 +219,7 @@ editor_options:
             the `diag(diag(R))` scaling was meant to impose.
 
     3.  NEED TO CHOOSE THE INFORMATIVE PRIORS
-    
+
         **The Stage 2 detection prior is too informative and too
         optimistic; it causes `p`'s undercoverage, and it is hard-coded
         so a user cannot work around it.** Found 28 July 2026 by the
@@ -255,10 +253,10 @@ editor_options:
         | `Beta(5, 1)` as coded | 0.903     | **+0.050** |
         | `Beta(1, 1)` flat     | **0.944** | **-0.005** |
 
-        For (a), **Alex should choose the default** --
-        `Beta(1,1)` was only a diagnostic, not a recommendation. The
-        requirement is that the default not be sharply informative at
-        0.83 when the package's own example data sits at 0.3-0.6.
+        For (a), **Alex should choose the default** -- `Beta(1,1)` was
+        only a diagnostic, not a recommendation. The requirement is that
+        the default not be sharply informative at 0.83 when the
+        package's own example data sits at 0.3-0.6.
 
     **B. Crashes, unreachable code paths, and API bugs**
 
@@ -291,7 +289,6 @@ editor_options:
             function users cannot call. Either re-export it or drop the
             `.Rd`.
 
-
     3.  **`predictNewSites()` still has no defaults for `X_psi` /
         `X_s`** (residual of the original audit's B.4; see Fixed bugs
         18, which wrongly recorded this half as done). Verified via
@@ -313,22 +310,22 @@ editor_options:
             `maxP` was never assigned -- it survives only because R's
             lazy evaluation never forces the promise; pass `NULL`
             explicitly.
-        (c) `d <- get_param(listParams, "n_factors")` defaults to 0, and
+        (b) `d <- get_param(listParams, "n_factors")` defaults to 0, and
             the cap at `:716` uses `ncol(OTU)`, which is `NULL` for a
             single-species vector `OTU` -- `if (d > NULL)` errors.
-        (d) `reparamFactorModel(A_output, C_output)` (`:1273`) assumes
+        (c) `reparamFactorModel(A_output, C_output)` (`:1273`) assumes
             `qr.Q()` is square; when `ncov_psi < gt` it is not, and
             `diag(diag(R_current), nrow = d)` recycles.
-        (e) The spatial-covariate numeric check at `:540` runs *before*
+        (d) The spatial-covariate numeric check at `:540` runs *before*
             the "names present in `data$info`" check at `:544`, so a
             mistyped spatial covariate name gives
             `undefined columns selected` rather than the intended
             message.
-        (f) `simulateOccJSDMData()`'s `@details` still says "For
+        (e) `simulateOccJSDMData()`'s `@details` still says "For
             two-stage eDNA data specifically, use
             `simulateOccJSDMData()`" -- a self-reference left over from
             the merge of `simulateOccJSDMDataGeneral()`.
-        (g) `computeSpeciesDetected()`'s roxygen still documents the
+        (f) `computeSpeciesDetected()`'s roxygen still documents the
             removed Beta-approximation signature (`ab_p`, `K`, `primer`,
             `alpha`) instead of its actual arguments.
 
@@ -588,13 +585,13 @@ editor_options:
 
         Four test assertions also had to be rewritten once run, because
         the premise was wrong in ways only execution revealed:
-        `psi_output` is not produced by every model type, `tau_output` is
-        `NA` by design outside `continuous`, PCR replicates are
+        `psi_output` is not produced by every model type, `tau_output`
+        is `NA` by design outside `continuous`, PCR replicates are
         exchangeable so row-for-row equality is the wrong bar, and
         `idx_ls` is constant for a reason unrelated to the fix it
-        appeared to test. Written from code-reading alone, all four would
-        have encoded false expectations and one would have *masked*
-        group A item 2.
+        appeared to test. Written from code-reading alone, all four
+        would have encoded false expectations and one would have
+        *masked* group A item 2.
 
         **What remains under this item:**
 
@@ -604,8 +601,8 @@ editor_options:
             to be unreliable. Cost is one command and a few hours.
         (b) **Decide the replicate count for the paper.** R = 100 was
             chosen to *detect* defects and did so decisively. Asserting
-            *nominal* coverage in print is a claim about the absence of a
-            small deviation and wants R = 200-500 (`PLAN.md` §9). The
+            *nominal* coverage in print is a claim about the absence of
+            a small deviation and wants R = 200-500 (`PLAN.md` §9). The
             runner takes `R` as an argument.
         (c) **Decide how the results are presented** (`PLAN.md` open
             item 4). Currently a private Claude artifact; a pkgdown
@@ -668,7 +665,7 @@ editor_options:
 
     1.  Design better model selection criterion (the one currently
         implemented, which is the same as HMSC, tend to overfit).
-        
+
     2.  ability to analyse count data
 
     3.  scenario for source-sink inference (sites where env covariate
