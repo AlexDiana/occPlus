@@ -266,6 +266,8 @@ Replicates are embarrassingly parallel at the *process* level — independent da
 
 SE of estimated coverage is `sqrt(0.95 * 0.05 / R)`. Cost is linear in R; precision improves only as sqrt(R) — halving the error bar costs 4x the compute.
 
+> **Caveat, added 29 July 2026.** `sqrt(0.95 * 0.05 / R)` assumes the replicates are independent. They are not, currently. `get_rng()` in `src/functions.cpp` is seeded from the literal `12345 + omp_get_thread_num()`, which is per *process*, so every PSOCK worker starts its Polya-Gamma stream at the same position and replicates in different workers share random numbers. The true SE is therefore larger than the table below by an unknown amount, and every coverage figure in §12 inherits that. Filed as TODO.Rmd group A item 4; the fix (seed from R's RNG) also restores `set.seed()` reproducibility. Re-check the §12 numbers after it lands.
+
 | R       | Coverage SE | Undercoverage reliably flagged |
 |---------|-------------|--------------------------------|
 | 50      | 3.1%        | below \~0.890                  |
