@@ -297,19 +297,19 @@ editor_options:
         default, so the obvious call fails.** `returnCovariateEffect()`
         and `plotCovariateEffect()` (added 29 July 2026) both declare
         `idx_species` with no default, so
-        `returnCovariateEffect(fit, "X_psi.EnvCov.1")` errors instead
-        of doing the natural thing. This is the same API gap as
+        `returnCovariateEffect(fit, "X_psi.EnvCov.1")` errors instead of
+        doing the natural thing. This is the same API gap as
         `predictNewSites()` in item 3 above; fix both the same way, by
         defaulting to all species.
 
     6.  **`plotSpeciesResponseCurve()` is exported but has an internal
-        helper's signature.** It takes `species_name, target_cov,
-        beta_mcmc_j, list_matrix, raw_df, n_points` -- raw MCMC pieces
-        and a raw data frame, with no `fitModel` argument -- while
-        every other plotting function in `R/output.R` takes the fitted
-        object. A user holding a `runOccJSDM()` result has no
-        documented way to assemble these arguments. Either give it a
-        `fitModel` signature like its neighbours, or drop it from
+        helper's signature.** It takes
+        `species_name, target_cov, beta_mcmc_j, list_matrix, raw_df, n_points`
+        -- raw MCMC pieces and a raw data frame, with no `fitModel`
+        argument -- while every other plotting function in `R/output.R`
+        takes the fitted object. A user holding a `runOccJSDM()` result
+        has no documented way to assemble these arguments. Either give
+        it a `fitModel` signature like its neighbours, or drop it from
         `NAMESPACE` and let `plotCovariateEffect()` call it internally.
         Until this is settled it is untestable, which is why the new
         smoke tests cover the other two GAM exports and not this one.
@@ -380,21 +380,21 @@ editor_options:
     sized fit first to confirm where the time actually goes.
 
     **Before profiling, check whether OpenMP is even on.** Measured 29
-    July 2026 on the macOS development machine: `R CMD config
-    SHLIB_OPENMP_CXXFLAGS` is *empty*, so the `$(SHLIB_OPENMP_CXXFLAGS)`
-    in `src/Makevars` expands to nothing, every `#pragma omp` compiles
-    to a no-op, and `nm -u src/occJSDM.so | grep -c '__kmpc\|_GOMP'`
-    returns 0. The package is running single-threaded here despite
-    `libomp.dylib` appearing in `otool -L` (pulled in transitively by
-    R's own libraries, not by us).
+    July 2026 on the macOS development machine:
+    `R CMD config SHLIB_OPENMP_CXXFLAGS` is *empty*, so the
+    `$(SHLIB_OPENMP_CXXFLAGS)` in `src/Makevars` expands to nothing,
+    every `#pragma omp` compiles to a no-op, and
+    `nm -u src/occJSDM.so | grep -c '__kmpc\|_GOMP'` returns 0. The
+    package is running single-threaded here despite `libomp.dylib`
+    appearing in `otool -L` (pulled in transitively by R's own
+    libraries, not by us).
 
     Consequences: the parallel sections are currently dead weight on
     this machine, the thread-safety bug of Fixed bugs 26 could never
     have manifested locally, and any timing measured here says nothing
     about a Linux build where OpenMP *is* active. Worth confirming what
     Alex's machine and CRAN's check farm do before investing in items 1
-    and 2 below -- the payoff differs completely between the two
-    cases.
+    and 2 below -- the payoff differs completely between the two cases.
 
     1.  **Parallelise over chains -- but use a PSOCK cluster, not
         `mclapply()`.** The `for (chain in 1:nchain)` loop
@@ -966,8 +966,8 @@ verified against the source rather than the commit message.
     Fixed bugs 26 replaced `randinvg()`'s use of R's global RNG inside
     an OpenMP loop with `thread_local` engines, which correctly closed
     the data race. But neither replacement engine ever read R's RNG
-    state: `get_rng()` was seeded from the literal `12345 +
-    omp_get_thread_num()`, and `mvrnormArmaQuick_TS()` from
+    state: `get_rng()` was seeded from the literal
+    `12345 + omp_get_thread_num()`, and `mvrnormArmaQuick_TS()` from
     `std::random_device{}()`. Measured before the fix: two fits of the
     same fixture under the same `set.seed(4242)` differed by 5.09 on
     `B0_output`.
@@ -996,20 +996,21 @@ verified against the source rather than the commit message.
         a suite.
     (c) `std::normal_distribution` caches the second Box-Muller deviate,
         and that cache survives `rng.seed()`. Without an explicit
-        `dist.reset()`, the first `rnorm()` of a fit could return a value
-        left over from the previous fit, so reproducibility depended on
-        the parity of normal draws earlier in the process. This is why
-        the test passed standalone and failed inside the suite.
+        `dist.reset()`, the first `rnorm()` of a fit could return a
+        value left over from the previous fit, so reproducibility
+        depended on the parity of normal draws earlier in the process.
+        This is why the test passed standalone and failed inside the
+        suite.
 
     `arma::randn()` elsewhere in the package was never affected:
     RcppArmadillo sets `ARMA_RNG_ALT` to route Armadillo's RNG to R's,
     so those draws already honoured `set.seed()`.
 
     **Scope.** Reproducibility holds for a given thread count. Threads
-    derive separate streams, so if the package is ever built with
-    OpenMP actually enabled (it is not on the macOS dev machine -- see
-    group D), changing the thread count changes which stream produces
-    which element. Inherent to per-thread streams, not a defect.
+    derive separate streams, so if the package is ever built with OpenMP
+    actually enabled (it is not on the macOS dev machine -- see group
+    D), changing the thread count changes which stream produces which
+    element. Inherent to per-thread streams, not a defect.
 
     **Tests.** `test-regression-bugs.R` covers same-seed equality,
     different-seed inequality, and independence of consecutive fits.
@@ -1031,8 +1032,8 @@ verified against the source rather than the commit message.
     2026 (then group B item 4); fixed by Alex in `42198d9`, unlogged.
     The simulator's cross-species spatial covariance used to collapse to
     jitter at `ds = 0` -- measured `sd(spatField)` of 0.0019 against
-    ~1.0 at `ds = 2` -- so any scenario built at `ds = 0` was silently a
-    null-field test. Verified 29 July at seed 42: `sd(spatField)` is
+    \~1.0 at `ds = 2` -- so any scenario built at `ds = 0` was silently
+    a null-field test. Verified 29 July at seed 42: `sd(spatField)` is
     0.598 at `ds = 0`, 0.467 at `ds = 1`, 0.678 at `ds = 2`. The study
     grid still uses `ds = 2`, now by choice rather than necessity.
 
