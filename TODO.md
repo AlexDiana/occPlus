@@ -440,8 +440,8 @@ editor_options:
     shows that *some* of the effect is an M/data-volume story.
 
 7.  **`q` (Stage 2 false positives) degrades hard as `K` rises.** Found
-    29 July 2026, as a side effect of the M-ladder run (`PLAN.md`
-    13.7) -- not something that run was built to look for.
+    29 July 2026, as a side effect of the M-ladder run (`PLAN.md` 13.7)
+    -- not something that run was built to look for.
 
     Coverage: 0.945 at `M2` (K = 3) down to **0.614 at `K30`** (K = 30,
     same total rows as `M20`). `M20` itself, which keeps K = 3 and
@@ -450,13 +450,13 @@ editor_options:
     not more, and the effect is bigger than the M-driven change in any
     of items 4-6.
 
-    Not investigated beyond this measurement. Worth checking against
-    the same label-switching mechanism noted in item 3 above -- more
-    PCR replicates sharpen the posterior, and if the informative prior
-    is pulling `p`/`q` away from the true values by a fixed amount,
-    sharper intervals would show it as *worse* coverage, exactly as
-    seen here for `beta_theta` in item 4. If so this is not a new bug
-    but the same cost-of-identifiability story, extended to K.
+    Not investigated beyond this measurement. Worth checking against the
+    same label-switching mechanism noted in item 3 above -- more PCR
+    replicates sharpen the posterior, and if the informative prior is
+    pulling `p`/`q` away from the true values by a fixed amount, sharper
+    intervals would show it as *worse* coverage, exactly as seen here
+    for `beta_theta` in item 4. If so this is not a new bug but the same
+    cost-of-identifiability story, extended to K.
 
 ## **C. Crashes, unreachable code paths, and API bugs (Alex)**
 
