@@ -84,13 +84,13 @@ editor_options:
         **Three decisions.**
 
         (a) **Is the helper's new contract the one you want?**
-            `plotSpeciesRates(data_plot, idx_species, speciesNames)`
-            now takes one row per species with `Min`/`Max` columns plus
-            the *unsubset* names, and does the subsetting itself, so
+            `plotSpeciesRates(data_plot, idx_species, speciesNames)` now
+            takes one row per species with `Min`/`Max` columns plus the
+            *unsubset* names, and does the subsetting itself, so
             ordering is computed on exactly the rows plotted. If the
             helper was meant to serve the other three rate plots, this
-            is the contract they would adopt -- so it should be a
-            shape you are happy with.
+            is the contract they would adopt -- so it should be a shape
+            you are happy with.
         (b) **Do you want the other three fixed the same way?**
             `plotOccupancyRates()`, `plotFPTPStage2Rates()` and
             `plotStage1FPRates()` still order on the full species set
@@ -271,11 +271,11 @@ editor_options:
         flipped, and coverage was unmoved at 0.777 (0.752-0.768 in nine
         of ten cells). Same data, same truth, same answer: the
         undercoverage is not sampling noise and does not depend on the
-        RNG or on any of the four fixes. `d_underfit` still
-        *over*covers at 0.980, which is diagnostic -- under-fitting the
-        ordination widens the intervals enough to hide the bias, so the
-        defect's visible severity depends on the fitted factor
-        dimension. See `PLAN.md` 12.1.
+        RNG or on any of the four fixes. `d_underfit` still *over*covers
+        at 0.980, which is diagnostic -- under-fitting the ordination
+        widens the intervals enough to hide the bias, so the defect's
+        visible severity depends on the fitted factor dimension. See
+        `PLAN.md` 12.1.
 
     3.  **Choose the informative priors for `p`, `q` and `theta0`.**
         Alex's note in this file: *"NEED TO CHOOSE THE INFORMATIVE
@@ -326,13 +326,13 @@ editor_options:
         to know to set `a_p`/`b_p`, and nothing currently tells them.
 
     4.  **`beta_theta` still undercovers at 0.766 after the prior-mean
-        fix, so a second cause remains.** Measured by the 29 July
-        R = 100 re-run (`PLAN.md` 12.1).
+        fix, so a second cause remains.** Measured by the 29 July R =
+        100 re-run (`PLAN.md` 12.1).
 
         Alex's correction of the collection-covariate prior mean from 1
         to 0 (Fixed bugs 25) was a real cause and did real work: every
         cell gained 0.03-0.05 coverage and two-thirds of the bias went
-        (+0.112 -> +0.038). But 0.766 against a nominal 0.95 is still
+        (+0.112 -\> +0.038). But 0.766 against a nominal 0.95 is still
         far outside the 2.2-point SE, and the residue has the same
         signature as before -- **flat across model type, primer count,
         species count and factor misspecification** (0.709-0.771 in nine
@@ -344,8 +344,8 @@ editor_options:
         overshoot when the data are thin -- see item 5.
 
         **This is the clearest open target in group A**: it is the
-        largest remaining deviation that is definitely a defect
-        (unlike `p`, which is the identifiability constraint working as
+        largest remaining deviation that is definitely a defect (unlike
+        `p`, which is the identifiability constraint working as
         intended).
 
     5.  **`theta0` now overcovers at 0.978-0.985, having been near
@@ -358,8 +358,8 @@ editor_options:
 
         Overcoverage is the safe direction and this is not urgent, but
         the pattern points at the same edit as item 4 -- the widened
-        `diag(2)` prior variance on the collection coefficients looks
-        to have overshot. Worth examining the two together, since one
+        `diag(2)` prior variance on the collection coefficients looks to
+        have overshot. Worth examining the two together, since one
         change plausibly produced both.
 
     6.  **`B0` bias roughly doubled, and coverage does not show it.**
@@ -367,10 +367,10 @@ editor_options:
         regression, cause not yet identified.**
 
         Nine of ten cells moved more negative between the pre- and
-        post-fix runs on identical data: base -0.113 -> -0.208,
-        `occupancy` -0.024 -> -0.151, `primers_3` -0.031 -> -0.151,
-        `low_information` -0.931 -> -1.056. Only `binary` moved the
-        other way. Overall -0.135 -> -0.228.
+        post-fix runs on identical data: base -0.113 -\> -0.208,
+        `occupancy` -0.024 -\> -0.151, `primers_3` -0.031 -\> -0.151,
+        `low_information` -0.931 -\> -1.056. Only `binary` moved the
+        other way. Overall -0.135 -\> -0.228.
 
         **Coverage stays at 0.943**, because the intervals are wide
         enough to absorb the shift -- so this is invisible in the
@@ -378,12 +378,11 @@ editor_options:
         argument for tracking both.
 
         Nothing in the four fixes should move species intercepts this
-        way. The likeliest candidate is the 421-line `jsdmfun.R`
-        rewrite that shipped in the same pull (`42198d9`). An R = 8
-        probe on 29 July hinted at it and R = 100 confirmed it, so it
-        is not noise. **`B0` is a headline quantity for a JSDM -- this
-        needs a cause before the MEE paper reports species
-        intercepts.**
+        way. The likeliest candidate is the 421-line `jsdmfun.R` rewrite
+        that shipped in the same pull (`42198d9`). An R = 8 probe on 29
+        July hinted at it and R = 100 confirmed it, so it is not noise.
+        **`B0` is a headline quantity for a JSDM -- this needs a cause
+        before the MEE paper reports species intercepts.**
 
     **B. Crashes, unreachable code paths, and API bugs**
 
@@ -1279,13 +1278,16 @@ under *Fixed bugs* above; this is everything else.
       to CRAN**. `helper-fixtures.R`, `test-smoke-configs.R`,
       `test-regression-bugs.R`, `test-api-contracts.R`.
       `test-placeholder.R` deleted.
+
     - **Tier 2** (`f63eeeb`): recovery canary, \~30 s, `skip_on_cran()`,
       thresholds measured over eight seed sets.
+
     - **Tier 3 + runner** (`f63eeeb`, `6123036`, `e0718f1`, `32b56a2`):
       env-gated study plus `dev/simstudy/run_study.R`, with
       checkpointing, `--resume`, `--caffeinate` and progress reporting.
-    - **The run itself:** re-run 29 July 2026 after Alex's fixes and
-      the RNG seeding fix. 10 scenarios x 100 replicates, 1000 fits, 0
+
+    - **The run itself:** re-run 29 July 2026 after Alex's fixes and the
+      RNG seeding fix. 10 scenarios x 100 replicates, 1000 fits, 0
       failures, 285 min on 5 cores, 155,578 interval checks. Results in
       `dev/simstudy/results/`, tabulated in `PLAN.md` §12. The 27-28
       July pre-fix run is retained for comparison (`PLAN.md` §12.6).
