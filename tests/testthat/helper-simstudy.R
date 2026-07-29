@@ -21,7 +21,7 @@ SIMSTUDY_BASE <- list(
   # ds = 0 the simulator's cross-species spatial covariance collapsed to
   # jitter, giving sd(spatField) = 0.0019 against ~1.0 at ds = 2, so every
   # spatial cell would have been testing against a null field. Fixed in
-  # 42198d9 (TODO.Rmd Fixed bugs 30); re-measured 29 July at seed 42, ds = 0
+  # 42198d9 (TODO.md Fixed bugs 30); re-measured 29 July at seed 42, ds = 0
   # now gives 0.598. Left at 2 so the grid keeps a clearly non-degenerate
   # field and stays comparable with the 28 July run.
   ds = 2L,
@@ -54,7 +54,7 @@ simstudy_scenarios <- function() {
     mk("traits_isolated",   useSpatField = FALSE, n_supportpoints = NULL),
     mk("primers_3",         P = 3L),
     # Low information: weak detection AND fewer sites. n_supportpoints is set
-    # explicitly; the default no longer crashes below 31 sites (TODO.Rmd Fixed
+    # explicitly; the default no longer crashes below 31 sites (TODO.md Fixed
     # bugs 29) but the study pins it regardless (PLAN.md 5.4).
     mk("low_information",   n = 40L, n_supportpoints = 8L,
                             p_range = c(0.1, 0.3),

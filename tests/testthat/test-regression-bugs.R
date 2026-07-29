@@ -1,4 +1,4 @@
-# Tier 1: one test per entry in TODO.Rmd's "Fixed bugs" record.
+# Tier 1: one test per entry in TODO.md's "Fixed bugs" record.
 #
 # Every one of those fixes was verified by reading code or by a one-off manual
 # run; none had a test. These are the tests. Each is named for the entry it

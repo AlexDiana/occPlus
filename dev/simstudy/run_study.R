@@ -13,9 +13,9 @@
 #
 # Replicates are parallelised across *processes*, which is free: each is an
 # independent dataset and fit, needing no package changes -- unlike the
-# in-package chain parallelisation in TODO.Rmd group D item 1.
+# in-package chain parallelisation in TODO.md group D item 1.
 #
-# PSOCK rather than mclapply(), for the reasons in TODO.Rmd D.1: mclapply() is
+# PSOCK rather than mclapply(), for the reasons in TODO.md D.1: mclapply() is
 # fork-based and errors outright on Windows, and forking a session with a live
 # OpenMP pool is a known deadlock source. PSOCK works on all three platforms.
 #
@@ -273,7 +273,7 @@ message("\nwritten to ", normalizePath(out_dir))
 # Reminders that outlive this session -- see PLAN.md 5.3 and 10.
 message("\nRead with care:")
 message("  * l_s and sigma_h are NOT in the table: never sampled / not recoverable")
-message("    (TODO.Rmd group A items 1 and 2). Spatial cells say nothing about range.")
+message("    (TODO.md group A items 1 and 2). Spatial cells say nothing about range.")
 message("  * sigma_b is prior-dominated; its coverage reflects prior-data")
 message("    consistency more than data-driven recovery.")
 message("  * R = ", R_reps, " gives a coverage SE of ",

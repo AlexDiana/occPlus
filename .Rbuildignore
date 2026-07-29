@@ -4,7 +4,7 @@
 ^Meta$
 ^AGENTS\.md$
 ^CITATION\.cff$
-^TODO\.Rmd$
+^TODO\.md$
 ^deprecated$
 ^dev$
 ^data/.*_highp_highthetabaseline\.rda$

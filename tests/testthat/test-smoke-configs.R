@@ -1,6 +1,6 @@
 # Tier 1: every advertised model configuration completes a fit.
 #
-# This is the tier that would have caught the sample_ls regression (TODO.Rmd
+# This is the tier that would have caught the sample_ls regression (TODO.md
 # Fixed bugs 22), which broke every non-spatial fit and survived because
 # nothing exercised that path -- the vignette passes spatCovariates, so it
 # would not have caught it either.

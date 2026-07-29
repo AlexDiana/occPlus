@@ -1,10 +1,13 @@
 ---
 title: "TODO"
 output: html_document
-editor_options: 
-  markdown: 
-    wrap: 72
 ---
+
+<!-- Plain markdown. There is deliberately no `editor_options: markdown:
+     wrap:` block here: it instructs RStudio's visual editor to re-wrap and
+     re-canonicalise the whole file on every save, which produced diff churn
+     on every edit and, in 2242b34, silently corrupted a code span (`* 2`
+     became `- 2` in the logDetKuu note). Edit this file in Source mode. -->
 
 ## functions to add
 
@@ -1205,7 +1208,7 @@ verified against the source rather than the commit message.
 
     *Both of these were removed from group B by `42198d9` without a
     Fixed-bugs entry, which is why they are recorded here late. The
-    check that caught it: `TODO.Rmd`'s group B numbering had a gap at 5
+    check that caught it: `TODO.md`'s group B numbering had a gap at 5
     and 6.*
 
 31. **`plotCollectionRates()` errored on every input.** Reported by Doug

@@ -1,6 +1,6 @@
 # Simulation-based validation of `occJSDM`
 
-Plan for the "extensive testing on simulated datasets" item under *MEE paper / Doug to dos* in `TODO.Rmd`. Drafted 27 July 2026.
+Plan for the "extensive testing on simulated datasets" item under *MEE paper / Doug to dos* in `TODO.md`. Drafted 27 July 2026.
 
 [Guide to the test suite](https://claude.ai/code/artifact/ad3d46eb-1fd4-49b5-b795-6b71474ef1d5 "Guide to the test suite")
 
@@ -48,7 +48,7 @@ Rscript -e 'pkgbuild::clean_dll(); devtools::test()'
 
 ### Two things to know before changing a test
 
-**A failing test names its bug.** The regression tests are titled `"Fixed bugs 22: ..."`, `"Fixed bugs 8: ..."` and so on, keyed to the *Fixed bugs* list in `TODO.Rmd`. Read that entry before debugging — it says what broke, when, and why it mattered.
+**A failing test names its bug.** The regression tests are titled `"Fixed bugs 22: ..."`, `"Fixed bugs 8: ..."` and so on, keyed to the *Fixed bugs* list in `TODO.md`. Read that entry before debugging — it says what broke, when, and why it mattered.
 
 **Do not "fix" a loose assertion by tightening it.** Several are deliberately loose and the comment above each says why. The GP length-scale test asserts that `sample_ls()` is *reached*, not that `idx_ls` varies, precisely so it does not encode the open `sigma_s` bug (§10.0); tightening it would make it pass for the wrong reason now and fail confusingly once that bug is fixed. The shuffle-invariance test asserts group totals rather than row-for-row equality because PCR replicates are exchangeable, and ignores `row.names` because those were verified to be **order-dependent but pairing-preserving** -- a user looking up by name gets the right row either way, so re-tightening it would fail on a difference that carries no information. The tier-2 thresholds are set from measurement across three seed sets (§6.3), not from taste.
 
@@ -60,7 +60,7 @@ Check that `runOccJSDM()` recovers known generating parameters from data produce
 
 Two distinct goals, which need different designs — worth keeping separate in the writing-up:
 
-- **Regression.** Guard the \~23 bugs already fixed (`TODO.Rmd`, *Fixed bugs*). None of them currently has a test; every one was verified by reading code, or by a one-off manual run. This is the near-term value.
+- **Regression.** Guard the \~23 bugs already fixed (`TODO.md`, *Fixed bugs*). None of them currently has a test; every one was verified by reading code, or by a one-off manual run. This is the near-term value.
 - **Calibration evidence.** Support a claim in the MEE paper that inference is correctly calibrated. Needs more replicates and a tighter argument (§9).
 
 The suite as specified below serves the first goal well and the second adequately. Read §5 before quoting any coverage number in the paper.
@@ -79,7 +79,7 @@ The suite as specified below serves the first goal well and the second adequatel
 
 ### Why a testsuite rather than a vignette or article
 
-- The `sample_ls` regression (`TODO.Rmd` Fixed bugs 22) broke *every* non-spatial fit and survived because nothing exercised that path. A three-line test would have caught it the moment it landed. The vignette would not have — it passes `spatCovariates`.
+- The `sample_ls` regression (`TODO.md` Fixed bugs 22) broke *every* non-spatial fit and survived because nothing exercised that path. A three-line test would have caught it the moment it landed. The vignette would not have — it passes `spatCovariates`.
 - It discharges Phase 3 step 11 of the CRAN plan in `AGENTS.md` ("write the testthat suite"). Done as of `6d9526d`: `test-placeholder.R` is gone, replaced by four real test files.
 - No package-size or vignette-build cost. Both matter here: `sampleresults.rda` at 62 MB is already a CRAN blocker.
 
@@ -127,7 +127,7 @@ These are the things most likely to make the suite wrong or annoying. Each has b
 
 **Tier 1 assertions must be structural**: does it run, are dimensions right, is a block non-`NA`, does a value vary. Numeric recovery belongs in tiers 2–3, with tolerances.
 
-**The original reason expired on 29 July 2026, and the rule survives it.** This rule was written because a fixed seed did not reproduce the sampler: `randinvg()` drew from R's global RNG inside an OpenMP loop, so a tier-1 `expect_equal()` on posterior quantities would have passed locally and flaked on CRAN. That is fixed (TODO.Rmd Fixed bugs 28) — `set.seed()` now controls the whole fit, verified across separate processes.
+**The original reason expired on 29 July 2026, and the rule survives it.** This rule was written because a fixed seed did not reproduce the sampler: `randinvg()` drew from R's global RNG inside an OpenMP loop, so a tier-1 `expect_equal()` on posterior quantities would have passed locally and flaked on CRAN. That is fixed (TODO.md Fixed bugs 28) — `set.seed()` now controls the whole fit, verified across separate processes.
 
 The rule stands anyway, for a different and more durable reason: **fitted values are not a contract**. Any legitimate change to a sampler, a prior default, or the order of draws moves every number, and a suite full of golden values turns each such change into a wall of failures that says nothing about correctness. Structural assertions survive those changes; numeric ones do not.
 
@@ -156,7 +156,7 @@ The latent-factor model is invariant to rotation and sign. `reparamFactorModel()
 
 ### 5.4 The GP knot count must be pinned, not left to the default
 
-`getDefaultSupportPoints(n)` used to be `max(30, floor(n * 0.2))` — a constant 30 for any dataset below 150 sites, and a crash below 31 (§10.1). Fixed in `42198d9`; it is now `min(floor(n * 0.2), n - 1)` (`R/jsdmfun.R:875`, `TODO.Rmd` Fixed bugs 29). The study pins `n_supportpoints` anyway rather than trusting any default.
+`getDefaultSupportPoints(n)` used to be `max(30, floor(n * 0.2))` — a constant 30 for any dataset below 150 sites, and a crash below 31 (§10.1). Fixed in `42198d9`; it is now `min(floor(n * 0.2), n - 1)` (`R/jsdmfun.R:875`, `TODO.md` Fixed bugs 29). The study pins `n_supportpoints` anyway rather than trusting any default.
 
 Two consequences for the design, beyond the crash. The knot count would be **uncontrolled but not constant** across cells — identical for `n = 40` and `n = 140`, then suddenly proportional above 150 — so any difference attributed to `n` would be partly an artefact of the spatial approximation changing underneath. And at small `n` it approaches one knot per site, which is a qualitatively different (denser) approximation than at `n = 100`, precisely in the low-information cell where calibration is most at risk.
 
@@ -174,7 +174,7 @@ Two cores maximum (`_R_CHECK_LIMIT_CORES_`). Tier 3's replicate-level parallelis
 
 Base = `two_stage`, traits on, spatial on, `d = 2`, **`ds = 2`**, `n = 100`, `S = 10`, `M = 2`, `P = 2`, `K = 3`, `n_supportpoints = 20`.
 
-`ds >= 1` *used to be* required or there was no spatial field at all: at `ds = 0` the simulator's cross-species spatial covariance collapsed to jitter, `sd(spatField)` = 0.0019 rather than \~1.0. The grid used `ds = 0` until 27 July, which made every spatial cell a null-field test — the exact trap the audit flagged for Fixed bugs 7. Fixed in `42198d9` (`TODO.Rmd` Fixed bugs 30); re-measured 29 July, `ds = 0` now gives 0.598. The grid stays at `ds = 2` by choice, for a clearly non-degenerate field and comparability with the 28 July run.
+`ds >= 1` *used to be* required or there was no spatial field at all: at `ds = 0` the simulator's cross-species spatial covariance collapsed to jitter, `sd(spatField)` = 0.0019 rather than \~1.0. The grid used `ds = 0` until 27 July, which made every spatial cell a null-field test — the exact trap the audit flagged for Fixed bugs 7. Fixed in `42198d9` (`TODO.md` Fixed bugs 30); re-measured 29 July, `ds = 0` now gives 0.598. The grid stays at `ds = 2` by choice, for a clearly non-degenerate field and comparability with the 28 July run.
 
 Every spatial cell sets `n_supportpoints` explicitly (§10.1). Left to the default it is a constant 30 for any `n` below 150, so it would neither scale with `n` nor be a controlled factor — and below 31 sites it crashes outright.
 
@@ -207,7 +207,7 @@ One shared fixture fit built in `helper-fixtures.R` and reused: `sampledata`, `n
 
 `test-smoke-configs.R` — every configuration completes: `two_stage` / `occupancy` / `binary`; with and without `spatCovariates`; with and without traits; `d = 0` and `d = 2`; `P = 1` and `P = 3`. *This is the tier that would have caught the `sample_ls` regression.*
 
-`test-regression-bugs.R` — one test per fixed bug, named so a failure points at its `TODO.Rmd` entry:
+`test-regression-bugs.R` — one test per fixed bug, named so a failure points at its `TODO.md` entry:
 
 | Guards           | Assertion                                           |
 |------------------|-----------------------------------------------------|
@@ -262,7 +262,7 @@ Measured on `sampledata` (100 sites, 10 species, 2 chains): **0.039 s per iterat
 
 Cells 9–10 are cheaper than the estimate; cell 8 (`S = 30`) is dearer.
 
-Replicates are embarrassingly parallel at the *process* level — independent datasets and fits — so this needs no package changes, unlike the in-package chain parallelisation in `TODO.Rmd` group D item 1.
+Replicates are embarrassingly parallel at the *process* level — independent datasets and fits — so this needs no package changes, unlike the in-package chain parallelisation in `TODO.md` group D item 1.
 
 **Do not buy replicates by shortening chains.** Each interval endpoint is a tail quantile; with 500 total draws only \~12 land below the 2.5% bound, so the endpoints are noisy and that noise feeds into coverage as bias, not just variance. Set chain length by an ESS target (\>= 400 on monitored parameters, which `returnConvergenceDiagnostics()` already reports) and let R take what is left.
 
@@ -272,7 +272,7 @@ Replicates are embarrassingly parallel at the *process* level — independent da
 
 SE of estimated coverage is `sqrt(0.95 * 0.05 / R)`. Cost is linear in R; precision improves only as sqrt(R) — halving the error bar costs 4x the compute.
 
-> **Resolved 29 July 2026.** This previously carried a caveat that the replicates were not independent: `get_rng()` was seeded from a literal, per *process*, so every PSOCK worker started its Polya-Gamma stream at the same position. That is fixed (TODO.Rmd Fixed bugs 28) — `runOccJSDM()` now derives its C++ seed from R's RNG, and because `draw_truth()` sets a per-(scenario, replicate) seed before each fit, every replicate gets its own stream. Verified: a repeated replicate reproduces exactly, and two replicates differ on every column. `sqrt(0.95 * 0.05 / R)` is therefore the right SE for the re-run.
+> **Resolved 29 July 2026.** This previously carried a caveat that the replicates were not independent: `get_rng()` was seeded from a literal, per *process*, so every PSOCK worker started its Polya-Gamma stream at the same position. That is fixed (TODO.md Fixed bugs 28) — `runOccJSDM()` now derives its C++ seed from R's RNG, and because `draw_truth()` sets a per-(scenario, replicate) seed before each fit, every replicate gets its own stream. Verified: a repeated replicate reproduces exactly, and two replicates differ on every column. `sqrt(0.95 * 0.05 / R)` is therefore the right SE for the re-run.
 >
 > The §12 numbers below were produced *before* this fix and inherit the old correlation, so their error bars are understated by an unknown amount. Replace them with the re-run rather than reconciling them.
 
@@ -293,7 +293,7 @@ Also: pooling coverage across species within a block buys precision, but those i
 
 ## 10. Open items
 
-0.  *OPEN, and it degrades cells 1 and 2.* **The GP length-scale is never recovered** (`TODO.Rmd` group A item 2, re-diagnosed 27 July).
+0.  *OPEN, and it degrades cells 1 and 2.* **The GP length-scale is never recovered** (`TODO.md` group A item 2, re-diagnosed 27 July).
 
     `sample_ls()` treats the fitted field `SE` as a GP draw and scores its density under `N(0, sigma_s^2 K(l_s))` while holding `SE` fixed. But under the SoR approximation `SE = Ks(l_s) %*% Bs` is a *deterministic function of `l_s`*, already smoothed at the current value, so it scores better and better under smoother covariances. The likelihood is monotone increasing in `l_s` and `idx_ls` pins at the grid maximum — measured at range 10-10 for every true `l_s` tried (0.074, 0.171, 0.300) with real spatial signal present.
 
@@ -303,13 +303,13 @@ Also: pooling coverage across species within a block buys precision, but those i
 
 1.  ~~*OPEN, blocking tier 3.***Minimum `n` for spatial cells.**~~ **RESOLVED 27 July 2026, and no longer blocking.** Measured: the floor is **31 unique locations** with default settings. `n <= 29` fails with `cannot take a sample larger than the population`, `n = 30` with `number of cluster centres must lie between 1 and nrow(x)`, `n >= 31` runs.
 
-    Cause: `getDefaultSupportPoints(n) <- max(30, floor(n * 0.2))` (`R/jsdmfun.R:480`) feeds `kmeans(X_s, centers = ps)`, and the hard-coded 30 wins for every dataset under 150 sites, so the knot count never scales down. Filed as a bug and **since fixed** (`42198d9`, `TODO.Rmd` Fixed bugs 29) — the default was also statistically wrong well before it crashed (30 knots for 31 sites is \~1 knot per site, defeating the point of a sparse GP). Now `min(floor(n * 0.2), n - 1)`.
+    Cause: `getDefaultSupportPoints(n) <- max(30, floor(n * 0.2))` (`R/jsdmfun.R:480`) feeds `kmeans(X_s, centers = ps)`, and the hard-coded 30 wins for every dataset under 150 sites, so the knot count never scales down. Filed as a bug and **since fixed** (`42198d9`, `TODO.md` Fixed bugs 29) — the default was also statistically wrong well before it crashed (30 knots for 31 sites is \~1 knot per site, defeating the point of a sparse GP). Now `min(floor(n * 0.2), n - 1)`.
 
     **Consequence for this plan:** cell 5 must set `listParams$n_supportpoints` explicitly rather than relying on the default. Verified working at `n = 20` with 6 knots. Pinning the knot count is the right call for a study cell anyway — it stops the spatial approximation silently changing with `n` across scenarios, which would otherwise confound the low-information comparison. Apply the same reasoning to **every** spatial cell (1, 2, 4–10), not just cell 5: set `n_supportpoints` per scenario so it is a controlled factor rather than a function of `n`.
 
 2.  ~~*OPEN.* Tier 2 failing vs advisory (§6.3).~~ **RESOLVED: it fails**, on measured thresholds -- see §6.3.
 
-3.  ~~*OPEN.***`beta_theta` and `resid_cor` sit below nominal.**~~ **RESOLVED 28 July by the full run, and both traced to code.** `beta_theta` undercovers in *every* cell (0.676-0.730) -- the flatness across model types, primer counts and factor misspecification is the signature of a structural cause, and it is `TODO.Rmd` group A item 3 (prior mean 1 instead of 0 on the collection slopes). `resid_cor` sits at 0.74-0.77 in nine cells and is group A item 4 (`reparamFactorModel()` breaking `t(L) %*% L`). See §12.
+3.  ~~*OPEN.***`beta_theta` and `resid_cor` sit below nominal.**~~ **RESOLVED 28 July by the full run, and both traced to code.** `beta_theta` undercovers in *every* cell (0.676-0.730) -- the flatness across model types, primer counts and factor misspecification is the signature of a structural cause, and it is `TODO.md` group A item 3 (prior mean 1 instead of 0 on the collection slopes). `resid_cor` sits at 0.74-0.77 in nine cells and is group A item 4 (`reparamFactorModel()` breaking `t(L) %*% L`). See §12.
 
 4.  *Deferred.* Presentation of tier-3 results for the paper. Build the suite first; the summary object then feeds either a short pkgdown article or the manuscript directly. Nothing here forecloses that.
 
@@ -354,7 +354,7 @@ Averaged over all cells, pre-fix → post-fix:
 
 2.  **`resid_cor` is untouched, and the paired design makes that conclusive.** Only **104 of 49,978** coverage decisions flipped. Identical data, identical truth, coverage unmoved at 0.777. This is `reparamFactorModel()` (group A item 2), which is unfixed and currently disputed. The `d_underfit` exception persists exactly as before: *over*covering at 0.980, because under-fitting the ordination widens intervals enough to mask the bias.
 
-3.  **`p` is unchanged, and that is the correct outcome.** `low_information` sits at 0.109. The informative `Beta(5, 1)` is load-bearing for identifiability — `p` and `q` enter `sample_pq_cpp()` symmetrically, so the prior is what selects the mode (TODO.Rmd group A item 3). This cell measures the *cost of that constraint* when true `p` is 0.1–0.3. It is not a defect to be fixed by flattening the prior.
+3.  **`p` is unchanged, and that is the correct outcome.** `low_information` sits at 0.109. The informative `Beta(5, 1)` is load-bearing for identifiability — `p` and `q` enter `sample_pq_cpp()` symmetrically, so the prior is what selects the mode (TODO.md group A item 3). This cell measures the *cost of that constraint* when true `p` is 0.1–0.3. It is not a defect to be fixed by flattening the prior.
 
 ### 12.2 New finding: `B0` bias roughly doubled
 
@@ -410,7 +410,7 @@ Kept because the *delta* is the evidence that the fixes worked, not the level. R
 
 5.  Tier 3 + `run_study.R`.
 
-6.  **Full R = 100 run; inspect the table.** **Done 27-28 July 2026** -- all 10 cells at R = 100, 1000 fits, 0 failures, \~497 min on 5 cores (`base` alone first, 100 fits/22.9 min; then the other 9 cells, 900 fits/474 min). Results in `dev/simstudy/results/`, tabulated in §12. Found three undercovering blocks, each since traced to code; see §12 and TODO.Rmd group A.
+6.  **Full R = 100 run; inspect the table.** **Done 27-28 July 2026** -- all 10 cells at R = 100, 1000 fits, 0 failures, \~497 min on 5 cores (`base` alone first, 100 fits/22.9 min; then the other 9 cells, 900 fits/474 min). Results in `dev/simstudy/results/`, tabulated in §12. Found three undercovering blocks, each since traced to code; see §12 and TODO.md group A.
 
     **A re-run is now owed, and it checks two things at once.** Alex's 28-29 July fixes (`sigma_h`, the collection-covariate prior mean, the Stage 2 prior wiring) all change fitted values, so §12 is stale on its own terms. Separately, the replicates in that run were not independent -- see the note under §8 -- so its error bars were understated. The re-run therefore measures whether the fixes worked *and* produces the first numbers with honest SEs.
 

@@ -52,7 +52,7 @@ test_that("an unrecognised covariate name is rejected", {
 test_that("n_supportpoints overrides the GP knot default", {
   # The default used to be max(30, floor(n * 0.2)), which crashed below 31
   # sites and was a flat 30 below 150. Fixed in 42198d9 -- it is now
-  # min(floor(n * 0.2), n - 1) (TODO.Rmd Fixed bugs 29) -- so this no longer
+  # min(floor(n * 0.2), n - 1) (TODO.md Fixed bugs 29) -- so this no longer
   # guards a crash. Kept because the simulation study pins n_supportpoints
   # rather than trusting any default (PLAN.md 5.4), and that override needs to
   # keep working.

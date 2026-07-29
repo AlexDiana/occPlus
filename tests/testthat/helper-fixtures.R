@@ -5,7 +5,7 @@
 #   1. Speed. The whole tier is budgeted under 30 s because it ships to CRAN
 #      and runs on every check.
 #
-#   2. No numeric reproducibility. While TODO.Rmd group A item 2 is open,
+#   2. No numeric reproducibility. While TODO.md group A item 2 is open,
 #      randinvg() draws from R's global RNG inside an OpenMP loop, so a fixed
 #      seed does NOT reproduce across platforms -- deterministic on stock
 #      macOS clang (no OpenMP), racy on Linux/Windows. A test asserting
@@ -17,7 +17,7 @@
 #      Simulated *data* is reproducible (simulateOccJSDMData() uses only R's
 #      RNG, no OpenMP), so tests on design matrices are safe.
 
-# Small by design. n = 40 clears the 31-site spatial floor (TODO.Rmd group B
+# Small by design. n = 40 clears the 31-site spatial floor (TODO.md group B
 # item 3) with room to spare.
 FIXTURE_N <- 40L
 FIXTURE_S <- 4L
@@ -109,7 +109,7 @@ cached_fixture <- function(key, build) {
 #' Two-stage, spatial, multi-primer (P = 2).
 #'
 #' The workhorse fixture. P > 1 is required by the primer-subsetting
-#' regression test (TODO.Rmd Fixed bugs 21), which cannot detect pooling
+#' regression test (TODO.md Fixed bugs 21), which cannot detect pooling
 #' across primers when there is only one.
 fixture_twostage <- function() {
   cached_fixture("twostage", function() {

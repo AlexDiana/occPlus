@@ -15,7 +15,7 @@ inst/doc
 # from the build via ^deprecated$ in .Rbuildignore. Its existing contents were
 # tracked only by grandfathering -- they predate the ignore rule this replaces
 # -- which meant anything moved there in future would have been silently
-# untracked. That matters because TODO.Rmd group C plans to move more dead
+# untracked. That matters because TODO.md group C plans to move more dead
 # code here. Nothing is ignored under deprecated/ now.
 outputs/caiwang_results.rda
 src/*.o
@@ -32,5 +32,5 @@ traitdata_caiwang.rdata
 interim_todo.Rmd
 data/sampledata_highp_highthetabaseline.rda
 data/sampleresults_highp_highthetabaseline.rda
-# Rendered from TODO.Rmd as a parse check; regenerable, never a deliverable.
+# Rendered from TODO.md as a parse check; regenerable, never a deliverable.
 TODO.html

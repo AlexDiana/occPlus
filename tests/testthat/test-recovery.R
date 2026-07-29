@@ -9,7 +9,7 @@
 #
 # Thresholds are set from measurement, not taste. Re-derived 27 July under
 # ds = 2 (the grid previously used ds = 0, which at the time produced no
-# spatial field at all -- since fixed, TODO.Rmd Fixed bugs 30). Eight independent seed sets at this
+# spatial field at all -- since fixed, TODO.md Fixed bugs 30). Eight independent seed sets at this
 # configuration gave:
 #
 #                          min    median   max     floor   margin

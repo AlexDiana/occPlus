@@ -829,7 +829,7 @@ plotSpeciesRates <- function(data_plot,
 
   # Order on the subset that is actually plotted. Ordering the full set and
   # then indexing the subset (or the reverse) mismatches labels to bars -- the
-  # defect in TODO.Rmd group B item 1, which the other three rate plots still
+  # defect in TODO.md group B item 1, which the other three rate plots still
   # have.
   speciesNameOrdered <- data_plot$Species[order(data_plot$Min)]
 
