@@ -1243,12 +1243,71 @@ verified against the source rather than the commit message.
     error for models with no collection stage, which previously fell
     through to a subscript failure.
 
-    **Note for group B item 1:** this fixes the species-ordering defect
-    for this function only. `plotOccupancyRates()`,
-    `plotFPTPStage2Rates()` and `plotStage1FPRates()` still order on the
-    full species set while indexing a filtered one. The test added here
-    asserts label-to-value pairing rather than mere absence of error,
-    and is the template for fixing those three.
+    **Note, since resolved:** this fixed the species-ordering defect for
+    this function only. `plotOccupancyRates()`, `plotFPTPStage2Rates()`
+    and `plotStage1FPRates()` still ordered on the full species set
+    while indexing a filtered one (this was filed as group C item 1, not
+    group B as originally written here). The test added here asserted
+    label-to-value pairing rather than mere absence of error, and served
+    as the template for fixing those three -- see Fixed bugs 32.
+
+32. **`plotOccupancyRates()`, `plotFPTPStage2Rates()` and
+    `plotStage1FPRates()` shared the species-ordering defect
+    `plotCollectionRates()` had (Fixed bugs 31).** Filed as group C item
+    1; fixed by Claude 29 July 2026. Each computed `order()` on the
+    *filtered* `idx_species` subset and then used the result to index
+    the *unfiltered* `speciesNames`, so for any `idx_species` other than
+    a prefix `1:k` the factor levels named the wrong species and bars
+    silently vanished.
+
+    `plotOccupancyRates()` and `plotStage1FPRates()` now delegate to the
+    `plotSpeciesRates()` helper fixed in Fixed bugs 31, which subsets
+    first and derives labels from the subset. `plotFPTPStage2Rates()`
+    has a two-interval (`p`/`q`) layout that doesn't fit that helper, so
+    it was fixed inline: order and labels are both now derived from the
+    filtered `data_plot`. `plotStage2FPRates()` was already correct and
+    untouched.
+
+    Verified against a live fit with `idx_species = c(3, 1, 10)`: all
+    four functions now plot exactly that subset with matching labels.
+    Full test suite passes (119/119). `R/output.R`.
+
+33. **`returnCovariateEffect()`/`plotCovariateEffect()` had no
+    `idx_species` default, and fixing that exposed two further bugs in
+    the code they call.** Filed as group C item 5; fixed by Claude 29
+    July 2026.
+
+    Both functions declared `idx_species` with no default, so
+    `returnCovariateEffect(fit, covName)` errored instead of defaulting
+    to all species -- the same gap as `predictNewSites()` (group C item
+    2). Gave both a `NULL` default resolving to all species, matching
+    every other return/plot function in `R/output.R`.
+
+    That default immediately reached two pre-existing bugs that a
+    narrow, prefix `idx_species` had been masking:
+
+    (a) `plotCovariateEffect_base()` (`R/jsdmfun.R`) re-applied
+        `apply(B_output, c(1,2), c)` to arrays its only caller,
+        `plotCovariateEffect()`, had already collapsed. The second
+        `apply()` collapsed the species margin again, leaving the
+        array's third dimension sized by `ncov_psi` instead of `S` --
+        any species index beyond `ncov_psi` (2 in the test fit) errored
+        with `subscript out of bounds`, exactly the region "all species"
+        reaches immediately. Renamed the formals to `B0_output_vec`/
+        `B_output_vec` to match the already-collapsed inputs and dropped
+        the redundant `apply()` calls.
+
+    (b) `returnCovariateEffect_base()`'s per-species loop labelled each
+        row `speciesNames[i]` (the loop counter) instead of
+        `speciesNames[sp_idx]` -- the same class of defect as Fixed bugs
+        32 -- mislabelling every species whenever `idx_species` wasn't
+        the prefix `1:k`.
+
+    Verified against a live fit: the default now facets all 10 species
+    correctly; `idx_species = c(3, 1)` plots and labels `OTU_3`/`OTU_1`
+    correctly (previously mislabelled `OTU_1`/`OTU_2`, then errored once
+    the default was exercised). Full test suite passes (119/119).
+    `R/jsdmfun.R`, `R/output.R`.
 
 # **Completed work**
 
