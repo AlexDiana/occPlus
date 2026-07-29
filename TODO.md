@@ -6,6 +6,7 @@ editor_options:
     wrap: 72
 ---
 
+```{=html}
 <!-- This file is edited in RStudio's Visual mode and is hard-wrapped at 72
      columns. The wrap directive is per-document on purpose: AGENTS.md and
      PLAN.md are NOT wrapped (44% and 39% of their lines exceed 72), so a
@@ -17,6 +18,7 @@ editor_options:
      boundary and be mangled -- in 2242b34 that turned `* 2` into `- 2` in
      the logDetKuu note, silently asserting something false. Keep code
      spans short, or phrase around them. -->
+```
 
 ## functions to add
 
