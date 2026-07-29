@@ -100,6 +100,9 @@ list_jsdmParams <- list(
   useSpatField = TRUE
   )
 
+# add splinevars to list_params
+# add comments to list_jsdmParams
+
 list_params <- list(
   p = matrix(runif(P * S, 0.3, 0.6), P, S),   
   # p is the Stage 2 (PCR/lab): true-positive detection rate per PCR 
