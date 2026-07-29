@@ -726,8 +726,10 @@ editor_options:
 
         (c) **Decide how the results are presented** (`PLAN.md` open
             item 4). Currently a private Claude artifact
-            (<https://claude.ai/code/artifact/ad3d46eb-1fd4-49b5-b795-6b71474ef1d5>);
-            a pkgdown article is the obvious home -- see item 3.
+            (<https://claude.ai/code/artifact/ad3d46eb-1fd4-49b5-b795-6b71474ef1d5>),
+            updated 29 July 2026 with the post-fix re-run and the
+            before/after comparison; a pkgdown article is the obvious
+            home -- see item 3.
 
         **One constraint carried from the bug list:** `l_s` is excluded
         from coverage checks because it is not recoverable while group A
