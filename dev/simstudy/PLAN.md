@@ -11,7 +11,7 @@ Plan for the "extensive testing on simulated datasets" item under *MEE paper / D
 | 3\. `helper-simstudy.R` | **done** (`6123036`) -- validated at R = 8 |
 | 4\. Tier 2 canary | **done** (`f63eeeb`) -- \~30 s, `skip_on_cran()` |
 | 5\. Tier 3 + runner | **done** (`f63eeeb`) -- runner smoke-tested end to end |
-| 6\. Full R = 100 run | **done, 28 July** -- all 10 cells at R = 100, 900 replicates, 0 failures. Results in `dev/simstudy/results/`. See §12. |
+| 6\. Full R = 100 run | **done, 27-28 July** -- all 10 cells at R = 100 across two runs: `base` alone (100 fits, 22.9 min) then the other 9 cells (900 fits, 474 min). 1000 fits, 0 failures. Results in `dev/simstudy/results/`. See §12. |
 
 Building it surfaced four corrections to this plan and two package bugs; both are recorded in place below rather than only in commit messages.
 
@@ -30,7 +30,7 @@ Six levels, cheapest first. Times are wall clock on Doug's machine and include \
 | One study cell | `Rscript dev/simstudy/run_study.R --cores=5 --scenarios=base --caffeinate` | \~50 min | tier 3, one cell at R = 100 |
 | Full study | `Rscript dev/simstudy/run_study.R --cores=5 --caffeinate` | \~8 h | tier 3, all 10 cells at R = 100 |
 
-Study times are **measured**, not projected: the 28 July run took 474 min for all 10 cells (900 fits, 0 failures). An earlier version of this table said `--cores=8` and \~2.4 h, which was a guess and roughly 3x optimistic. On a fanless MacBook Air, 5 cores is the practical ceiling; use `--caffeinate` for anything over an hour, because a run that sleeps mid-way is easy to misread as thermal throttling (it was, once — check the cpu/wall ratio in the progress line, which makes sleep unmistakable). `--resume` picks a run back up from the last checkpoint.
+Study times are **measured**, not projected: the grid took 474 min for 9 cells (900 fits, 0 failures) on 28 July, after `base` had been run on its own the day before (100 fits, 22.9 min). All 10 cells in one go is therefore \~497 min, i.e. the \~8 h in the table. An earlier version of this table said `--cores=8` and \~2.4 h, which was a guess and roughly 3x optimistic. On a fanless MacBook Air, 5 cores is the practical ceiling; use `--caffeinate` for anything over an hour, because a run that sleeps mid-way is easy to misread as thermal throttling (it was, once — check the cpu/wall ratio in the progress line, which makes sleep unmistakable). `--resume` picks a run back up from the last checkpoint.
 
 **`devtools::test()` is the day-to-day command** — run it after any change to `R/` or `src/`. In RStudio, Cmd+Shift+T. `filter` is a regex on the filename minus the `test-` prefix; the tier-1 files are `smoke`, `regression` and `api`.
 
@@ -329,7 +329,7 @@ Also: pooling coverage across species within a block buys precision, but those i
 > **Re-running is the outstanding item** -- and it is now the evidence that
 > Alex's fixes worked, not merely a repeat.
 
-900 replicates, 10 scenarios, 0 failures, 474 min on 5 cores. 155,578 individual interval checks. Coverage SE at R = 100 is 2.2 points, so treat anything in 0.93-0.97 as indistinguishable from nominal.
+1000 replicates, 10 scenarios, 0 failures, \~497 min on 5 cores. 155,578 individual interval checks. Run in two parts -- `base` on 27 July (100 fits, 22.9 min), the other 9 cells on 28 July (900 fits, 474 min) -- because `base` was run first to settle the open question in §10.3 before committing to the grid. Coverage SE at R = 100 is 2.2 points, so treat anything in 0.93-0.97 as indistinguishable from nominal.
 
 | block | base | spat.isol | trait.isol | primers3 | low.info | d.under | d.over | sp20 | occ | binary |
 |----|----|----|----|----|----|----|----|----|----|----|
@@ -377,7 +377,7 @@ Also: pooling coverage across species within a block buys precision, but those i
 
 5.  Tier 3 + `run_study.R`.
 
-6.  **Full R = 100 run; inspect the table.** **Done 28 July 2026** -- all 10 cells, 900 replicates, 0 failures, 474 min on 5 cores. Results in `dev/simstudy/results/`, tabulated in §12. Found three undercovering blocks, each since traced to code; see §12 and TODO.Rmd group A.
+6.  **Full R = 100 run; inspect the table.** **Done 27-28 July 2026** -- all 10 cells at R = 100, 1000 fits, 0 failures, \~497 min on 5 cores (`base` alone first, 100 fits/22.9 min; then the other 9 cells, 900 fits/474 min). Results in `dev/simstudy/results/`, tabulated in §12. Found three undercovering blocks, each since traced to code; see §12 and TODO.Rmd group A.
 
     **A re-run is now owed, and it checks two things at once.** Alex's 28-29 July fixes (`sigma_h`, the collection-covariate prior mean, the Stage 2 prior wiring) all change fitted values, so §12 is stale on its own terms. Separately, the replicates in that run were not independent -- see the note under §8 -- so its error bars were understated. The re-run therefore measures whether the fixes worked *and* produces the first numbers with honest SEs.
 

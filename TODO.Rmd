@@ -1126,8 +1126,10 @@ under *Fixed bugs* above; this is everything else.
     - **Tier 3 + runner** (`f63eeeb`, `6123036`, `e0718f1`, `32b56a2`):
       env-gated study plus `dev/simstudy/run_study.R`, with
       checkpointing, `--resume`, `--caffeinate` and progress reporting.
-    - **The run itself:** 10 scenarios x 100 replicates, 900 fits, 0
-      failures, 474 min on 5 cores, 155,578 interval checks. Results in
+    - **The run itself:** 10 scenarios x 100 replicates, 1000 fits, 0
+      failures, ~497 min on 5 cores, 155,578 interval checks. Run in two
+      parts: `base` alone (100 fits, 22.9 min, 27 July), then the other
+      9 cells (900 fits, 474 min, 28 July). Results in
       `dev/simstudy/results/`, tabulated in `PLAN.md` §12.
 
     It found six defects -- three while the tests were being written,
