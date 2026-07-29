@@ -212,3 +212,83 @@ test_that("Fixed bugs 12: the GP length-scale sampler is reached", {
   invisible(fit_fixture(simulate_fixture(model = "two_stage"), spatial = TRUE))
   expect_true(called)
 })
+
+# --- Alex's fixes of 28-29 July (Fixed bugs 24-27) ------------------------
+
+test_that("Fixed bugs 24: sigma_h is sampled, not stuck at 1", {
+  # sigma_h was initialised to 1 and passed through update_jSDMcoef()
+  # unchanged, so sigmah_output was constant. A new sample_sigmah() is now
+  # called each iteration. Inert for the fitted model -- U at training sites
+  # is drawn under a hard-coded unit-variance prior regardless -- but it is
+  # the factor-score SD predictNewSites() uses at NEW sites.
+  sh <- fixture_twostage()$results_output$jsdm_output$sigmah_output
+  expect_false(is.null(sh))
+  expect_gt(length(unique(as.vector(sh))), 1)
+  expect_true(all(sh > 0, na.rm = TRUE))
+})
+
+test_that("Fixed bugs 25: collection-covariate priors are centred on 0", {
+  # b_betatheta was rep(1, ncov_theta) with only element 1 (the intercept)
+  # overwritten, so every covariate slope carried a prior centred on +1 and
+  # was dragged upward. Asserted on the prior itself rather than on recovery:
+  # recovery is stochastic and belongs in tiers 2-3, whereas the prior is a
+  # fact about the code and is what actually regressed.
+  f <- test_path("..", "..", "R", "runOccJSDM.R")
+  skip_if_not(file.exists(f), "package source not reachable (installed-package check)")
+  line <- grep("b_betatheta\\s*<-\\s*rep\\(", readLines(f, warn = FALSE), value = TRUE)
+  expect_length(line, 1)
+  expect_match(line, "rep\\(0,")     # NOT rep(1, ...)
+})
+
+test_that("Fixed bugs 26: a fixed seed reproduces a fit", {
+  skip(paste("KNOWN OPEN BUG -- runOccJSDM() is not reproducible from set.seed().",
+             "See TODO.Rmd group A. Delete this skip() when it is fixed."))
+
+  # Fixed bugs 26 replaced randinvg()'s use of R's global RNG inside an OpenMP
+  # loop with a thread_local engine. That closed the data race, but the
+  # replacement engines never read R's RNG state, so set.seed() still does not
+  # control the sampler:
+  #
+  #   functions.cpp:9-15, jsdm.cpp:9-15  get_rng() seeded from the literal
+  #                                      12345 + omp_get_thread_num()
+  #   functions.cpp:224                  mvrnormArmaQuick_TS() seeded from
+  #                                      std::random_device{}() -- OS entropy
+  #
+  # Measured: two fits under the same seed differ by up to 5.09 on B0_output.
+  #
+  # Left in place, and skipped rather than deleted, because it is the exact
+  # assertion that should pass once the engines are seeded from R. It is also
+  # the only place tier 1 may assert numeric equality: PLAN.md 5.1 bans that
+  # everywhere else precisely because of this race.
+  sim <- simulate_fixture(model = "two_stage")
+  mc <- list(nchain = 2, nburn = 20, niter = 20, nthin = 1)
+  set.seed(4242); a <- fit_fixture(sim, MCMCparams = mc)
+  set.seed(4242); b <- fit_fixture(sim, MCMCparams = mc)
+  expect_equal(a$results_output$jsdm_output$B0_output,
+               b$results_output$jsdm_output$B0_output)
+})
+
+test_that("Fixed bugs 27: listPriors actually reaches the Stage 2 priors", {
+  # a_p/b_p/a_q/b_q were documented as settable but hard-coded -- the same
+  # failure as prior_beta_psi (Fixed bugs 14), which is why this is worth a
+  # test rather than a read-through. Two documented-but-ignored parameters
+  # have already shipped.
+  #
+  # Beta(1, 50) against the default Beta(5, 1) is a large enough shift that
+  # the posterior must move even on a short chain, so this does not depend on
+  # numeric reproducibility.
+  sim <- simulate_fixture(model = "two_stage", P = 2L)
+  mc <- list(nchain = 2, nburn = 40, niter = 40, nthin = 1)
+
+  fit_default <- fit_fixture(sim, MCMCparams = mc)
+  fit_low <- suppressMessages(suppressWarnings(
+    runOccJSDM(sim$data_list,
+               listParams = list(n_factors = 2L, n_supportpoints = FIXTURE_KNOTS),
+               occCovariates = fixture_occ_covariates(),
+               spatCovariates = fixture_spat_covariates(),
+               listPriors = list(a_p = 1, b_p = 50),
+               MCMCparams = mc)))
+
+  expect_gt(mean(fit_default$results_output$p_output, na.rm = TRUE),
+            mean(fit_low$results_output$p_output, na.rm = TRUE))
+})

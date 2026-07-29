@@ -65,3 +65,35 @@ test_that("n_supportpoints overrides the GP knot default", {
     ))
   )
 })
+
+# --- GAM covariate-effect exports ----------------------------------------
+#
+# Added in Alex's 29 July pull. Three functions were exported with no test
+# reference at all, so nothing caught a signature change or a broken return.
+# Smoke level only: these assert shape and that the call runs, not numbers.
+
+test_that("returnCovariateEffect() returns one row per grid point per species", {
+  fit <- fixture_twostage()
+  eff <- returnCovariateEffect(fit, covName = "X_psi.EnvCov.1",
+                               idx_species = 1:2, confidence = 0.95)
+  expect_s3_class(eff, "data.frame")
+  expect_gt(nrow(eff), 0)
+  # a fitted value and an interval, whatever they end up being called
+  expect_gte(ncol(eff), 4)
+  expect_true(any(grepl("species|sp", names(eff), ignore.case = TRUE)))
+})
+
+test_that("plotCovariateEffect() builds a plot for each covariate asked for", {
+  fit <- fixture_twostage()
+  p <- plotCovariateEffect(fit, covNames = "X_psi.EnvCov.1",
+                           idx_species = 1:2, confidence = 0.95)
+  expect_type(p, "list")
+  expect_length(p, 1)
+})
+
+test_that("the GAM effect functions reject a covariate that is not in the fit", {
+  fit <- fixture_twostage()
+  expect_error(
+    returnCovariateEffect(fit, covName = "NotACovariate", idx_species = 1:2)
+  )
+})

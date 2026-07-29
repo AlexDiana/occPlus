@@ -222,6 +222,62 @@ editor_options:
         `@param listPriors`. Someone running a low-detection study needs
         to know to set `a_p`/`b_p`, and nothing currently tells them.
 
+    4.  **`set.seed()` does not control any of the C++ samplers, so
+        `runOccJSDM()` is not reproducible.** Found 29 July 2026 while
+        writing the regression test for Fixed bugs 26.
+
+        Fixed bugs 26 replaced `randinvg()`'s use of R's global RNG
+        inside an OpenMP loop with a `thread_local` engine, which
+        correctly closed the data race. But neither replacement engine
+        ever reads R's RNG state:
+
+        -   `get_rng()` (`src/functions.cpp:9-15`, `src/jsdm.cpp:9-15`)
+            is seeded from the literal `12345 + omp_get_thread_num()`.
+            This drives the Polya-Gamma sampler and every `runif()` /
+            `rnorm()` in both files.
+        -   `mvrnormArmaQuick_TS()` (`src/functions.cpp:224`) is seeded
+            from `std::random_device{}()`, i.e. OS entropy. It is the
+            draw inside `sample_beta_cpp_TS()`, which is what
+            `sample_betatheta_cpp_parallel()` calls under `#pragma omp
+            parallel for`.
+
+        Measured: two fits of the same fixture under the same
+        `set.seed(4242)` differ by up to 5.09 on `B0_output`.
+
+        **What this does and does not affect.** It does *not* bias the
+        posterior -- both are valid streams. Three real consequences:
+
+        (a) Users cannot reproduce a published fit. For a CRAN package
+            whose main entry point is an MCMC sampler this is close to
+            disqualifying, and it is the kind of thing a reviewer
+            checks first.
+        (b) The literal `12345` is per-process, not per-run, so in the
+            simulation study every worker process starts its
+            Polya-Gamma stream at the identical position. Replicates in
+            *different* workers share random numbers. That correlates
+            replicates and means the reported coverage SE of +-2.2% at
+            R = 100 is understated by an unknown amount. Worth stating
+            as a caveat in the MEE paper until it is fixed.
+        (c) `std::random_device` is not guaranteed to be
+            non-deterministic -- on some Windows toolchains it is a
+            fixed PRNG, which would give every thread the same seed and
+            hence perfectly correlated draws across the parallel loop.
+            Unverified here, but it is a portability risk that the
+            fix below removes for free.
+
+        **Fix.** Seed both engines from R at the top of the sampler:
+        draw a base seed with `R::unif_rand()` (inside `GetRNGstate()`
+        / `PutRNGstate()`, on the master thread, before any parallel
+        region), then seed thread `t` with a well-separated function of
+        it -- `std::seed_seq` on `{base, t}` rather than `base + t`, to
+        avoid adjacent-seed correlation. `set.seed()` then controls the
+        whole fit, and the study's replicates become genuinely
+        independent.
+
+        **Test.** `tests/testthat/test-regression-bugs.R` already has
+        the assertion, `skip()`ped with a pointer to this entry. Delete
+        the `skip()` line when this is fixed.
+
     **B. Crashes, unreachable code paths, and API bugs**
 
     1.  **Species-ordering bug shared by four plotting functions.**
@@ -292,6 +348,27 @@ editor_options:
         (f) `computeSpeciesDetected()`'s roxygen still documents the
             removed Beta-approximation signature (`ab_p`, `K`, `primer`,
             `alpha`) instead of its actual arguments.
+
+    7.  **The two GAM covariate-effect functions have no `idx_species`
+        default, so the obvious call fails.** `returnCovariateEffect()`
+        and `plotCovariateEffect()` (added 29 July 2026) both declare
+        `idx_species` with no default, so
+        `returnCovariateEffect(fit, "X_psi.EnvCov.1")` errors instead
+        of doing the natural thing. This is the same API gap as
+        `predictNewSites()` in item 5 above; fix both the same way, by
+        defaulting to all species.
+
+    8.  **`plotSpeciesResponseCurve()` is exported but has an internal
+        helper's signature.** It takes `species_name, target_cov,
+        beta_mcmc_j, list_matrix, raw_df, n_points` -- raw MCMC pieces
+        and a raw data frame, with no `fitModel` argument -- while
+        every other plotting function in `R/output.R` takes the fitted
+        object. A user holding a `runOccJSDM()` result has no
+        documented way to assemble these arguments. Either give it a
+        `fitModel` signature like its neighbours, or drop it from
+        `NAMESPACE` and let `plotCovariateEffect()` call it internally.
+        Until this is settled it is untestable, which is why the new
+        smoke tests cover the other two GAM exports and not this one.
 
     **C. Dead and broken internal code**
 
