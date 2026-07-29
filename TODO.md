@@ -402,20 +402,7 @@ editor_options:
 
 ## **C. Crashes, unreachable code paths, and API bugs (Alex)**
 
-1.  **Species-ordering bug shared by four plotting functions.**
-    `plotOccupancyRates()` (`R/output.R:513-516`),
-    `plotCollectionRates()` (`:701`), `plotFPTPStage2Rates()` (`:789`)
-    and `plotStage1FPRates()` (`:949-952`) each compute `order()` on the
-    *filtered* `data_plot` and then use the result to index the
-    *unfiltered* `speciesNames`. For any `idx_species` other than a
-    prefix `1:k`, the factor levels name the wrong species and the bars
-    silently disappear. `plotCollectionRates()` also accepts
-    `idx_species` and never uses it -- the filter is commented out at
-    `:698`.
-
-    CLAUDE TO FIX IT
-
-2.  **`thinOutput()`: two of the three original defects remain**
+1.  **`thinOutput()`: two of the three original defects remain**
     (residual of the original audit's B.2; see Fixed bugs 16). The crash
     is gone and `thin` is now honoured, but
 
@@ -433,7 +420,7 @@ editor_options:
 
         ALEX TO DISABLE IT FOR NOW, BUT LET'S KEEP IT THERE
 
-3.  **`predictNewSites()` still has no defaults for `X_psi` / `X_s`**
+2.  **`predictNewSites()` still has no defaults for `X_psi` / `X_s`**
     (residual of the original audit's B.4; see Fixed bugs 18, which
     wrongly recorded this half as done). Verified via
     `formals(predictNewSites)`: `fitModel`, `X_psi` and `X_s` all have
@@ -447,7 +434,7 @@ editor_options:
     deliberately omits it rather than encoding the broken behaviour. Add
     the test with the fix.
 
-4.  **Assorted smaller items.**
+3.  **Assorted smaller items.**
 
     (a) `createDataIdx()` is called with `maxP` (`R/runOccJSDM.R:638`)
         for `model = "occupancy"` too, where `maxP` was never assigned
@@ -478,18 +465,7 @@ editor_options:
 
         ALEX WILL REVIEW THE ABOVE
 
-5.  **The two GAM covariate-effect functions have no `idx_species`
-    default, so the obvious call fails.** `returnCovariateEffect()` and
-    `plotCovariateEffect()` (added 29 July 2026) both declare
-    `idx_species` with no default, so
-    `returnCovariateEffect(fit, "X_psi.EnvCov.1")` errors instead of
-    doing the natural thing. This is the same API gap as
-    `predictNewSites()` in item 3 above; fix both the same way, by
-    defaulting to all species.
-
-    CLAUDE TO FIX
-
-6.  **`plotSpeciesResponseCurve()` is exported but has an internal
+4.  **`plotSpeciesResponseCurve()` is exported but has an internal
     helper's signature.** It takes
     `species_name, target_cov, beta_mcmc_j, list_matrix, raw_df, n_points`
     -- raw MCMC pieces and a raw data frame, with no `fitModel` argument

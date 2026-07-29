@@ -6,10 +6,12 @@ paper / Doug to dos* in `TODO.md`. Drafted 27 July 2026.
 [Guide to the test
 suite](https://claude.ai/code/artifact/ad3d46eb-1fd4-49b5-b795-6b71474ef1d5 "Guide to the test suite")
 
-**Status as of 28 July 2026: complete. All stages built and the full R =
-100 study has run.** Its results are in §12 and they identified four
-defects, three of which are now traced to specific lines of code.
-Sections marked *OPEN* still need a decision or a measurement.
+**Status as of 29 July 2026: complete, and the study has now been run
+twice.** The pre-fix run (27–28 July) found four defects; three were
+traced to specific lines of code and one turned out not to be a defect
+at all. The post-fix re-run (29 July) is the current table in §12, and
+it added two further findings. Sections marked *OPEN* still need a
+decision or a measurement.
 
 | Stage | State |
 |----|----|
@@ -18,7 +20,7 @@ Sections marked *OPEN* still need a decision or a measurement.
 | 3\. `helper-simstudy.R` | **done** (`6123036`) -- validated at R = 8 |
 | 4\. Tier 2 canary | **done** (`f63eeeb`) -- \~30 s, `skip_on_cran()` |
 | 5\. Tier 3 + runner | **done** (`f63eeeb`) -- runner smoke-tested end to end |
-| 6\. Full R = 100 run | **done, 27-28 July** -- all 10 cells at R = 100 across two runs: `base` alone (100 fits, 22.9 min) then the other 9 cells (900 fits, 474 min). 1000 fits, 0 failures. Results in `dev/simstudy/results/`. See §12. |
+| 6\. Full R = 100 run | **done, run twice** -- pre-fix 27-28 July (1000 fits across two runs), post-fix 29 July (1000 fits, 285 min, one run). 0 failures throughout. Results in `dev/simstudy/results/`. See §12. |
 
 Building it surfaced four corrections to this plan and two package bugs;
 both are recorded in place below rather than only in commit messages.
@@ -153,7 +155,7 @@ What this gives up is *presentation*. Tests answer "does it pass?", not
 |----|----|----|----|
 | 1\. Regression + smoke | none | \< 30 s | every `check()`, including CRAN |
 | 2\. Recovery canary | `skip_on_cran()` | \~2 min | local + CI |
-| 3\. Coverage study | env var `OCCJSDM_SIMSTUDY` | 2.5–3 h | manual / nightly |
+| 3\. Coverage study | env var `OCCJSDM_SIMSTUDY` | \~4.75 h | manual / nightly |
 
 Tier 3 cannot be an ordinary test: CRAN wants the whole check under \~10
 minutes.
@@ -440,12 +442,17 @@ SBC. That is the method working (group A item 1), not a new bug.
 Measured on `sampledata` (100 sites, 10 species, 2 chains): **0.039 s
 per iteration**, so `nburn = 1000 + niter = 1000` is \~84 s per fit.
 
-|                   | Serial  | 8 cores       |
-|-------------------|---------|---------------|
-| One cell, R = 100 | \~2.3 h | \~17 min      |
-| 10 cells          | \~23 h  | **\~2.5–3 h** |
+|                   | Serial  | 5 cores        |
+|-------------------|---------|----------------|
+| One cell, R = 100 | \~2.3 h | \~28 min       |
+| 10 cells          | \~23 h  | **\~4.75 h**   |
 
-Cells 9–10 are cheaper than the estimate; cell 8 (`S = 30`) is dearer.
+**Superseded by measurement**: the 29 July run did all 10 cells in 285
+min on 5 cores, i.e. \~4.75 h. The earlier \~2.5–3 h figure assumed 8
+cores, which this machine cannot usefully supply — the M4 has only 4
+performance cores, so workers past the fourth land on efficiency cores
+worth roughly a third to a half as much (see §5.5). Cells 9–10 are
+cheaper than the average; cell 8 (`species_20`) is dearer.
 
 Replicates are embarrassingly parallel at the *process* level —
 independent datasets and fits — so this needs no package changes, unlike
@@ -476,9 +483,10 @@ the compute.
 > reproduces exactly, and two replicates differ on every column.
 > `sqrt(0.95 * 0.05 / R)` is therefore the right SE for the re-run.
 >
-> The §12 numbers below were produced *before* this fix and inherit the
-> old correlation, so their error bars are understated by an unknown
-> amount. Replace them with the re-run rather than reconciling them.
+> §12 now reports the 29 July re-run, which was made *after* this fix,
+> so its error bars are sound. It is the superseded pre-fix table at
+> §12.6 that inherits the old correlation: treat those figures as
+> indicative only, and never quote an SE against them.
 
 | R       | Coverage SE | Undercoverage reliably flagged |
 |---------|-------------|--------------------------------|

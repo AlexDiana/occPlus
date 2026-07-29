@@ -101,30 +101,39 @@ Not ported: `compare_to_true()`/`plot_estimated_vs_true()` from GLGS-eDNA, since
 
 ## Editing the planning docs
 
-**`TODO.md` is hard-wrapped at 72 columns. Wrap prose to 72 when editing it.**
-Doug edits it in RStudio's *Visual* mode, which rewrites the whole file to
-match `editor_options: markdown: wrap: 72` in its YAML on every save. Text
-that arrives unwrapped gets reflowed on the next open, producing a diff
-nobody authored.
+**`TODO.md`, `PLAN.md` and `AGENTS.md` are all hard-wrapped at 72 columns.
+Wrap prose to 72 when editing any of them.**
 
-That is not merely cosmetic. In `2242b34` ("update line wrappings") a rewrap
-split an inline code span across the column boundary, escaped the opening
-backtick, ate the surrounding spaces, and turned `* 2` into `- 2` in a note
-about a Cholesky log-determinant -- where the factor of two was the entire
-point. The surviving sentence asserted something false and read as garbage.
-Restored in `006b16f`. **So: keep inline code spans short, or phrase around
-them, so they cannot land on the boundary.**
+Doug edits them in RStudio's *Visual* mode, which rewrites a file to match
+the wrap setting on every save. Text that arrives unwrapped gets reflowed on
+the next open, producing a diff nobody authored. The setting is project-level,
+in `occJSDM.Rproj`:
+
+```
+MarkdownWrap: Column
+MarkdownWrapAtColumn: 72
+```
+
+`TODO.md` also carries a per-document `editor_options: markdown: wrap: 72`
+block. That is redundant with the project setting and harmless; it survives if
+the file is ever opened outside this project.
+
+**Keep inline code spans short, or phrase around them.** This is not
+cosmetic. In `2242b34` ("update line wrappings") a rewrap split a code span
+across the column boundary, escaped the opening backtick, ate the surrounding
+spaces, and turned `* 2` into `- 2` in a note about a Cholesky
+log-determinant -- where the factor of two was the entire point. The surviving
+sentence asserted something false and read as garbage. Restored in `006b16f`.
 
 Check before committing: `awk 'length>72' TODO.md`. A handful of hits is
-expected and fine -- URLs, long inline code, the `----` rule -- because
-neither RStudio nor pandoc can break those either. Prose lines over 72 are
-the ones to fix.
+expected and fine -- table rows, URLs, long inline code -- because RStudio
+will not break those either. Prose lines over 72 are the ones to fix.
 
-**`AGENTS.md` and `PLAN.md` are *not* wrapped** (44% and 39% of their lines
-exceed 72) and should be left that way. This is why the wrap directive lives
-in `TODO.md`'s own YAML rather than in `occJSDM.Rproj`: a project-level
-setting would reformat both of these the first time either was opened in
-Visual mode.
+**Do not hand-wrap these files with a script.** Measured 29 July: a
+paragraph-filling wrapper reproduced only 702 of RStudio's 768 lines on
+`PLAN.md`, diverging on table separators, titled links *and* ordinary prose.
+An approximation just moves the churn to the next Visual-mode open. If a file
+needs re-wrapping wholesale, open it in Visual mode and let RStudio do it.
 
 ## Git and build artifacts
 
