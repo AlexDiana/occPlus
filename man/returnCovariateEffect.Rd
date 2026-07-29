@@ -4,7 +4,7 @@
 \alias{returnCovariateEffect}
 \title{returnCovariateEffect}
 \usage{
-returnCovariateEffect(fitModel, covName, idx_species, confidence = 0.95)
+returnCovariateEffect(fitModel, covName, idx_species = NULL, confidence = 0.95)
 }
 \arguments{
 \item{fitModel}{Output from the function runOccJSDM}

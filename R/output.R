@@ -532,12 +532,17 @@ plotSpeciesResponseCurve <- function(species_name,
 #'
 returnCovariateEffect <- function(fitModel,
                                   covName,
-                                  idx_species,
+                                  idx_species = NULL,
                                   confidence = .95){
 
   B_output <- fitModel$results_output$jsdm_output$B_output
   B0_output <- fitModel$results_output$jsdm_output$B0_output
   speciesNames <- fitModel$infos$speciesNames
+
+  if (is.null(idx_species)) {
+    idx_species <- seq_along(speciesNames)
+  }
+
   sp_name <- speciesNames[idx_species]
 
   B_output_vec <- apply(B_output, c(1,2), c)
@@ -573,7 +578,7 @@ returnCovariateEffect <- function(fitModel,
 #'
 #'
 #' @param fitModel Output from the function runOccJSDM
-#' @param covName Character vector. Name(s) of the covariate(s) to evaluate
+#' @param covNames Character vector. Name(s) of the covariate(s) to evaluate
 #' @param idx_species Indexes of the species to include (leave out for all species)
 #' @param confidence Numeric scalar between 0 and 1. The width of the Bayesian
 #'   credible interval to compute (default is \code{0.95} for a 95\% interval).
@@ -584,12 +589,17 @@ returnCovariateEffect <- function(fitModel,
 #'
 plotCovariateEffect <- function(fitModel,
                                 covNames,
-                                idx_species,
+                                idx_species = NULL,
                                 confidence = .95){
 
   B_output <- fitModel$results_output$jsdm_output$B_output
   B0_output <- fitModel$results_output$jsdm_output$B0_output
   speciesNames <- fitModel$infos$speciesNames
+
+  if (is.null(idx_species)) {
+    idx_species <- seq_along(speciesNames)
+  }
+
   sp_name <- speciesNames[idx_species]
 
   B_output_vec <- apply(B_output, c(1,2), c)

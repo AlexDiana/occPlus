@@ -394,7 +394,10 @@ returnCovariateEffect_base <- function(cov_name,
   for (i in seq_along(idx_species)) {
 
     sp_idx  <- idx_species[i]
-    sp_name <- speciesNames[i]
+    # Index by sp_idx, not the loop counter i -- speciesNames[i] mislabels
+    # every species whenever idx_species isn't the prefix 1:k (same defect
+    # as TODO.md group C item 1, found here as part of item 5).
+    sp_name <- speciesNames[sp_idx]
 
     beta_mcmc_j <- B_output_vec[, , sp_idx]
     beta_mcmc_sub <- beta_mcmc_j[, cov_indices, drop = FALSE]
@@ -437,8 +440,8 @@ returnCovariateEffect_base <- function(cov_name,
 
 plotCovariateEffect_base <- function(idx_species,
                                cov_names,
-                               B0_output,
-                               B_output,
+                               B0_output_vec,
+                               B_output_vec,
                                list_matrix,
                                speciesNames,
                                X0, X,
@@ -449,8 +452,12 @@ plotCovariateEffect_base <- function(idx_species,
   X0 <- as.data.frame(X0)
   X <- as.data.frame(X)
 
-  B_output_vec <- apply(B_output, c(1,2), c)
-  B0_output_vec <- apply(B0_output, 1, c)
+  # B0_output_vec/B_output_vec arrive already collapsed to (draws x species)
+  # and (draws x covariate x species) by the caller (plotCovariateEffect()).
+  # A previous version re-applied apply(..., c(1,2), c) here, which collapsed
+  # the species margin a second time and left B_output_vec's third dimension
+  # sized by ncov_psi instead of S -- "subscript out of bounds" for any
+  # sp_idx > ncov_psi. Fixed as part of TODO.md group C item 5.
 
   plot_list <- list()
 
