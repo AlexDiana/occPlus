@@ -80,11 +80,11 @@ probabilities but produces a much larger object.}
 \item{listPriors}{(Optional) list of prior hyperparameters. Currently
 supported: \code{a_p}/\code{b_p} (Beta prior shape parameters for the true
 positive lab stage rate,
-default \code{10}/\code{1}), \code{a_q}/\code{b_q} (Beta prior shape parameters
+default \code{5}/\code{1}), \code{a_q}/\code{b_q} (Beta prior shape parameters
 for the false positive
-lab stage rate, default \code{1}/\code{10})  and
+lab stage rate, default \code{1}/\code{20})  and
 \code{a_theta0}/\code{b_theta0} (Beta prior shape parameters for the
-false positive field stage rate, default \code{1}/\code{30}).}
+false positive field stage rate, default \code{1}/\code{20}).}
 }
 \value{
 A list with:
