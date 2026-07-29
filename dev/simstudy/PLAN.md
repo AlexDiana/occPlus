@@ -309,6 +309,18 @@ Also: pooling coverage across species within a block buys precision, but those i
 
 ## 12. Results of the full run (28 July 2026)
 
+> **These results predate Alex's `42198d9`/`e60e3ad` (28-29 July), which fixed
+> three of the defects the study found.** The table below therefore describes
+> the *pre-fix* code. `sigma_h` is now sampled, the collection-covariate prior
+> mean is corrected to 0, and the OpenMP RNG hole is closed -- all of which
+> change fitted values, so the `beta_theta` row in particular should improve on
+> a re-run. Two findings are unaffected and still stand: `resid_cor`
+> (`reparamFactorModel()` unchanged) and `p` (the `Beta(5, 1)` *default*
+> unchanged, though the hyperparameters are now settable via `listPriors`).
+>
+> **Re-running is the outstanding item** -- and it is now the evidence that
+> Alex's fixes worked, not merely a repeat.
+
 900 replicates, 10 scenarios, 0 failures, 474 min on 5 cores. 155,578 individual interval checks. Coverage SE at R = 100 is 2.2 points, so treat anything in 0.93-0.97 as indistinguishable from nominal.
 
 | block | base | spat.isol | trait.isol | primers3 | low.info | d.under | d.over | sp20 | occ | binary |

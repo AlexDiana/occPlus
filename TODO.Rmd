@@ -40,6 +40,40 @@ editor_options:
     in the fixed-bug entries below point at the *post-fix* code and so
     will not match the original audit.
 
+    **Alex's pulls of 28-29 July (`e60e3ad` "Added GAMs", `42198d9`
+    "Fixed many bugs", `59eb56b`).** Verified against the code rather
+    than the commit messages, as the `b7b6aa2` experience recommends:
+
+    | item | claim | verified state |
+    |------|-------|----------------|
+    | A.1 `sigma_h` | fixed | **FIXED** -- `sample_sigmah()` added (`R/jsdmfun.R:1173`) and called (`:1694`) |
+    | A.3 `beta_theta` prior mean | fixed | **FIXED** -- now `rep(0, ncov_theta)`; prior variance also widened from `diag(1)` to `diag(2)` |
+    | A.5 OpenMP RNG | fixed | **FIXED** -- `randinvg()` now uses the `thread_local` `rnorm()`; the `R::rnorm` line is commented out |
+    | A.6 Stage 2 priors | partly | **HALF FIXED** -- all four now read from `listPriors`, and the docs were corrected to match the code (5/1, 1/20). **The default is still `Beta(5, 1)`**, which is the half that causes the 0.103 coverage. |
+    | A.2 `sample_ls` density | -- | **NOT FIXED** -- still `sigma_s = 1` at the call site (`R/jsdmfun.R:1700`), still scoring `SE` as a GP draw |
+    | A.4 `reparamFactorModel` | -- | **NOT FIXED** -- still scales by `diag(diag(R_current))` (`R/jsdmfun.R:34`) |
+    | B.5 `predictNewSites` defaults | -- | **NOT FIXED** -- `X_psi`/`X_s` still have no defaults |
+
+    Also new: a **GAM feature** (`plotCovariateEffect()`,
+    `plotSpeciesResponseCurve()`, `returnCovariateEffect()`), which
+    discharges "GAMs for JSDM" under *Alex to dos*. Not yet covered by
+    any test.
+
+    **Consequence for the simulation study: the R = 100 results are now
+    partly stale.** A.1, A.3 and A.6's wiring all change fitted values,
+    so the coverage table in `dev/simstudy/PLAN.md` §12 describes the
+    *pre-pull* code. The `beta_theta` row in particular should now
+    improve. Re-running is the outstanding item (a) under *MEE paper /
+    Doug to dos 2* -- and it is now the way to confirm Alex's fixes
+    worked, which is precisely what that item exists for.
+
+    One test needed relaxing after the pull, and it was **my** test at
+    fault rather than Alex's code: the row-shuffle check asserted on
+    `data_info` including `row.names`, which are inherited from the
+    caller's row order and are cosmetic. Content, key sequence and both
+    design matrices were identical. Now compared with
+    `ignore_attr = TRUE`.
+
     **A. Inference-affecting bugs (wrong numbers, silently)**
 
 

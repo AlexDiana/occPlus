@@ -133,7 +133,13 @@ test_that("Fixed bugs 1 and 11: row order of the input data does not matter", {
   expect_equal(fit_shuffled$X_theta, fit_sorted$X_theta)
 
   # The internal data_info must be canonical, i.e. independent of input order.
-  expect_equal(fit_shuffled$infos$data_info, fit_sorted$infos$data_info)
+  # check.attributes = FALSE deliberately: row.names are inherited from the
+  # caller's row order and are cosmetic. Asserting on them made this test fail
+  # against Alex's 42198d9 when nothing behavioural had changed -- the
+  # (Site, Sample, Primer) sequence, the covariate columns and both design
+  # matrices were all identical. Same over-strictness as the OTU check below.
+  expect_equal(fit_shuffled$infos$data_info, fit_sorted$infos$data_info,
+               ignore_attr = TRUE)
 
   # The response must travel with its covariates. Note this is deliberately
   # NOT expect_equal() on infos$OTU row-for-row: (Site, Sample, Primer) is not
