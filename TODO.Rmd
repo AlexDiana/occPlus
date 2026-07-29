@@ -939,6 +939,60 @@ the *MEE paper* testing item is meant to address.
     equivalent for this purpose and is standard practice for thinning an
     MCMC chain, so no further change is needed.
 
+**Fixes of 28-29 July 2026 (Alex, `42198d9` / `e60e3ad`).** Each verified
+against the source rather than the commit message.
+
+24. ~~**`sigma_h` is never sampled.**~~ **FIXED.** A new
+    `sample_sigmah(U, a_sigmah, b_sigmah)` (`R/jsdmfun.R:1173`) is now
+    called each iteration (`:1694`), so `sigmah_output` varies instead of
+    sitting at its initialised 1. This was inert for fitted models -- `U`
+    at the training sites is drawn under a hard-coded unit-variance prior
+    regardless -- but it is the factor-score SD `predictNewSites()` uses
+    when simulating `U` at *new* sites, so out-of-sample predictions no
+    longer silently assume unit factor variance.
+
+25. ~~**The prior mean for collection-covariate slopes is 1, not 0.**~~
+    **FIXED.** `b_betatheta <- rep(0, ncov_theta)` (`R/runOccJSDM.R:757`);
+    previously `rep(1, ...)`, with only element 1 (the intercept)
+    overwritten, so every actual covariate slope carried a prior centred
+    on +1. The prior variance was also widened from `diag(1)` to
+    `diag(2)`.
+
+    This was the most clearly evidenced item in the whole audit: at
+    R = 100 the intercept -- the one coefficient whose prior mean *was*
+    overridden -- covered at 0.937, while the slopes covered at 0.496
+    with bias +0.113, against true slopes averaging +0.01. Across the
+    full grid `beta_theta` undercovered in **every** cell (0.676-0.730).
+
+    **The R = 100 coverage table (`PLAN.md` §12) predates this fix**, so
+    that row should improve substantially on a re-run. Confirming it is
+    the point of item (a) under *MEE paper / Doug to dos 2*.
+
+26. ~~**Non-thread-safe RNG in the hottest OpenMP loop.**~~ **FIXED.**
+    `randinvg()` (`src/jsdm.cpp:86`) now draws from the `thread_local`
+    `rnorm()` rather than `R::rnorm`; the old line is commented out
+    beside it. That closes the last hole on the `samplePGvariables()`
+    path, whose Polya-Gamma helpers were already converted in `53c38f1`.
+
+    **Two consequences worth acting on.** A fixed seed should now
+    reproduce on Linux and Windows, which (i) removes the reason
+    `sampleresults.rda` had to be refit on macOS or an OpenMP-disabled
+    build, and (ii) unblocks CRAN item 16. It also means the tier-1
+    constraint in `dev/simstudy/PLAN.md` §5.1 -- structural assertions
+    only, never numeric equality -- can be revisited; it was adopted
+    solely because of this race. Verify reproducibility on a
+    multi-threaded platform before relying on any of that.
+
+27. ~~**Stage 2 hyperparameters documented as settable but never read.**~~
+    **FIXED.** `a_p`, `b_p`, `a_q` and `b_q` now read from `listPriors`
+    (`R/runOccJSDM.R:751-754`), matching the behaviour `@param listPriors`
+    already claimed, and the documented defaults were corrected to match
+    the code (5/1 and 1/20). A user running a low-detection study can now
+    override the prior without editing the package.
+
+    **Only the wiring is closed.** What the default *should be* remains
+    open and is a design decision, not a defect -- see group A item 3.
+
 **Future versions**
 
 1.  use spike-in to estimate abundance change (i.e. eDNAPlus)
