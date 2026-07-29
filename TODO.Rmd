@@ -105,9 +105,9 @@ editor_options:
         numerically. **Disputed -- see Alex's note at the end of this
         item.**
 
-        `reparamFactorModel()` (`R/jsdmfun.R:48`) rewrites the stored `U`
-        and `L` each iteration as `L_new = diag(1/diag(R)) %*% R` and
-        `U_new = U %*% Q %*% diag(diag(R))`, where `L = QR`. That
+        `reparamFactorModel()` (`R/jsdmfun.R:48`) rewrites the stored
+        `U` and `L` each iteration as `L_new = diag(1/diag(R)) %*% R`
+        and `U_new = U %*% Q %*% diag(diag(R))`, where `L = QR`. That
         **preserves `U %*% L`** -- verified to 4e-16 -- so the linear
         predictor is untouched and the rotation is legitimate for
         identifiability.
@@ -123,20 +123,20 @@ editor_options:
 
         | pair | original | after reparam |
         |------|----------|---------------|
-        | 1 | +0.713 | **+0.926** |
-        | 2 | -0.811 | **-0.958** |
-        | 3 | -0.168 | **-0.780** |
-        | 4 | +0.443 | **+0.875** |
-        | 5 | +0.585 | **+0.285** |
+        | 1    | +0.713   | **+0.926**    |
+        | 2    | -0.811   | **-0.958**    |
+        | 3    | -0.168   | **-0.780**    |
+        | 4    | +0.443   | **+0.875**    |
+        | 5    | +0.585   | **+0.285**    |
 
         Maximum change **0.612**, consistently toward the extremes.
         Inflated point estimates with correctly-sized intervals is
         exactly what produces undercoverage, and across the full grid
         `resid_cor` covers at 0.74-0.77 in nine of ten scenarios
         (`PLAN.md` §12). The exception is diagnostic: `d_underfit`
-        *over*covers at 0.980, so under-fitting the ordination widens the
-        intervals enough to mask the bias -- a model with too few factors
-        looks better calibrated than it is.
+        *over*covers at 0.980, so under-fitting the ordination widens
+        the intervals enough to mask the bias -- a model with too few
+        factors looks better calibrated than it is.
 
         **Impact.** `returnResidualCorrelationMatrix()` and
         `plotResidualCorrelationMatrix()` overstate species
@@ -151,20 +151,20 @@ editor_options:
         correlation as `t(L) %*% Var(U) %*% L`. (a) is simpler and
         preserves the existing output contract.
 
-        ------------------------------------------------------------
+        ------------------------------------------------------------------------
 
         **Alex's note:** *"THIS IS NOT AN ISSUE FOR LOGISTIC MODELS (as
         the covariance matrix is not recoverable anyway, only the
         correlation one)."*
 
         **Response -- the premise is right but does not resolve it.** In
-        a logistic latent-variable model the scale is indeed unidentified
-        and only the correlation is meaningful. But the table above is
-        already correlations, and they still move by 0.612.
-        `cov2cor()` does not absorb the change because `diag(1/diag(R))`
-        rescales **per factor** while `cov2cor()` normalises **per
-        species** -- a per-factor rescaling is not a global scale change,
-        so it survives the normalisation.
+        a logistic latent-variable model the scale is indeed
+        unidentified and only the correlation is meaningful. But the
+        table above is already correlations, and they still move by
+        0.612. `cov2cor()` does not absorb the change because
+        `diag(1/diag(R))` rescales **per factor** while `cov2cor()`
+        normalises **per species** -- a per-factor rescaling is not a
+        global scale change, so it survives the normalisation.
 
         **If it is nonetheless a non-issue, then the simulation study is
         measuring the wrong thing and that needs identifying**: it
@@ -536,7 +536,7 @@ editor_options:
         **What it found.** Four defects, three traced to specific lines:
 
         | found by | defect |
-        |------------------------------------|------------------------------------|
+        |----|----|
         | writing the tests | `sigma_s` never sampled (**group A item 2**) |
         | writing the tests | `predictNewSites()` missing `X_psi`/`X_s` defaults (**group B item 5**; also corrected Fixed bugs 18) |
         | writing the tests | GP knot floor (**group B item 3**) |
