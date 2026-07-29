@@ -358,7 +358,7 @@ editor_options:
     remaining deviation that is definitely a defect (unlike `p`, which
     is the identifiability constraint working as intended).
 
-    RUN SIMULATION STUDY WITH M \> 10 AND SEE IF IT FIXES IT
+    CLAUDE TO RUN SIMULATION STUDY WITH M \> 10 AND SEE IF IT FIXES IT
 
 5.  **`theta0` now overcovers at 0.978-0.985, having been near
     nominal.** Measured by the same re-run (`PLAN.md` 12.3).
@@ -374,7 +374,7 @@ editor_options:
     overshot. Worth examining the two together, since one change
     plausibly produced both.
 
-    RUN SIMULATION STUDY WITH M \> 10 AND SEE IF IT FIXES IT
+    CLAUDE TO RUN SIMULATION STUDY WITH M \> 10 AND SEE IF IT FIXES IT
 
 6.  **`B0` bias roughly doubled, and coverage does not show it.**
     Measured by the same re-run (`PLAN.md` 12.2). **Possible regression,
@@ -398,7 +398,7 @@ editor_options:
     a headline quantity for a JSDM -- this needs a cause before the MEE
     paper reports species intercepts.**
 
-    RUN SIMULATION STUDY WITH M \> 10 AND SEE IF IT FIXES IT
+    CLAUDE TO RUN SIMULATION STUDY WITH M \> 10 AND SEE IF IT FIXES IT
 
 ## **C. Crashes, unreachable code paths, and API bugs (Alex)**
 
