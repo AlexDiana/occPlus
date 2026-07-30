@@ -586,3 +586,66 @@ R = 50, for the same reason as 13.2: adequate to detect a move, not to confirm a
 **A second candidate was checked and is also dead.** Before writing this up, checked whether added M-samples might be pseudo-replicated -- i.e. whether `X_theta` repeats within a site, which would make more M look like independent information without actually being any. It does not: `X_theta <- cbind(1, matrix(rnorm(N * ncov_theta), N, ncov_theta))` (`R/simulateData.R:126`) draws the covariate independently per *sample*, not per site. So the narrowing interval is not a design-matrix artefact either.
 
 **Where this leaves item 4.** Two plausible mechanisms are now ruled out: the prior is not too tight, and the covariate is not pseudo-replicated. The overconfidence has to come from somewhere in the likelihood or the sampler's variance computation for `beta_theta` -- plausibly how the latent collection state `w` (or `z`) is aggregated across a site's M samples, or a genuine numerical issue in the Polya-Gamma update. That is a C++/sampler-level investigation, not another prior-tuning experiment, and is a job for whoever wrote `sample_beta_cpp_TS`/`sample_betatheta_cpp_parallel`, not a further simulation-study pass. Recorded in `TODO.md` rather than pursued further here.
+
+------------------------------------------------------------------------
+
+## 14. `theta0` overcoverage: a better experiment than the one planned
+
+**Status: planned, not yet run.** Supersedes the previous plan for group B item 5, which was "re-run the M10 or M20 arm at R = 200". That plan answers the wrong question, for the reason below.
+
+### 14.1 The question was framed wrong
+
+13.7 read `theta0` as Stage 1 under-identification, because coverage falls toward nominal as M rises (0.986 at M2, 0.944 at M10) while the matched `K30` control makes it worse. That reading has a hole in it: **the pre-fix grid had `theta0` at 0.938-0.959, which is nominal, at the same M = 2 where it now sits at 0.978-0.985.** If M = 2 were simply too little information for `theta0`, it would have overcovered before Alex's fixes too. It did not.
+
+So the question is not "is `theta0` fine at high M". We already have four arms saying it is, and high M is not the configuration anyone runs. The question is **what changed at M = 2**, which is the production setting and the one the shipped defaults describe.
+
+### 14.2 What the existing evidence points at
+
+`theta0`'s own prior is untouched: `a_theta0`/`b_theta0` are still `Beta(1, 20)`, last changed in `1c25529` on 23 July, before the pre-fix run. So the cause is not `theta0`'s prior directly.
+
+The likely route is coupling. `b_betatheta`'s variance was widened to `diag(2)` in Fixed bugs 25. That changes `beta_theta`, which drives the collection probability, which drives the latent `w`; and `sample_theta0(z, w, ...)` conditions on `w`. A more uncertain `w` gives a wider `theta0` posterior, which is overcoverage.
+
+**The tighter-prior run already supports this, weakly.** Both arms moved `theta0` toward nominal:
+
+| arm | var = 2 | var = 0.5 | change |
+|---|---|---|---|
+| M10 | 0.944 | 0.940 | -0.004 |
+| M20 | 0.952 | 0.942 | -0.010 |
+
+Small, as expected: those are the arms where data dominates the prior. **M2 is the one arm where the prior should dominate, and it is the one arm not yet run at the tighter setting.**
+
+The `K30` result (0.996, worse than M2's 0.986) also fits: more PCR replicates sharpen `w` without adding Stage 1 samples, and sharpening the wrong stage does not help a term whose uncertainty comes from the collection process.
+
+### 14.3 The experiment
+
+Two new arms at M = 2, varying only `b_betatheta_slope_var`, using the `listPriors` hook added for 13.8:
+
+| Arm | M | `b_betatheta_slope_var` | Purpose |
+|---|---|---|---|
+| `M2` | 2 | 2 (default) | already collected, 13.7 |
+| `M2_tight` | 2 | 0.5 | matches the 13.8 setting |
+| `M2_vtight` | 2 | 0.1 | far enough to force a visible move |
+
+Same `seed_label = "mladder"`, so these pair against the existing `M2` arm. R = 50.
+
+**Cost: about 16 minutes.** M2 is the cheapest arm at roughly 40 s per fit, so 100 fits on 5 cores is trivial next to the 97 and 189 minute runs already done. This is a much better use of an hour than an R = 200 confirmation of something already measured four ways.
+
+### 14.4 What each outcome means
+
+| Outcome | Reading | Action |
+|---|---|---|
+| `theta0` walks 0.986 toward 0.95 as the variance tightens | Coupling confirmed. `theta0` overcoverage is a downstream symptom of the `b_betatheta` widening, not an independent defect. | Close B5 as part of B4. One cause, two symptoms; whatever fixes B4's overconfidence should be checked against `theta0` at the same time. |
+| `theta0` does not move | Coupling is not the route. The cause is elsewhere in the `jsdmfun.R` rewrite, or in `sample_theta0()` itself. | Next test is `theta0`'s own prior, which already has `listPriors$a_theta0`/`b_theta0` hooks, at M = 2. |
+| `theta0` moves the wrong way | The widening was compensating for something, and reverting it alone would make `theta0` worse. | Stop and hand to Alex with both results; this would mean B4 and B5 pull in opposite directions. |
+
+**Bonus, at no extra cost:** the same run says whether `beta_theta` responds to the prior at M = 2. 13.9 found no response at M10/M20, but those are the arms where data dominates. A response at M = 2 would qualify 13.9's "the prior is not the cause" conclusion, which was drawn only from high-M arms.
+
+### 14.5 Priority, stated honestly
+
+**B5 is the least urgent of the open findings and this plan should not grow.** Overcoverage is the safe direction: intervals wider than they need to be cost power, not correctness. Nobody publishes a wrong number because of it. Compare B4, where undercoverage at 0.58 means genuinely overconfident intervals, and B6, where `B0`'s bias doubled invisibly to coverage.
+
+The case for spending 16 minutes here is that it is cheap and likely resolves B5 as a **side effect of diagnosing B4**, not that B5 is important on its own. If the first outcome above holds, B5 stops being a separate item entirely.
+
+### 14.6 What happened to the R = 200 plan
+
+Dropped, not deferred. Its purpose was to confirm `theta0` has genuinely reached nominal at high M, since R = 50 cannot distinguish 0.944 from 0.90. But that confirmation is only worth buying if the claim matters, and "`theta0` is well calibrated when you take 10 or 20 samples per site" is not a claim the paper needs or that users can act on at M = 2 to 3. If a publication-grade calibration claim is wanted later, it belongs in a single planned high-R run across the whole grid (see 9), not a one-arm confirmation of the least urgent finding.

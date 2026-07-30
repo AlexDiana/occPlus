@@ -200,11 +200,19 @@ output: html_document
 
     Overcoverage is the safe direction and this is not urgent, but the pattern points at the same edit as item 4 -- the widened `diag(2)` prior variance on the collection coefficients looks to have overshot. Worth examining the two together, since one change plausibly produced both.
 
-    **M-ladder result, 29 July 2026 (`PLAN.md` 13.7): confirms Stage 1 under-identification, not a defect.** Overcoverage falls from 0.986 at M2 toward nominal at M10 (0.944), while the matched control (`K30`, same rows, wrong stage) makes it *worse* (0.996). M is the lever and matched data volume elsewhere is not -- exactly the pattern that distinguishes an information problem from a code defect.
+    **M-ladder result, 29 July 2026 (`PLAN.md` 13.7).** Overcoverage falls toward nominal as M rises (0.986 at M2, 0.944 at M10), while the matched control (`K30`: same row count, spent on PCR replicates instead) makes it worse at 0.996.
 
-    **Not yet closeable.** R = 50 confirms the deviation is real but cannot confirm recovery: an observed 0.944 is not distinguishable from a true 0.90 at this R (`PLAN.md` 13.2/13.4). Re-run the M10 or M20 arm at R = 200 before closing this as "not a bug".
+    **That was read as Stage 1 under-identification. The reading has a hole in it, found 30 July.** Pre-fix, `theta0` sat at 0.938-0.959 at the *same* M = 2 where it now sits at 0.978-0.985. If M = 2 were simply too little information for `theta0`, it would have overcovered before Alex's fixes too. It did not. So the question is not whether `theta0` is fine at high M, which four arms already say it is, but **what changed at M = 2** -- the setting users actually run.
 
-    CLAUDE TO "Re-run the M10 or M20 arm at R = 200"
+    **Likely route: coupling, not `theta0`'s own prior.** `a_theta0`/`b_theta0` are untouched, still `Beta(1, 20)`, last changed 23 July before the pre-fix run. But `b_betatheta`'s variance was widened to `diag(2)` in Fixed bugs 25, which changes `beta_theta`, which drives the collection probability, which drives the latent `w`; and `sample_theta0(z, w, ...)` conditions on `w`. The tighter-prior run supports this weakly: `theta0` moved toward nominal in both arms tested (M10 0.944 to 0.940, M20 0.952 to 0.942), small because those are the arms where data dominates the prior. M2, where the prior should dominate, is the one arm not yet run at the tighter setting.
+
+    **Plan: `PLAN.md` 14.** Two arms at M = 2 varying only `b_betatheta_slope_var` (0.5 and 0.1 against the default 2), R = 50, about 16 minutes. If `theta0` walks toward 0.95 as the variance tightens, this closes as a downstream symptom of item 4 rather than a separate defect, and the two should be fixed together.
+
+    **The previous plan, "re-run the M10 or M20 arm at R = 200", is dropped.** It would confirm that `theta0` reaches nominal at high M, but that is not a claim the paper needs or that users can act on at M = 2 to 3. See `PLAN.md` 14.6.
+
+    **Priority: lowest of the open findings, and this should not grow.** Overcoverage is the safe direction; it costs power, not correctness. The case for the 16 minutes is that it likely resolves this as a side effect of diagnosing item 4, not that it matters on its own.
+
+    CLAUDE TO RUN THE M = 2 PRIOR-VARIANCE ARMS (`PLAN.md` 14)
 
 6.  **`B0` bias roughly doubled, and coverage does not show it.** Measured by the same re-run (`PLAN.md` 12.2). **Possible regression, cause not yet identified.**
 
