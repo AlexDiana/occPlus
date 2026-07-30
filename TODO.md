@@ -368,7 +368,7 @@ None of this is reachable from an exported function, but it will draw `R CMD che
 
     **So the fix is the refit, not the function.** Regenerating `sampleresults.rda` is already a CRAN blocker in `AGENTS.md` (CRAN plan item 4), gated on the group B fixes so the shipped object is not baked against known-wrong inference. **That gate now also blocks the vignette, and therefore `R CMD check` and item 4 above**, which puts the refit and the group B decisions on the critical path together. Worth saying out loud when deciding how long to leave group B open.
 
-    **Worth doing regardless of the refit:** `plotCovariateEffect()` and `returnCovariateEffect()` should detect a fit predating `X0_psi` and say so. Users will hold saved fits from older versions, and `'from' must be a finite number` gives them nothing to act on. A check for `is.null(fitModel$infos$X0_psi)` naming the cause would do it.
+    **Stale-fit guard: DONE 30 July 2026** (Claude, `R/output.R`). Both functions now call a shared `stopIfNoRawCovariates()` helper that errors with the cause named and the remedy stated, rather than failing inside `seq()`. Verified against the real `sampleresults` object, not a synthetic one, and tested both ways: a current fit must carry `X0_psi`, and a fit with it removed must be rejected by name. **This does not fix the vignette**, which still needs the refit; it only turns an unreadable failure into a readable one.
 
     **Do not assume this is the last vignette failure.** Two have surfaced (Fixed bugs 31, then this), both only because something forced a real build, and each was hidden behind the previous one. After the refit, run `devtools::check()` to completion and see what the next chunk does.
 

@@ -513,6 +513,38 @@ plotSpeciesResponseCurve <- function(species_name,
 }
 
 
+#' Stop early on a fit that predates `infos$X0_psi`.
+#'
+#' `X0_psi` holds the raw (untransformed) occupancy covariates, and the
+#' covariate-effect functions need it to build their prediction grid. It was
+#' added by `e60e3ad`; any model object fitted before that lacks the field.
+#' Without this guard the failure surfaces deep inside the grid construction
+#' as `min(NULL)` giving `Inf` and then `seq(Inf, -Inf, ...)` erroring with
+#' "'from' must be a finite number", which tells the user nothing about the
+#' actual problem or how to fix it.
+#'
+#' This is not hypothetical: it is exactly how the shipped `sampleresults`
+#' dataset fails, and it is what breaks the vignette build (TODO.md group D).
+#' Users holding their own saved fits from an earlier version hit the same
+#' thing.
+#'
+#' @param fitModel A fitted model object.
+#' @param what Name of the calling function, for the message.
+#'
+#' @return Invisibly `TRUE`, or an error.
+#'
+#' @noRd
+stopIfNoRawCovariates <- function(fitModel, what){
+  if(is.null(fitModel$infos$X0_psi)){
+    stop(what, "() needs the raw occupancy covariates, which this fitted ",
+         "model does not carry: `infos$X0_psi` is missing. That field was ",
+         "added after this model was fitted, so the fit predates it. Refit ",
+         "with the current version of runOccJSDM() to use this function.",
+         call. = FALSE)
+  }
+  invisible(TRUE)
+}
+
 #' returnCovariateEffect
 #'
 #' Return predicted species response curve
@@ -547,6 +579,8 @@ returnCovariateEffect <- function(fitModel,
 
   B_output_vec <- apply(B_output, c(1,2), c)
   B0_output_vec <- apply(B0_output, 1, c)
+
+  stopIfNoRawCovariates(fitModel, "returnCovariateEffect")
 
   X_psi <- fitModel$X_psi
   X0_psi <- fitModel$infos$X0_psi
@@ -604,6 +638,8 @@ plotCovariateEffect <- function(fitModel,
 
   B_output_vec <- apply(B_output, c(1,2), c)
   B0_output_vec <- apply(B0_output, 1, c)
+
+  stopIfNoRawCovariates(fitModel, "plotCovariateEffect")
 
   X_psi <- fitModel$X_psi
   X0_psi <- fitModel$infos$X0_psi

@@ -167,3 +167,27 @@ test_that("predictNewSites() handles a fit with no spatial field", {
     suppressMessages(predictNewSites(fit, X_psi = X_psi, useSpatial = TRUE)),
     "not estimated in this fit")
 })
+
+test_that("the GAM effect functions reject a fit predating infos$X0_psi", {
+  # X0_psi holds the raw occupancy covariates and was added by e60e3ad. A fit
+  # made before that lacks it, and the grid construction then does min(NULL)
+  # -> Inf and seq(Inf, -Inf, ...) -> "'from' must be a finite number", which
+  # says nothing about the cause. That is exactly how the shipped
+  # sampleresults dataset fails and how the vignette build breaks, so the
+  # guard is aimed at a real object, not a hypothetical one.
+  fit <- fixture_twostage()
+  expect_false(is.null(fit$infos$X0_psi))   # a current fit must carry it
+
+  stale <- fit
+  stale$infos$X0_psi <- NULL
+  expect_error(returnCovariateEffect(stale, "X_psi.EnvCov.1", 1:2),
+               "raw occupancy covariates")
+  expect_error(plotCovariateEffect(stale, "X_psi.EnvCov.1", 1:2),
+               "raw occupancy covariates")
+
+  # and the message must name the function the user actually called
+  expect_error(returnCovariateEffect(stale, "X_psi.EnvCov.1", 1:2),
+               "returnCovariateEffect")
+  expect_error(plotCovariateEffect(stale, "X_psi.EnvCov.1", 1:2),
+               "plotCovariateEffect")
+})
