@@ -366,9 +366,13 @@ Counts by file: `mcmcfun.R` 17, `jsdmfun.R` 17, `output.R` 3, `diagnostics.R` 1,
 
     CLAUDE TO DEPRECATE, BUT KEEP FOR REFERENCE
 
-2.  `R/jsdmfun.R`: `sample_BCsL()` references undefined `U` / `gt` / `gts`; `sample_U()`, `sample_Br()` and `sample_BL_fixed()` reference globals `S` / `U` / `n`; `computePredictiveProbs()` references `fitModel`, `psi_output`, `X_ord` and `beta_ord_output`, none of which exist; `partition_r2()` calls `pseudo_R2()` with one argument (it takes two); `returnSpatialEffectMean()` and `plotSpatialEffect()` reference a global `Xs_centers` and a nonexistent `returnSpatialEffect()`.
+2.  `R/jsdmfun.R`. **The four `sample_*` functions are DONE, 30 July 2026** (Claude): `sample_BCsL()`, `sample_U()`, `sample_Br()` and `sample_BL_fixed()` moved to `deprecated/R/jsdmfun-dead-samplers.R`, per Doug's scoping to sampler code only. All four were unreachable (no callers in `R/`, `tests/` or `vignettes/`, not in `NAMESPACE`, no string references so nothing could reach them via `do.call()`/`get()`/`match.fun()`) and all four referenced undefined globals, so none could have run as written. Superseded by the `_cpp` implementations. Measured effect: `R CMD check`'s undefined-globals NOTE fell from 84 symbols to 80, losing exactly `U`, `gt`, `gts` and `computeBscoef`. 167 tests unchanged.
 
-    CLAUDE TO DEPRECATE THE SAMPLE FUNCTIONS NOT USED IN THE MCMC
+    **Still open in this item, deliberately.** Four more functions listed here are dead by the same test but are **not** sampler code, so Doug's directive did not cover them: `computePredictiveProbs()` (references `fitModel`, `psi_output`, `X_ord`, `beta_ord_output`, none of which exist), `partition_r2()` (calls `pseudo_R2()` with one argument; it takes two), and the pair `returnSpatialEffectMean()` / `plotSpatialEffect()` (reference a global `Xs_centers` and a nonexistent `returnSpatialEffect()`).
+
+    Two of them look like unfinished intent rather than abandoned code, which is why they were not swept up: `partition_r2()` relates to the live *MEE paper* item on site variance partitioning, and the spatial pair is the only spatial-field plotting anywhere in the package. `computePredictiveProbs()` looks straightforwardly superseded by `predictNewSites()`.
+
+    ALEX/DOUG TO DECIDE ON THE REMAINING FOUR
 
 3.  `R/output.R`: `plotReadIntensity()` reads `results_output$mu1_output` / `mu0_output` / `sigma1_output` / `sigma0_output` and `infos$maxexplogy1`, none of which `runOccJSDM()` produces any more; `plotOccupancyStates()` references undefined `data_info` / `OTU`.
 
