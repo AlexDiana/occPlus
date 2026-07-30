@@ -109,7 +109,28 @@ simstudy_scenarios <- function() {
     mk("M10_tightprior", M = 10L, K = 3L, seed_label = "mladder",
                          listPriors = list(b_betatheta_slope_var = 0.5)),
     mk("M20_tightprior", M = 20L, K = 3L, seed_label = "mladder",
-                         listPriors = list(b_betatheta_slope_var = 0.5)))
+                         listPriors = list(b_betatheta_slope_var = 0.5)),
+
+    # --- Prior variance at M = 2 (PLAN.md 14) ---------------------------
+    #
+    # theta0 went from 0.938-0.959 pre-fix to 0.978-0.985 post-fix at the
+    # SAME M = 2, so its overcoverage is not "M = 2 is too little data":
+    # it would have overcovered before Alex's fixes too. theta0's own
+    # prior is untouched, so the suspected route is coupling through
+    # b_betatheta -> beta_theta -> collection probability -> latent w,
+    # which sample_theta0() conditions on.
+    #
+    # The 13.8 arms moved theta0 toward nominal only slightly (M10 0.944
+    # to 0.940, M20 0.952 to 0.942), as expected: those are the arms where
+    # the data dominates the prior. M = 2 is where the prior should
+    # dominate, and is the arm 13.8 did not cover.
+    #
+    # Two variances rather than one, so a null result cannot be blamed on
+    # not having pushed hard enough.
+    mk("M2_tight",  M = 2L, K = 3L, seed_label = "mladder",
+                    listPriors = list(b_betatheta_slope_var = 0.5)),
+    mk("M2_vtight", M = 2L, K = 3L, seed_label = "mladder",
+                    listPriors = list(b_betatheta_slope_var = 0.1)))
 }
 
 # --- Seam 1: how the true parameters are chosen --------------------------
