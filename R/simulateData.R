@@ -23,7 +23,6 @@ logistic <- function(x) 1 / (1 + exp(-x))
 #'
 #' @details
 #' General-purpose simulation function that supports multiple model types.
-#' For two-stage eDNA data specifically, use \code{\link{simulateOccJSDMData}}.
 #'
 #' @return A list with simulated data and true parameters.
 #'

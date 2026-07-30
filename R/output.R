@@ -850,31 +850,6 @@ plotCollectionRates <- function(fitModel,
   plotSpeciesRates(data_plot, idx_species, speciesNames) +
     ggtitle("Collection rates")
 
-
-  # %>%
-  #   mutate(Species = speciesNames) %>%
-  # mutate(speciesOrder = order(`2.5%`)) %>%
-  # filter(Species %in% speciesNames[idx_species])
-  #
-  # orderSpecies <- order(data_plot$`2.5%`)
-  #
-  # plot_collectionrates <- data_plot %>%
-  #   ggplot(aes(x =  factor(Species, level = speciesNames[orderSpecies]),
-  #              ymin = `2.5%`,
-  #              ymax = `97.5%`)) + geom_errorbar() +
-  #   xlab("Species") +
-  #   ggtitle("Collection rates") +
-  #   theme_bw() +
-  #   ylim(c(0,1)) +
-  #   theme(
-  #     axis.text = element_text(angle = 0,
-  #                              size = 8),
-  #     plot.title = element_text(hjust = .5,
-  #                               size = 15)
-  #   ) + coord_flip()
-  #
-  # plot_collectionrates
-
 }
 
 # SECOND STAGE RATES ----
@@ -1585,7 +1560,8 @@ predictNewSites <- function(fitModel,
                             useSpatial = NULL,
                             useBiotic = NULL,
                             summarised = T,
-                            confidence = .95
+                            confidence = .95,
+                            verbose = T
 ){
 
   S <- fitModel$infos$S
@@ -1702,7 +1678,8 @@ predictNewSites <- function(fitModel,
       idx_ls_output_vec,
       conflevels,
       useEnvCov, useSpatial, useBiotic,
-      fitModel$infos$jsdmModel)
+      fitModel$infos$jsdmModel,
+      verbose)
 
   }
 

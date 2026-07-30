@@ -452,7 +452,8 @@ arma::cube computeNewOutputs(
     bool useEnvCov,
     bool useSpatial,
     bool useBiotic,
-    std::string model)
+    std::string model,
+    bool verbose)
 {
 
   // The number of new sites comes from whichever term is actually in use.
@@ -476,7 +477,10 @@ arma::cube computeNewOutputs(
 
   for (int j = 0; j < S; j++) {
 
-    Rcout << "Computing species " << j + 1 << " out of " << S << std::endl;
+    if(verbose){
+      Rcout << "Computing species " << j + 1 << " out of " << S << std::endl;
+    }
+
 
     for (int iter = 0; iter < niter; iter++) {
 

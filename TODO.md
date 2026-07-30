@@ -54,31 +54,12 @@ Every code change Claude made, newest first. None has had human review beyond Do
 All are recoverable from git; revert or rework freely. Each says what to check. 
 Full detail for each is in *Fixed bugs*, which is the record; this section is the queue.
 
-
-
-1.  **Imports for three symbols live code needs.** 30 July, `R/occJSDM-package.R`. Added `stats::setNames`, `stats::rnbinom`, `tidyr::pivot_longer`.
-
-    **To check:** nothing, unless you disagree with the placement. Worth knowing it was not cosmetic: `pivot_longer` did not resolve from an installed namespace at all, and it is reached in the categorical-covariate branch of both exported GAM functions, so they would have failed with "could not find function" for any user with a categorical covariate.
-    
-2.  **`predictNewSites()` could not be called without both `X_psi` and `X_s`.** 30 July, `R/output.R` and **`src/jsdm.cpp`**. Both now default to `NULL`, and `useEnvCov`/`useSpatial` adopt the tri-state `useBiotic` already used: `NULL` means use the term if the fit estimated it, `TRUE` means use it and error if not, `FALSE` means skip.
-
-    **To check, two API decisions that are yours:** (a) is the tri-state the shape you want, given it changes two documented defaults from `TRUE` to `NULL`? It is strictly more permissive, so no call that worked before changes. (b) should "no covariates and no spatial" error, as it now does, or should the function gain an `n_new` argument? Nothing in the arguments says how many sites to predict for.
-
-    Fixing the guards also exposed three defects in `computeNewOutputs()` and the reshaping around it, all of which were unreachable until the guards worked, and all fixed here. Two are in your C++. Detail in *Fixed bugs* 34.
-
-3.  **`listPriors$b_betatheta_slope_var`, a new hook.** 29 July, `R/runOccJSDM.R`. `B_betatheta`'s slope variance was hard-coded at `diag(2)` with no override, unlike `p`/`q`/`theta0`. Default unchanged, so behaviour is identical unless set.
-
-    **To check:** whether you want the hook at all. It was added to test a hypothesis (see B item 4), and it is a one-line revert.
-
-7.  **`plotCollectionRates()` errored on every input.** 29 July, `R/output.R`. `plotSpeciesRates()` had been extracted as a shared helper and never wired up: it read `Min`/`Max` while the caller passed `quantile()`'s `2.5%`/`97.5%`, filtered on a `Species` column the caller never made, and referenced `speciesNames` as a free variable.
-
-    **To check, three decisions:** (a) is the helper's new contract the shape you want, since it is what the other rate plots would adopt? (b) the same ordering defect in the other three rate plots is now fixed too. (c) the pre-extraction implementation is still sitting commented out below the return; delete it?
-
-8.  **`set.seed()` did not control any C++ sampler.** 29 July, `src/rng.h` (new), `src/functions.cpp`, `src/jsdm.cpp`, `R/runOccJSDM.R`. Your fix for the OpenMP race was correct, but the replacement engines never read R's RNG state, so two fits under one seed differed by 5.09 on `B0_output`.
+ 
+1.  **`set.seed()` did not control any C++ sampler.** 29 July, `src/rng.h` (new), `src/functions.cpp`, `src/jsdm.cpp`, `R/runOccJSDM.R`. Your fix for the OpenMP race was correct, but the replacement engines never read R's RNG state, so two fits under one seed differed by 5.09 on `B0_output`.
 
     **To check:** the design in `src/rng.h`, which documents three traps worth knowing before touching it. Also two questions: (a) is thread-count invariance worth having? Reproducibility currently holds for a given thread count. (b) what does `R CMD config SHLIB_OPENMP_CXXFLAGS` return on your machine? It is empty on Doug's, so every `#pragma omp` compiles to a no-op there and the package runs single-threaded.
 
-9.  **`plotFPTPStage2Rates()` ignored its own `primerName` argument.** 27 July, `R/output.R`. It pooled quantiles across all primers regardless of what was passed, so changing `primerName` produced an identical plot. Now subsets to the requested primer and errors on an unknown one.
+ALEX: We don't care about reproducibility.
 
 ## **B. Inference-affecting bugs (wrong numbers, silently) (Alex)**
 
@@ -150,9 +131,7 @@ Full detail for each is in *Fixed bugs*, which is the record; this section is th
 
     (d) The spatial-covariate numeric check at `:540` runs before the "names present in `data$info`" check at `:544`, so a mistyped name gives `undefined columns selected` rather than the intended message.
 
-    (e) `simulateOccJSDMData()`'s `@details` still says "For two-stage eDNA data specifically, use `simulateOccJSDMData()`", a self-reference left from a merge.
-
-    (f) `computeSpeciesDetected()`'s roxygen documents the removed Beta-approximation signature instead of its actual arguments.
+    (e) `computeSpeciesDetected()`'s roxygen documents the removed Beta-approximation signature instead of its actual arguments.
 
     ALEX WILL REVIEW THE ABOVE
 
@@ -161,20 +140,15 @@ Full detail for each is in *Fixed bugs*, which is the record; this section is th
     It pollutes any script, vignette chunk or app that predicts in a loop, and unconditional console output from a compute function is the kind of thing CRAN reviewers pick up. **Fix:** a `verbose` argument defaulting to `FALSE`, threaded from `predictNewSites()`. Progress reporting is useful on a slow prediction, so making it opt-in beats deleting it.
 
     ALEX TO DECIDE AND FIX (touches `src/jsdm.cpp`)
+    
+  Added a verbose argument
 
 ## **D. Dead and broken internal code (Alex)**
 
 Ten dead functions were moved to `deprecated/` on 30 July (section A item 1). What remains is below. A systematic scan found 38 dead R functions plus 8 unused `RcppExports` wrappers in total, so most of this is still outstanding.
 
-1.  **Four more dead functions in `R/jsdmfun.R`, awaiting a decision rather than a sweep.** All are unreachable by the same test as the ten already moved, but none is sampler code, and two look like unfinished intent:
 
-    - `computePredictiveProbs()`: references `fitModel`, `psi_output`, `X_ord`, `beta_ord_output`, none of which exist. Looks straightforwardly superseded by `predictNewSites()`.
-    - `partition_r2()`: calls `pseudo_R2()` with one argument; it takes two. Relates to the live *MEE paper* item on site variance partitioning, so may be groundwork rather than abandoned.
-    - `returnSpatialEffectMean()` and `plotSpatialEffect()`: reference a global `Xs_centers` and a nonexistent `returnSpatialEffect()`. This pair is the only spatial-field plotting anywhere in the package.
-
-    ALEX/DOUG TO DECIDE WHICH OF THESE FOUR GO
-
-2.  **The remaining dead functions, once the above is settled.** Roughly 24 more in `R/jsdmfun.R` and `R/mcmcfun.R`, plus `computeMinESS()` in `R/diagnostics.R`, plus 8 unused wrappers in `RcppExports.R`.
+1.  **The remaining dead functions, once the above is settled.** Roughly 24 more in `R/jsdmfun.R` and `R/mcmcfun.R`, plus `computeMinESS()` in `R/diagnostics.R`, plus 8 unused wrappers in `RcppExports.R`.
 
     The wrappers need different handling: **do not edit `RcppExports.R`**, it is generated. Remove the `// [[Rcpp::export]]` tag in the C++ and re-run `Rcpp::compileAttributes()`.
 
@@ -182,7 +156,7 @@ Ten dead functions were moved to `deprecated/` on 30 July (section A item 1). Wh
 
     CLAUDE TO CONTINUE AFTER THE ITEM 1 DECISION
 
-3.  **`globalVariables()` for the data-masked column names.** The `R CMD check` undefined-globals NOTE is down from 84 symbols to 65 as dead code has been removed. What will remain is `dplyr`/`ggplot2` NSE references (`x`, `y`, `Species`, `Min`, `2.5%` and so on), which are false positives and want one `utils::globalVariables()` call in `R/occJSDM-package.R`.
+2.  **`globalVariables()` for the data-masked column names.** The `R CMD check` undefined-globals NOTE is down from 84 symbols to 65 as dead code has been removed. What will remain is `dplyr`/`ggplot2` NSE references (`x`, `y`, `Species`, `Min`, `2.5%` and so on), which are false positives and want one `utils::globalVariables()` call in `R/occJSDM-package.R`.
 
     **Do this last.** Every dead function removed shrinks the list, so enumerating it earlier means writing entries for code about to be deleted. There is no `globalVariables()` anywhere yet, so this sets the convention.
 
@@ -190,7 +164,7 @@ Ten dead functions were moved to `deprecated/` on 30 July (section A item 1). Wh
 
     CLAUDE TO DO AFTER ITEMS 1 AND 2
 
-4.  **`sample_rnb()` cannot run as written** (`R/jsdmfun.R`). Groundwork for the count-data item, not yet called from anywhere, but it has a scoping bug that will bite when wired up: `r_current <- rnb[s]` reads `rnb` inside the `sapply()` whose result is being assigned to `rnb`, so lookup falls through to the namespace and fails. The current size vector needs to come in as an argument.
+3.  **`sample_rnb()` cannot run as written** (`R/jsdmfun.R`). Groundwork for the count-data item, not yet called from anywhere, but it has a scoping bug that will bite when wired up: `r_current <- rnb[s]` reads `rnb` inside the `sapply()` whose result is being assigned to `rnb`, so lookup falls through to the namespace and fails. The current size vector needs to come in as an argument.
 
     Two more to settle while there: `tune_sd = 5` is a random-walk SD on the *log* scale, so proposals land a factor of `exp(+/-10)` away and acceptance will be near zero (0.1 to 1 is the usual starting range); and the prior terms are stubbed to `0` with the intended `dgamma()` commented out, referencing `prior_shape`/`prior_rate`, which are not defined anywhere. The Metropolis step itself looks right: the `log(r_star) - log(r_current)` Jacobian is the correct correction for a log-scale random walk under a flat prior on `r`.
 
