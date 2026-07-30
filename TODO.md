@@ -71,6 +71,8 @@ output: html_document
 
     **What to review alongside it.** Testing (a) needed a real `listPriors` hook, since `B_betatheta`'s variance had none, unlike `p`/`q`/`theta0`. Added `listPriors$b_betatheta_slope_var` to `R/runOccJSDM.R`, default unchanged at 2, so nothing changes unless a caller sets it. Tested in `test-regression-bugs.R` and it reaches the sampler correctly, but has had no review from you.
 
+    **Qualified 30 July (`PLAN.md` 14.7).** Candidate (a) was ruled out on evidence from M10/M20 only, which are the arms where data dominates the prior. At M = 2 the prior is *not* inert: tightening it moves coverage 0.747 to 0.653. It remains ruled out as a **fix**, since that is the wrong direction, but the same knob turns out to control `B0`'s bias, which is now a decision in its own right. See item 5 below before changing anything here.
+
     ALEX TO INVESTIGATE THE SAMPLER
 
 4.  **Review the `predictNewSites()` fix, and confirm two API decisions in it.** **Written by Claude** on 30 July 2026, not by Doug. Touches `R/output.R` and **`src/jsdm.cpp`**. Revert or rework freely; it has had no human review beyond Doug asking for the fix. Full account in Fixed bugs 34.
@@ -88,6 +90,28 @@ output: html_document
     **Decision 2: should "no covariates and no spatial" be an error, or should the function take `n_new`?** With both terms off, nothing in the arguments says how many new sites to predict for; the answer would be the intercept plus the biotic term, identical at every site. It currently errors. The alternative is an explicit `n_new` argument, which would make that a legitimate call. I chose the error because it is the conservative reading, but it is a design question, not a bug.
 
     ALEX TO REVIEW THE FIX
+
+5.  **Decide `b_betatheta`'s slope prior variance. It trades `B0`'s bias against `beta_theta`'s coverage, and both are open findings.** Measured 30 July 2026 (`PLAN.md` 14.7). This is a modelling decision, not a bug: nothing here is broken in a way that has a right answer without knowing what the prior is meant to encode. Nothing has been changed; the default is still `diag(2)` as you set it.
+
+    **What the knob does.** All three arms below are M = 2, R = 50, paired on identical truths, varying only `b_betatheta_slope_var`:
+
+    | variance | `B0` bias | `beta_theta` coverage | `theta0` coverage |
+    |---|---|---|---|
+    | 2 (your current default) | -0.160 | 0.747 | 0.986 |
+    | 0.5 | -0.106 | 0.707 | 0.982 |
+    | 0.1 | **-0.044** | **0.653** | 0.980 |
+
+    Paired, `B0`'s bias improvement is 2.1 SE at 0.5 and 4.0 SE at 0.1. `B0` coverage is 0.946-0.950 throughout, unchanged.
+
+    **Why this matters for `B0` (group B item 6).** That item was filed as a possible regression with no known cause. It now has one: `42198d9` widened `B_betatheta` from `diag(1)` to `diag(2)` while correcting the mean from 1 to 0, and that is exactly when `B0`'s bias doubled, from -0.135 to -0.228. Turning the variance back down moves the bias back, monotonically. The `jsdmfun.R` rewrite in the same pull is no longer the leading suspect.
+
+    **Why it is not simply "turn it back down".** The same change degrades `beta_theta`'s coverage, from 0.747 to 0.653 at variance 0.1. Group B items 4 and 6 pull in opposite directions on one parameter. Tightening buys a better point estimate for species intercepts at the cost of more overconfident collection-covariate intervals.
+
+    **What is not known.** Whether some intermediate value is better than both endpoints, since only three points were measured; whether the trade looks the same at M > 2, since this was run only at the production setting; and whether the correct move is to keep `diag(2)` and fix `beta_theta`'s overconfidence at its source instead, which is item 3 above. If the sampler-level cause of item 3 turns out to be the real problem, this trade may dissolve.
+
+    **The hook exists**: `listPriors$b_betatheta_slope_var`, added for this test, defaults to 2 so current behaviour is unchanged. Reverting it is a one-line change if you would rather it stayed hard-coded.
+
+    ALEX TO DECIDE THE VALUE (or to decide that item 3 supersedes this)
 
 ## **B. Inference-affecting bugs (wrong numbers, silently) (Alex)**
 
@@ -238,7 +262,7 @@ output: html_document
 
     **But it is a trade-off, not a fix.** Tightening that variance helps `B0`'s bias and *hurts* `beta_theta`'s coverage (0.747 to 0.653 at variance 0.1, see item 4). Two open items pull in opposite directions on one knob. Setting it needs someone who knows what the prior is meant to encode.
 
-    ALEX TO SET `b_betatheta`'s SLOPE VARIANCE, TRADING B0 BIAS AGAINST beta_theta COVERAGE
+    ALEX TO DECIDE: filed as "Review Claude fixes" item 5, with the dose-response table and the trade-off against item 4.
 
 7.  **`q` (Stage 2 false positives) degrades hard as `K` rises.** Found 29 July 2026, as a side effect of the M-ladder run (`PLAN.md` 13.7) -- not something that run was built to look for.
 
