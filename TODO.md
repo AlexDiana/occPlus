@@ -96,7 +96,7 @@ output: html_document
     **What the knob does.** All three arms below are M = 2, R = 50, paired on identical truths, varying only `b_betatheta_slope_var`:
 
     | variance                 | `B0` bias  | `beta_theta` coverage | `theta0` coverage |
-    |--------------------------|------------|-----------------------|-------------------|
+    |---------------------|----------------|-------------------|----------------|
     | 2 (your current default) | -0.160     | 0.747                 | 0.986             |
     | 0.5                      | -0.106     | 0.707                 | 0.982             |
     | 0.1                      | **-0.044** | **0.653**             | 0.980             |
@@ -330,6 +330,38 @@ output: html_document
 
 None of this is reachable from an exported function, but it will draw `R CMD check` "no visible binding" notes and is a trap for anyone reading the source. Suggest moving the genuinely dead functions to `deprecated/` and wiring up the two missing imports.
 
+### Plan for items 1-3, written 30 July 2026
+
+**The catalogue in items 1-3 is incomplete.** It names 14 functions. A systematic scan (every function defined in `R/`, counting call sites in `R/`, `tests/` and `vignettes/`, excluding roxygen comment lines, and checking `NAMESPACE`) finds **38 dead R functions plus 8 unused `RcppExports.R` wrappers**. Deprecating only the 14 named would leave two thirds of the problem and most of the `R CMD check` NOTE behind.
+
+Counts by file: `mcmcfun.R` 17, `jsdmfun.R` 17, `output.R` 3, `diagnostics.R` 1, `RcppExports.R` 8, `zzz.R` 1.
+
+**Three different treatments, and conflating them is the trap:**
+
+**(a) Move to `deprecated/`.** The genuinely dead R functions. `deprecated/` is already tracked, already excluded by `.Rbuildignore`, and already holds `functions_old.cpp` and the old vignette, so the precedent and the mechanism both exist. Suggested layout: `deprecated/R/mcmcfun-dead.R`, `deprecated/R/jsdmfun-dead.R`, `deprecated/R/output-dead.R`, each with a header saying what it was and when it was moved.
+
+**(b) Remove the `// [[Rcpp::export]]` tag in C++, then re-run `Rcpp::compileAttributes()`.** The 8 `RcppExports.R` wrappers (`XsBs`, `XtOmegaX_SoR`, `convert_to_correlation`, `dist_matrix`, `findClosestPoint`, `gpCovMatrix`, `sample_betatheta_cpp`, `sample_w_cpp`). **Do not edit `RcppExports.R`**: it is generated, and hand edits are silently overwritten by the next `document()`. If the C++ function itself is also unused, it can go to `deprecated/functions_old.cpp` alongside the existing dead C++.
+
+**(c) Leave alone. Two false positives the scan flags that must not be deleted:**
+
+- **`.onLoad()`** (`R/zzz.R`). Zero callers because **R itself calls it** on namespace load. Deleting it would silently drop the `mc.cores` cap set for CRAN compliance.
+- **`thinOutput()`** (`R/output.R`). Genuinely uncallable today (not exported, no callers), but the CRAN plan's option (a) for shrinking `sampleresults.rda` depends on it, and it is group C item 1. **Fix it or decide against it before deprecating it**; do not sweep it up here.
+
+**Doug's directives, and one ambiguity to settle.** Item 1 says "deprecate, but keep for reference", which is exactly what `deprecated/` is for. Item 3 says "deprecate both". **Item 2 says "deprecate the sample functions not used in the MCMC", which is narrower than the item's own text**: item 2 also lists `computePredictiveProbs()`, `partition_r2()`, `returnSpatialEffectMean()` and `plotSpatialEffect()`, which are not `sample_*` functions. All four are dead by the same test. Confirm whether they go too, or stay pending a decision.
+
+**Verified before proposing any of this:** no dead name is referenced as a string anywhere in `R/`, `src/` or `tests/`, so nothing is reachable by `do.call()`, `get()` or `match.fun()`. That is the failure mode a caller-count scan would otherwise miss, and it is why the scan alone was not treated as sufficient.
+
+**Execution order:**
+
+1.  Move group (a) file by file, running `devtools::test()` after each file rather than at the end, so a break is attributable to one move.
+2.  Handle group (b), then `Rcpp::compileAttributes()` and `devtools::document()`.
+3.  Re-run `devtools::check()` and record how far the undefined-globals NOTE falls. **Expected: about half.** 19 of the 38 functions that currently generate undefined-global complaints are dead, and category (c) of item 4 should disappear entirely.
+4.  Only then start item 4 phase 2 (`globalVariables()`), which is blocked on this precisely so the surviving list is enumerated once.
+
+**What "done" looks like:** 167 tests still passing, the NOTE reduced to data-masked column names only, and no entry in it naming a function that no longer exists.
+
+**Risk, stated plainly:** this deletes a lot of Alex's code from the package build. It is recoverable from `deprecated/` and from git, and none of it is reachable, but it is his call whether "not currently reachable" means "not wanted". Worth his sign-off before step 1 rather than after step 4.
+
 1.  `R/mcmcfun.R`: `sample_z()`, `sample_w()` and `sample_cimk()` reference undeclared globals (`M`, `sumM`, `n`, `z`, `w`, `y`); `loglik_sigma1()` (`:547`) is an unfinished stub whose entire body is `p[primerIdx[]]`. All are superseded by the `_cpp` versions.
 
     CLAUDE TO DEPRECATE, BUT KEEP FOR REFERENCE
@@ -349,7 +381,7 @@ None of this is reachable from an exported function, but it will draw `R CMD che
     **What is actually live and missing an import:**
 
     | symbol | needs | live caller |
-    |----|----|----|
+    |------------------------|------------------------|------------------------|
     | `pivot_longer` | `tidyr` | `returnCovariateEffect_base`, `plotCovariateEffect_base` (Alex's GAM functions, both exported, both used in the vignette) |
     | `setNames` | `stats` | `create_covariates_matrix`, `transform_new_covariates` (the latter is on `predictNewSites()`'s path) |
     | `rnbinom` | `stats` | `simulateData`, reached from `simulateOccJSDMData()` |
@@ -403,11 +435,11 @@ None of this is reachable from an exported function, but it will draw `R CMD che
     >
     > Note this is **beta software**, under active development.
     >
-    > occJSDM extends the occPlus two-stage eDNA occupancy model of Ji et al. (2025, *Ecology Letters*, <doi:10.1111/ele.70302>) by adding a joint species distribution model (JSDM) layer.
+    > occJSDM extends the occPlus two-stage eDNA occupancy model of Ji et al. (2025, *Ecology Letters*, <doi:10.1111/ele.70302>) by adding a JSDM layer.
     >
     > Highlights:
     >
-    > - Occupancy modelling: Accounts for both false-negative and false-positive error at two stages (field and lab), per species. Stage 1: estimates species eDNA collection probability in the field, given true eDNA presence at the site, and contamination probability, given true eDNA absence at the site. Stage 2: estimates species eDNA detection probability in the lab (i.e. successful PCR and sequencing), given successful eDNA collection in Stage 1, and contamination probability, given eDNA non-collection in Stage 1. In datasets where multiple primers have been used, each species' detection probability is estimated per primer (allowing one to compare each primer's efficiency for each species), while species occupancies are estimated using information across all primers. Both environmental and detection covariates are supported.
+    > - Occupancy modelling: Accounts for both false-negative and false-positive error at two stages (field and lab), per species. Stage 1: estimates species eDNA collection probability in the field, given true eDNA presence at the site, and contamination probability, given true eDNA absence at the site. Stage 2: estimates species eDNA detection probability in the lab (i.e. successful DNA extraction, PCR, and sequencing), given successful eDNA collection in Stage 1, and contamination probability, given eDNA non-collection in Stage 1. In datasets where multiple primers have been used, each species' detection probability is estimated per primer (allowing one to compare each primer's efficiency for each species), while species occupancies are estimated using information across all primers. Both environmental and detection covariates are supported.
     > - JSDM: Integrates the occupancy model with a full-featured JSDM: species fit jointly, with latent-factor residual correlations. The JSDM optionally supports species traits shaping occupancy responses (trait X env interaction, aka \`fourth-corner analyses') and spatial autocorrelation (GP kernel) across sites.
     > - occJSDM not only fits a full-featured two-stage occupancy model (both field and PCR replicates required), but if given simpler study designs, can collapse to a classical occupancy model (field replicates only) or to a pure JSDM (no replicates).
     > - MCMC fitting with diagnostics, variance partitioning, ordination, and pairwise residual correlation outputs built in.
