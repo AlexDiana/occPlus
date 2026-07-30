@@ -1,23 +1,34 @@
 ---
 title: "TODO"
 output: html_document
-editor_options:
-  markdown:
-    wrap: 72
 ---
 
 ```{=html}
-<!-- This file is edited in RStudio's Visual mode and is hard-wrapped at 72
-     columns. The wrap directive is per-document on purpose: AGENTS.md and
-     PLAN.md are NOT wrapped (44% and 39% of their lines exceed 72), so a
-     project-level setting would reformat both the first time they were
-     opened in Visual mode.
+<!-- DO NOT hard-wrap this file. Write each paragraph as a single line.
 
-     Anyone editing this file, human or agent: wrap prose at 72. Where a
-     paragraph gets rewrapped, an inline `code span` can land across the
-     boundary and be mangled -- in 2242b34 that turned `* 2` into `- 2` in
-     the logDetKuu note, silently asserting something false. Keep code
-     spans short, or phrase around them. -->
+     There is deliberately no `editor_options: markdown: wrap:` block, and
+     `occJSDM.Rproj` sets `MarkdownWrap: None`. Doug edits these docs in
+     RStudio's Visual mode, which rewrites the file to canonical form on
+     every save. While the wrap was set to 72 columns, anything written by
+     hand or by an agent got reflowed on the next open, producing a diff
+     nobody authored, over and over.
+
+     Measured 30 July 2026: RStudio's canonicalisation cannot be
+     reproduced outside RStudio. Feeding RStudio's own output back through
+     pandoc changes 234 of 768 lines, across several flag combinations. So
+     matching it by hand or by hook is not achievable, and the fix is to
+     remove the line-breaking step entirely: with no wrapping there is no
+     algorithm left to mismatch.
+
+     Two related rules:
+     - NO EM-DASHES. Use a plain double hyphen. Em-dashes were the single
+       largest driver of reflow churn under the old setting, because
+       pandoc writes them 2 characters wider and every later wrap point
+       shifted.
+     - Keep inline `code spans` short. Under the old 72-column wrap, a
+       span landing on the boundary could be mangled: in 2242b34 that
+       turned `* 2` into `- 2` in the logDetKuu note, silently asserting
+       something false. Less dangerous now, but still good practice. -->
 ```
 
 # **v0.1.0-beta** **Public release**

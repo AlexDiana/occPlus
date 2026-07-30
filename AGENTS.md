@@ -435,43 +435,53 @@ multiple PCR replicates/primers).
 
 ## Editing the planning docs
 
-**`TODO.md`, `PLAN.md` and `AGENTS.md` are all hard-wrapped at 72
-columns. Wrap prose to 72 when editing any of them.**
+**Do not hard-wrap `TODO.md`, `PLAN.md` or `AGENTS.md`. Write each
+paragraph as a single line. And do not use em-dashes anywhere: use a
+plain double hyphen.**
 
-Doug edits them in RStudio's *Visual* mode, which rewrites a file to
-match the wrap setting on every save. Text that arrives unwrapped gets
-reflowed on the next open, producing a diff nobody authored. The setting
-is project-level, in `occJSDM.Rproj`:
+Changed 30 July 2026, replacing a 72-column rule that did not work.
 
-```         
-MarkdownWrap: Column
-MarkdownWrapAtColumn: 72
+**Why the old rule failed.** Doug edits these in RStudio's *Visual* mode,
+which rewrites a file to canonical form on every save. While the wrap was
+set to 72 columns, text written by hand or by an agent was reflowed on the
+next open, producing a diff nobody authored, repeatedly. Wrapping "to 72"
+is not sufficient: RStudio greedy-fills each line to the column limit, so
+a break placed even one word early gets pulled back, cascading through the
+rest of the paragraph.
+
+**And it is not fixable by matching.** Measured 30 July: feeding RStudio's
+*own output* back through pandoc changes 234 of 768 lines on `PLAN.md`,
+and no combination of flags tried (`-smart`, table extensions, ATX
+headings) got below that. RStudio's canonicalisation is not reproducible
+outside RStudio, so neither hand-wrapping nor a post-edit hook can
+converge. The fix is to remove the line-breaking step: with
+`MarkdownWrap: None` there is no algorithm left to mismatch.
+
+The setting is project-level, in `occJSDM.Rproj`:
+
+```
+MarkdownWrap: None
 ```
 
-`TODO.md` also carries a per-document
-`editor_options: markdown: wrap: 72` block. That is redundant with the
-project setting and harmless; it survives if the file is ever opened
-outside this project.
+`TODO.md` no longer carries a per-document `editor_options: markdown:
+wrap:` block. Do not reinstate one.
 
-**Keep inline code spans short, or phrase around them.** This is not
-cosmetic. In `2242b34` ("update line wrappings") a rewrap split a code
-span across the column boundary, escaped the opening backtick, ate the
-surrounding spaces, and turned `* 2` into `- 2` in a note about a
-Cholesky log-determinant -- where the factor of two was the entire
-point. The surviving sentence asserted something false and read as
-garbage. Restored in `006b16f`.
+**No em-dashes.** They were the single largest driver of the old churn:
+pandoc writes an em-dash as `---`, two characters wider than `—`, so every
+wrap point after one shifted. With wrapping off they are harmless
+mechanically, but Doug has asked for them gone regardless. Use `--`.
 
-Check before committing: `awk 'length>72' TODO.md`. A handful of hits is
-expected and fine -- table rows, URLs, long inline code -- because
-RStudio will not break those either. Prose lines over 72 are the ones to
-fix.
+**Keep inline code spans short.** Under the old wrap, a span landing on
+the column boundary could be mangled: in `2242b34` a rewrap escaped the
+opening backtick, ate the surrounding spaces, and turned `* 2` into `- 2`
+in a note about a Cholesky log-determinant, where the factor of two was
+the entire point. Restored in `006b16f`. Less dangerous now, but still
+worth doing.
 
-**Do not hand-wrap these files with a script.** Measured 29 July: a
-paragraph-filling wrapper reproduced only 702 of RStudio's 768 lines on
-`PLAN.md`, diverging on table separators, titled links *and* ordinary
-prose. An approximation just moves the churn to the next Visual-mode
-open. If a file needs re-wrapping wholesale, open it in Visual mode and
-let RStudio do it.
+**The tradeoff, stated honestly.** Unwrapped paragraphs make git diffs
+paragraph-granular rather than line-granular. `git diff --word-diff`
+recovers most of the readability. This was accepted deliberately as the
+lesser cost against recurring phantom diffs.
 
 ## Git and build artifacts
 
@@ -500,7 +510,7 @@ let RStudio do it.
   because it calls
   `labs(L = "Environment", T = "Biotic", R = "Spatial")`. The
   `ggplot2::labs()` function doesn't recognize ternary-axis parameters
-  `L`, `T`, `R`. **Fix**: Remove the `labs()` call entirely — the axis
+  `L`, `T`, `R`. **Fix**: Remove the `labs()` call entirely -- the axis
   labels are correctly set by the aesthetic names (`Env`, `Biotic`,
   `Spatial`) in the `aes()` mapping and don't require additional
   specification. The theme elements `tern.axis.title.T`,

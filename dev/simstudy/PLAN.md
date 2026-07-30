@@ -44,18 +44,18 @@ work itself is correspondingly less.
 
 Study times are **measured**, not projected: the 29 July run did all 10
 cells, 1000 fits, in **285 min** on 5 cores. Ignore the 474 min recorded
-for the 28 July grid — that wall time was inflated by the laptop
+for the 28 July grid -- that wall time was inflated by the laptop
 sleeping mid-run; its compute rate was the same \~4 fits/min. Throughput
 is flat across the whole run, so the cost scales linearly in R. An
 earlier version of this table said `--cores=8` and \~2.4 h, which was a
 guess and roughly 3x optimistic. On a fanless MacBook Air, 5 cores is
 the practical ceiling; use `--caffeinate` for anything over an hour,
 because a run that sleeps mid-way is easy to misread as thermal
-throttling (it was, once — check the cpu/wall ratio in the progress
+throttling (it was, once -- check the cpu/wall ratio in the progress
 line, which makes sleep unmistakable). `--resume` picks a run back up
 from the last checkpoint.
 
-**`devtools::test()` is the day-to-day command** — run it after any
+**`devtools::test()` is the day-to-day command** -- run it after any
 change to `R/` or `src/`. In RStudio, Cmd+Shift+T. `filter` is a regex
 on the filename minus the `test-` prefix; the tier-1 files are `smoke`,
 `regression` and `api`.
@@ -74,7 +74,7 @@ properly.
 
 **The study runner never runs from `devtools::test()`.** Tier 3 is gated
 on `OCCJSDM_SIMSTUDY`; setting it runs the study *serially* through the
-test entry point, which is \~19 h. Use `run_study.R` for any real run —
+test entry point, which is \~19 h. Use `run_study.R` for any real run --
 it parallelises across replicates. `--R=`, `--cores=`, `--scenarios=`,
 `--out=`, `--nburn=` and `--niter=` are all overridable.
 
@@ -82,7 +82,7 @@ it parallelises across replicates. `--R=`, `--cores=`, `--scenarios=`,
 
 **A failing test names its bug.** The regression tests are titled
 `"Fixed bugs 22: ..."`, `"Fixed bugs 8: ..."` and so on, keyed to the
-*Fixed bugs* list in `TODO.md`. Read that entry before debugging — it
+*Fixed bugs* list in `TODO.md`. Read that entry before debugging -- it
 says what broke, when, and why it mattered.
 
 **Do not "fix" a loose assertion by tightening it.** Several are
@@ -107,7 +107,7 @@ Check that `runOccJSDM()` recovers known generating parameters from data
 produced by `simulateOccJSDMData()`, at the nominal rate, across the
 configurations the package advertises.
 
-Two distinct goals, which need different designs — worth keeping
+Two distinct goals, which need different designs -- worth keeping
 separate in the writing-up:
 
 - **Regression.** Guard the \~23 bugs already fixed (`TODO.md`, *Fixed
@@ -137,7 +137,7 @@ adequately. Read §5 before quoting any coverage number in the paper.
 - The `sample_ls` regression (`TODO.md` Fixed bugs 22) broke *every*
   non-spatial fit and survived because nothing exercised that path. A
   three-line test would have caught it the moment it landed. The
-  vignette would not have — it passes `spatCovariates`.
+  vignette would not have -- it passes `spatCovariates`.
 - It discharges Phase 3 step 11 of the CRAN plan in `AGENTS.md` ("write
   the testthat suite"). Done as of `6d9526d`: `test-placeholder.R` is
   gone, replaced by four real test files.
@@ -197,7 +197,7 @@ in tiers 2–3, with tolerances.
 it.** This rule was written because a fixed seed did not reproduce the
 sampler: `randinvg()` drew from R's global RNG inside an OpenMP loop, so
 a tier-1 `expect_equal()` on posterior quantities would have passed
-locally and flaked on CRAN. That is fixed (TODO.md Fixed bugs 28) —
+locally and flaked on CRAN. That is fixed (TODO.md Fixed bugs 28) --
 `set.seed()` now controls the whole fit, verified across separate
 processes.
 
@@ -211,9 +211,9 @@ survive those changes; numeric ones do not.
 The one sanctioned exception is `test-regression-bugs.R`'s
 reproducibility test, where equality *is* the property under test. Note
 its scope: reproducibility holds for a given thread count, since threads
-derive separate streams (see `src/rng.h`). This is currently moot —
+derive separate streams (see `src/rng.h`). This is currently moot --
 `SHLIB_OPENMP_CXXFLAGS` is empty on the dev machine, so the pragmas
-compile to no-ops — but it would bite on a Linux build.
+compile to no-ops -- but it would bite on a Linux build.
 
 ### 5.2 Coverage assertions are stochastic and will flake if set tight
 
@@ -225,7 +225,7 @@ suite that cries wolf gets ignored.
 Mitigations, all three:
 
 - fix a seed per replicate, so a tier-3 run is reproducible;
-- set the hard failure threshold well below nominal — fail at **\<
+- set the hard failure threshold well below nominal -- fail at **\<
   0.85**, which catches every bug in the *Fixed bugs* list by a wide
   margin (§9);
 - record the coverage table with `expect_snapshot_value()` so changes
@@ -241,7 +241,7 @@ parameterisation.
 - **Directly comparable** (verified against the code while building
   `helper-simstudy.R`, 27 July): `B0`, `B`, `G`, `beta_theta`, `theta0`,
   `p`, `q`, `tau`. Two caveats. `beta_theta` requires passing
-  `collCovariates` to the fit — without it the posterior is `(1 x S)`
+  `collCovariates` to the fit -- without it the posterior is `(1 x S)`
   against a `(ncov_theta+1 x S)` truth. And `n_lattrait` must be pinned
   to the simulated `gt`, since the default
   `floor(sqrt(min(S, ncov_psi)))` will not generally match, giving
@@ -261,13 +261,13 @@ parameterisation.
   fit meanwhile represents the field as sparse-GP basis coefficients
   over `n_supportpoints` knots. Different parameterisations. Measured
   for `sigma_bs`: true 0.5 against a posterior mean of \~1.6, 0/8
-  coverage — a meaningless comparison rather than a bug.
+  coverage -- a meaningless comparison rather than a bug.
 - **Only as identified functions:** residual correlation matrix,
   `eta`/`psi`, variance partitioning
-- **Must NOT be checked element-wise:** `U`, `L`, `A`, `C` —
+- **Must NOT be checked element-wise:** `U`, `L`, `A`, `C` --
   element-wise coverage would fail for reasons that are not bugs
-- **Excluded:** `sigma_h` — never sampled (group A item 1), so it would
-  fail by construction. **Also `l_s`** — group A item 2: `sigma_s` is
+- **Excluded:** `sigma_h` -- never sampled (group A item 1), so it would
+  fail by construction. **Also `l_s`** -- group A item 2: `sigma_s` is
   hard-coded to 1 at the `sample_ls()` call site, so the length-scale
   absorbs the amplitude misspecification and rails at the top of
   `l_s_grid` for every true value tried. Any coverage figure for `l_s`
@@ -276,15 +276,15 @@ parameterisation.
 
 ### 5.4 The GP knot count must be pinned, not left to the default
 
-`getDefaultSupportPoints(n)` used to be `max(30, floor(n * 0.2))` — a
+`getDefaultSupportPoints(n)` used to be `max(30, floor(n * 0.2))` -- a
 constant 30 for any dataset below 150 sites, and a crash below 31
 (§10.1). Fixed in `42198d9`; it is now `min(floor(n * 0.2), n - 1)`
 (`R/jsdmfun.R:875`, `TODO.md` Fixed bugs 29). The study pins
 `n_supportpoints` anyway rather than trusting any default.
 
 Two consequences for the design, beyond the crash. The knot count would
-be **uncontrolled but not constant** across cells — identical for
-`n = 40` and `n = 140`, then suddenly proportional above 150 — so any
+be **uncontrolled but not constant** across cells -- identical for
+`n = 40` and `n = 140`, then suddenly proportional above 150 -- so any
 difference attributed to `n` would be partly an artefact of the spatial
 approximation changing underneath. And at small `n` it approaches one
 knot per site, which is a qualitatively different (denser) approximation
@@ -303,7 +303,7 @@ parallelism must be off or capped when not env-gated on.
 
 ## 6. Tier detail
 
-### 6.1 Tier 3 — the study
+### 6.1 Tier 3 -- the study
 
 Base = `two_stage`, traits on, spatial on, `d = 2`, **`ds = 2`**,
 `n = 100`, `S = 10`, `M = 2`, `P = 2`, `K = 3`, `n_supportpoints = 20`.
@@ -312,23 +312,23 @@ Base = `two_stage`, traits on, spatial on, `d = 2`, **`ds = 2`**,
 `ds = 0` the simulator's cross-species spatial covariance collapsed to
 jitter, `sd(spatField)` = 0.0019 rather than \~1.0. The grid used
 `ds = 0` until 27 July, which made every spatial cell a null-field test
-— the exact trap the audit flagged for Fixed bugs 7. Fixed in `42198d9`
+-- the exact trap the audit flagged for Fixed bugs 7. Fixed in `42198d9`
 (`TODO.md` Fixed bugs 30); re-measured 29 July, `ds = 0` now gives
 0.598. The grid stays at `ds = 2` by choice, for a clearly
 non-degenerate field and comparability with the 28 July run.
 
 Every spatial cell sets `n_supportpoints` explicitly (§10.1). Left to
 the default it is a constant 30 for any `n` below 150, so it would
-neither scale with `n` nor be a controlled factor — and below 31 sites
+neither scale with `n` nor be a controlled factor -- and below 31 sites
 it crashes outright.
 
 | \# | Cell | Differs from base by | Buys |
 |----|----|----|----|
-| 1 | base | — | Flagship config; *is* the traits×spatial interaction |
-| 2 | spatial isolated | traits off | `Bs` recovery unconfounded by trait terms (**not** `l_s` — see §5.3) |
+| 1 | base | -- | Flagship config; *is* the traits×spatial interaction |
+| 2 | spatial isolated | traits off | `Bs` recovery unconfounded by trait terms (**not** `l_s` -- see §5.3) |
 | 3 | traits isolated | spatial off | `G` (fourth-corner) recovery unconfounded by the GP |
 | 4 | `P = 3` | `P = 2 -> 3` | Guards Fixed bugs 2; matches shipped `sampledata` |
-| 5 | low information | low `p`/`theta_baseline`, smaller `n` (see §10.1 — must set `n_supportpoints`) | Calibration where data are thin — the realistic eDNA regime |
+| 5 | low information | low `p`/`theta_baseline`, smaller `n` (see §10.1 -- must set `n_supportpoints`) | Calibration where data are thin -- the realistic eDNA regime |
 | 6 | `d` under-fit | truth `d = 4`, fit `d = 2` | The common real-world misspecification |
 | 7 | `d` over-fit | truth `d = 2`, fit `d = 4` | Interacts with rotation invariance; least-trusted case |
 | 8 | larger `S` | `S = 10 -> 20` | Does calibration hold as species count grows. Trimmed from 30 on 27 July: at `S = 30` this was 1.75x base, the grid's most expensive cell, and the study runs on a fanless machine that throttles. `S = 20` is still double the base and costs 1.2x. |
@@ -345,7 +345,7 @@ seconds for free: "does configuration X run at all". Tier 3 hours should
 buy calibration evidence, which only tier 3 can provide.
 
 Cells 9–10 are **cheaper** (less data per fit: no PCR level, no
-replication) but also check **fewer parameters** — `occupancy` has no
+replication) but also check **fewer parameters** -- `occupancy` has no
 `p`/`q`; `binary` has no `beta_theta`, `theta0`, `p`, `q`. Their rows in
 the results table will be sparser, not directly comparable to the
 two_stage cells.
@@ -358,18 +358,18 @@ coverage of the 95% credible interval, bias, RMSE.
 `Sys.getenv("OCCJSDM_SIMSTUDY_OUT", tempdir())`, intended destination
 `dev/simstudy/results/`.
 
-### 6.2 Tier 1 — ships to CRAN
+### 6.2 Tier 1 -- ships to CRAN
 
 One shared fixture fit built in `helper-fixtures.R` and reused:
 `sampledata`, `nburn = 50, niter = 50, nchain = 2` (**measured 5.6 s**).
 Keeps the tier well under 30 s.
 
-`test-smoke-configs.R` — every configuration completes: `two_stage` /
+`test-smoke-configs.R` -- every configuration completes: `two_stage` /
 `occupancy` / `binary`; with and without `spatCovariates`; with and
 without traits; `d = 0` and `d = 2`; `P = 1` and `P = 3`. *This is the
 tier that would have caught the `sample_ls` regression.*
 
-`test-regression-bugs.R` — one test per fixed bug, named so a failure
+`test-regression-bugs.R` -- one test per fixed bug, named so a failure
 points at its `TODO.md` entry:
 
 | Guards           | Assertion                                           |
@@ -383,15 +383,15 @@ points at its `TODO.md` entry:
 
 Row-shuffle invariance must be asserted on the **prepared design
 matrices** (`X_psi`/`X_theta` row alignment against site/sample
-indices), which is deterministic — not on the posterior, which would
+indices), which is deterministic -- not on the posterior, which would
 flake under §5.1.
 
-`test-api-contracts.R` — unknown `primerName` errors with the available
+`test-api-contracts.R` -- unknown `primerName` errors with the available
 list; unknown covariate name errors informatively; `idx_species`
 subsetting returns the right rows; `predictNewSites()` honours its
 documented `NULL` defaults.
 
-### 6.3 Tier 2 — canary
+### 6.3 Tier 2 -- canary
 
 R = 3–5 replicates at the base cell. Not a calibration check: a smoke
 signal that recovery has not grossly broken between full tier-3 runs
@@ -415,8 +415,8 @@ draw_truth(scenario)        # fixed values now; prior draws for SBC
 summarise_fit(fit, truth)   # CI-contains indicator now; rank statistic for SBC
 ```
 
-Everything expensive — grid, simulate/fit loop, parallelism, artifact
-writing — is shared.
+Everything expensive -- grid, simulate/fit loop, parallelism, artifact
+writing -- is shared.
 
 Adding SBC later requires:
 
@@ -449,13 +449,13 @@ per iteration**, so `nburn = 1000 + niter = 1000` is \~84 s per fit.
 
 **Superseded by measurement**: the 29 July run did all 10 cells in 285
 min on 5 cores, i.e. \~4.75 h. The earlier \~2.5–3 h figure assumed 8
-cores, which this machine cannot usefully supply — the M4 has only 4
+cores, which this machine cannot usefully supply -- the M4 has only 4
 performance cores, so workers past the fourth land on efficiency cores
 worth roughly a third to a half as much (see §5.5). Cells 9–10 are
 cheaper than the average; cell 8 (`species_20`) is dearer.
 
-Replicates are embarrassingly parallel at the *process* level —
-independent datasets and fits — so this needs no package changes, unlike
+Replicates are embarrassingly parallel at the *process* level --
+independent datasets and fits -- so this needs no package changes, unlike
 the in-package chain parallelisation in `TODO.md` group D item 1.
 
 **Do not buy replicates by shortening chains.** Each interval endpoint
@@ -470,13 +470,13 @@ reports) and let R take what is left.
 ## 9. What R = 100 does and does not support
 
 SE of estimated coverage is `sqrt(0.95 * 0.05 / R)`. Cost is linear in
-R; precision improves only as sqrt(R) — halving the error bar costs 4x
+R; precision improves only as sqrt(R) -- halving the error bar costs 4x
 the compute.
 
 > **Resolved 29 July 2026.** This previously carried a caveat that the
 > replicates were not independent: `get_rng()` was seeded from a
 > literal, per *process*, so every PSOCK worker started its Polya-Gamma
-> stream at the same position. That is fixed (TODO.md Fixed bugs 28) —
+> stream at the same position. That is fixed (TODO.md Fixed bugs 28) --
 > `runOccJSDM()` now derives its C++ seed from R's RNG, and because
 > `draw_truth()` sets a per-(scenario, replicate) seed before each fit,
 > every replicate gets its own stream. Verified: a repeated replicate
@@ -499,7 +499,7 @@ R = 100 is chosen for the **regression** goal. Every bug in the *Fixed
 bugs* list would drive coverage to 0.5–0.8, not 0.93, so R = 100 catches
 them with room to spare.
 
-It is **not** enough to assert "coverage is nominal" in the paper — that
+It is **not** enough to assert "coverage is nominal" in the paper -- that
 claim needs R = 200–500, because it asserts the *absence* of a small
 deviation rather than detecting a large one. The runner takes `R` as an
 argument for exactly this reason; do a final publication-grade run at
@@ -523,7 +523,7 @@ computed as if there were R x S independent trials.**
     *deterministic function of `l_s`*, already smoothed at the current
     value, so it scores better and better under smoother covariances.
     The likelihood is monotone increasing in `l_s` and `idx_ls` pins at
-    the grid maximum — measured at range 10-10 for every true `l_s`
+    the grid maximum -- measured at range 10-10 for every true `l_s`
     tried (0.074, 0.171, 0.300) with real spatial signal present.
 
     **This supersedes the earlier entry here, which blamed `sigma_s`
@@ -531,12 +531,12 @@ computed as if there were R x S independent trials.**
     grid at the field's actual amplitude leaves the likelihood monotone,
     so that fix is disproven. `sigma_bs` is already sampled and already
     is the SoR amplitude; a separate `sigma_s` would be redundant. The
-    real fix is a modelling change needing Alex — see the TODO entry.
+    real fix is a modelling change needing Alex -- see the TODO entry.
 
     Consequences here: `l_s` stays out of the checked parameters (§5.3),
     and the spatial cells still test `Bs` and the overall spatial
     contribution but say nothing about range recovery. **Not blocking**
-    — those cells remain worth running — but no table produced before
+    -- those cells remain worth running -- but no table produced before
     this is fixed may be read as evidence about the GP. Re-run cells 1
     and 2 afterwards.
 
@@ -552,7 +552,7 @@ computed as if there were R x S independent trials.**
     (`R/jsdmfun.R:480`) feeds `kmeans(X_s, centers = ps)`, and the
     hard-coded 30 wins for every dataset under 150 sites, so the knot
     count never scales down. Filed as a bug and **since fixed**
-    (`42198d9`, `TODO.md` Fixed bugs 29) — the default was also
+    (`42198d9`, `TODO.md` Fixed bugs 29) -- the default was also
     statistically wrong well before it crashed (30 knots for 31 sites is
     \~1 knot per site, defeating the point of a sparse GP). Now
     `min(floor(n * 0.2), n - 1)`.
@@ -560,7 +560,7 @@ computed as if there were R x S independent trials.**
     **Consequence for this plan:** cell 5 must set
     `listParams$n_supportpoints` explicitly rather than relying on the
     default. Verified working at `n = 20` with 6 knots. Pinning the knot
-    count is the right call for a study cell anyway — it stops the
+    count is the right call for a study cell anyway -- it stops the
     spatial approximation silently changing with `n` across scenarios,
     which would otherwise confound the low-information comparison. Apply
     the same reasoning to **every** spatial cell (1, 2, 4–10), not just
@@ -605,7 +605,7 @@ from nominal.
 
 **This is a paired comparison with the 28 July pre-fix run.**
 `draw_truth()` seeds on (scenario, replicate), so the simulated data and
-true values are *bit-identical* between the two runs — verified,
+true values are *bit-identical* between the two runs -- verified,
 `max|truth difference| = 0`. Every difference below is attributable to
 the code, not to sampling variation between runs. That is a much
 stronger design than two independent runs would give, and it is worth
@@ -642,7 +642,7 @@ Averaged over all cells, pre-fix → post-fix:
 
 1.  **`beta_theta` improved but is not fixed.** Every cell gained
     0.03–0.05, and two-thirds of the bias is gone. Alex's correction of
-    the collection-covariate prior mean from 1 to 0 was a real cause —
+    the collection-covariate prior mean from 1 to 0 was a real cause --
     but not the only one, because 0.766 against nominal 0.95 is still
     far out. **This is now the clearest open target in group A.**
     Whatever remains is structural: it is flat across model type, primer
@@ -659,7 +659,7 @@ Averaged over all cells, pre-fix → post-fix:
 
 3.  **`p` is unchanged, and that is the correct outcome.**
     `low_information` sits at 0.109. The informative `Beta(5, 1)` is
-    load-bearing for identifiability — `p` and `q` enter
+    load-bearing for identifiability -- `p` and `q` enter
     `sample_pq_cpp()` symmetrically, so the prior is what selects the
     mode (TODO.md group A item 3). This cell measures the *cost of that
     constraint* when true `p` is 0.1–0.3. It is not a defect to be fixed
@@ -671,7 +671,7 @@ Nine of ten cells moved more negative: base −0.113 → −0.208, `occupancy`
 −0.024 → −0.151, `primers_3` −0.031 → −0.151, `low_information` −0.931 →
 −1.056. Only `binary` moved the other way (−0.002 → +0.012).
 
-**Coverage does not reveal this** — it holds at 0.943 because the
+**Coverage does not reveal this** -- it holds at 0.943 because the
 intervals are wide enough to absorb the shift. It is visible only in the
 bias column, which is the argument for tracking both.
 
@@ -696,7 +696,7 @@ a look alongside item 1 above, since both trace to the same edit.
 
 `q`, `B0`, `B` and `G` are at or near nominal in every cell except
 `low_information`. The quantities most likely to be reported in an
-ecology paper remain trustworthy — with the `B0` bias caveat in 12.2,
+ecology paper remain trustworthy -- with the `B0` bias caveat in 12.2,
 which affects the point estimate rather than the interval.
 
 `low_information` is still compromised across the board (`theta0` 0.602,
@@ -714,7 +714,7 @@ are noise.
 ### 12.6 The superseded pre-fix table (28 July 2026)
 
 Kept because the *delta* is the evidence that the fixes worked, not the
-level. Run in two parts — `base` on 27 July (100 fits, 22.9 min), the
+level. Run in two parts -- `base` on 27 July (100 fits, 22.9 min), the
 other 9 cells on 28 July (900 fits, 474 min wall, inflated by the laptop
 sleeping mid-run).
 
@@ -737,7 +737,7 @@ sleeping mid-run).
 1.  `helper-fixtures.R` + tier 1. Ships, pays immediately, blocks
     nothing.
 
-2.  ~~Resolve open item 1 (spatial `n` floor).~~ **Done** — floor is 31
+2.  ~~Resolve open item 1 (spatial `n` floor).~~ **Done** -- floor is 31
     sites; every spatial cell now pins `n_supportpoints` (§10.1).
 
 3.  `helper-simstudy.R` with the two seams (§7).
