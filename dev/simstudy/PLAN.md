@@ -649,3 +649,40 @@ The case for spending 16 minutes here is that it is cheap and likely resolves B5
 ### 14.6 What happened to the R = 200 plan
 
 Dropped, not deferred. Its purpose was to confirm `theta0` has genuinely reached nominal at high M, since R = 50 cannot distinguish 0.944 from 0.90. But that confirmation is only worth buying if the claim matters, and "`theta0` is well calibrated when you take 10 or 20 samples per site" is not a claim the paper needs or that users can act on at M = 2 to 3. If a publication-grade calibration claim is wanted later, it belongs in a single planned high-R run across the whole grid (see 9), not a one-arm confirmation of the least urgent finding.
+
+------------------------------------------------------------------------
+
+## 14.7 Results: hypothesis dead, but it diagnosed B6 instead (30 July 2026)
+
+**Run:** 100 fits, R = 50, 20.4 min, 0 failures. All three arms share `seed_label = "mladder"`, and truth is bit-identical across them (verified), so every comparison below is paired.
+
+| | var = 2 (default) | var = 0.5 | var = 0.1 |
+|---|---|---|---|
+| `theta0` coverage | 0.986 | 0.982 | 0.980 |
+| `beta_theta` coverage | 0.747 | 0.707 | 0.653 |
+| `B0` bias | -0.160 | -0.106 | **-0.044** |
+| `B0` coverage | 0.946 | 0.950 | 0.946 |
+
+### `theta0`: the hypothesis is disproved
+
+A **20-fold** reduction in the prior variance moved coverage by 0.006. The paired bias change reaches 2.7 SE at var = 0.1, so it is detectable, but it is far too small to matter: reaching nominal from 0.986 by this route would need an extrapolation the data does not support. **Coupling through `b_betatheta` is not what makes `theta0` overcover.**
+
+That is outcome 2 of 14.4, so the next test is `theta0`'s own `Beta(1, 20)` prior, which already has `listPriors$a_theta0`/`b_theta0` hooks and needs no code change. Given 14.5's priority argument, that is worth doing only if it can ride along with another run.
+
+### `B0`: an unplanned diagnosis, and the most useful thing here
+
+`B0`'s bias responds strongly and monotonically to the same knob: -0.160 at var = 2, -0.106 at 0.5, -0.044 at 0.1. Paired, that is +0.054 (2.1 SE) and +0.116 (4.0 SE).
+
+**The history lines up exactly.** `42198d9` widened `B_betatheta` from `diag(1)` to `diag(2)` (and corrected the mean from 1 to 0), and that is precisely when `B0`'s bias doubled, from -0.135 pre-fix to -0.228 post-fix. Turning the variance back down moves the bias back. B6 was filed as "possible regression, cause not yet identified"; **the widening is now the leading candidate, with a dose-response curve behind it.**
+
+`B0` coverage is 0.946-0.950 across all three arms, unchanged. That is why the original grid never flagged this: the intervals are wide enough to absorb the shift, and only the bias column moves. Further support for tracking both.
+
+### `beta_theta`: 13.9's conclusion survives, its reasoning does not
+
+13.9 concluded the prior's width is not the cause, from M10/M20 where tightening moved coverage by 0.001-0.003. **At M = 2 it moves coverage a lot: 0.747 to 0.653.** The conclusion holds, because tightening makes coverage *worse*, so the prior is not a fix. But the reasoning was wrong: the prior is not inert, it was inert *in the arms tested*, which were the arms where data dominates it. Anyone re-reading 13.9 should read this section with it.
+
+The detail worth keeping: bias falls (+0.0195 to +0.0063) while coverage falls faster. The intervals shrink more than the bias does. That is the overconfidence signature, now shown to be **controllable by the prior without being caused by it**.
+
+### This is a trade-off, not a fix, and it is Alex's call
+
+Tightening `b_betatheta`'s slope variance helps `B0`'s bias and hurts `beta_theta`'s coverage. Those are two open items pulling in opposite directions on one knob. Setting it needs someone who knows what that prior is meant to encode, which is why this goes to Alex rather than being applied. See `TODO.md`.

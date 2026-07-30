@@ -190,7 +190,7 @@ output: html_document
 
     Shrinking intervals around a bias that is not itself shrinking is the signature of a real defect being *exposed* by more information, not resolved by it. More field samples make this worse, so the next step is not more data but finding what makes the interval overconfident.
 
-    **Tighter-prior result, 30 July 2026: disproved.** Tightening `B_betatheta`'s slope variance 4x moved coverage by 0.001-0.003 -- noise. A second candidate, pseudo-replication in `X_theta`, is also ruled out. **Full detail and the review item are above, under "Review Claude fixes" item 3**: this needs sampler-level investigation, not another prior experiment.
+    **Tighter-prior result, 30 July 2026: the prior is not the cause, but the first test was run in the wrong place.** Tightening `B_betatheta`'s slope variance at M10/M20 moved coverage by 0.001-0.003 (`PLAN.md` 13.9). **At M = 2 it moves it a lot: 0.747 to 0.653** (`PLAN.md` 14.7). The conclusion survives, since tightening makes coverage *worse* and so is not a fix, but the prior is not inert as 13.9 implied: it was inert only in the arms tested, which were the ones where data dominates it. Bias falls while coverage falls faster, so the intervals shrink more than the bias does. A second candidate, pseudo-replication in `X_theta`, is also ruled out. **Full detail and the review item are above, under "Review Claude fixes" item 3**: this needs sampler-level investigation.
 
     ALEX TO REVIEW A3 ABOVE (THIS IS REDUNDANT WITH A3).
 
@@ -212,7 +212,11 @@ output: html_document
 
     **Priority: lowest of the open findings, and this should not grow.** Overcoverage is the safe direction; it costs power, not correctness. The case for the 16 minutes is that it likely resolves this as a side effect of diagnosing item 4, not that it matters on its own.
 
-    CLAUDE TO RUN THE M = 2 PRIOR-VARIANCE ARMS (`PLAN.md` 14)
+    **Result, 30 July 2026 (`PLAN.md` 14.7): the coupling hypothesis is disproved.** A 20-fold reduction in `b_betatheta`'s slope variance moved `theta0` coverage by 0.006 (0.986, 0.982, 0.980 at variance 2, 0.5, 0.1). Paired, the bias change is detectable at 2.7 SE but far too small to matter. `b_betatheta` is not the route.
+
+    **Next test, if it is worth doing at all:** `theta0`'s own `Beta(1, 20)` prior, which already has `listPriors$a_theta0`/`b_theta0` hooks and needs no code change. Given this is the least urgent open finding and overcoverage is the safe direction, it is worth running only alongside another study, not on its own.
+
+    CLAUDE TO PIGGYBACK A theta0-PRIOR ARM ON THE NEXT RUN
 
 6.  **`B0` bias roughly doubled, and coverage does not show it.** Measured by the same re-run (`PLAN.md` 12.2). **Possible regression, cause not yet identified.**
 
@@ -226,7 +230,15 @@ output: html_document
 
     Still needs the `jsdmfun.R` rewrite investigated as a candidate cause (see below), since the ladder does not rule it out -- it only shows that *some* of the effect is an M/data-volume story.
 
-    ALEX TO DIAGNOSE THE CAUSE, CHECK THE jsdmfun.R REWRITE, AND DECIDE WHAT TO DO ABOUT THIS
+    **Cause identified, 30 July 2026 (`PLAN.md` 14.7), found while testing something else.** `B0`'s bias responds strongly and monotonically to `b_betatheta`'s slope variance: -0.160 at the current default of 2, -0.106 at 0.5, -0.044 at 0.1. Paired against the same truths, that is +0.054 (2.1 SE) and +0.116 (4.0 SE).
+
+    **The history matches exactly.** `42198d9` widened `B_betatheta` from `diag(1)` to `diag(2)` while correcting the mean from 1 to 0, and that is precisely when `B0`'s bias doubled from -0.135 to -0.228. Turning the variance back down moves the bias back. So the widening, not the `jsdmfun.R` rewrite, is the leading candidate.
+
+    `B0` coverage is 0.946-0.950 across all three variances, unchanged, which is why the original grid never flagged this.
+
+    **But it is a trade-off, not a fix.** Tightening that variance helps `B0`'s bias and *hurts* `beta_theta`'s coverage (0.747 to 0.653 at variance 0.1, see item 4). Two open items pull in opposite directions on one knob. Setting it needs someone who knows what the prior is meant to encode.
+
+    ALEX TO SET `b_betatheta`'s SLOPE VARIANCE, TRADING B0 BIAS AGAINST beta_theta COVERAGE
 
 7.  **`q` (Stage 2 false positives) degrades hard as `K` rises.** Found 29 July 2026, as a side effect of the M-ladder run (`PLAN.md` 13.7) -- not something that run was built to look for.
 
