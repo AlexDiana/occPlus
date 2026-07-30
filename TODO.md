@@ -355,16 +355,14 @@ Counts by file: `mcmcfun.R` 17, `jsdmfun.R` 17, `output.R` 3, `diagnostics.R` 1,
 
 1.  Move group (a) file by file, running `devtools::test()` after each file rather than at the end, so a break is attributable to one move.
 2.  Handle group (b), then `Rcpp::compileAttributes()` and `devtools::document()`.
-3.  Re-run `devtools::check()` and record how far the undefined-globals NOTE falls. **Expected: about half.** 19 of the 38 functions that currently generate undefined-global complaints are dead, and category (c) of item 4 should disappear entirely.
+3.  Re-run `devtools::check()` and record how far the undefined-globals NOTE falls. **Measured so far: 84 symbols down to 65**, a 23% reduction, from items 1, 3 and the four `sample_*` of item 2 alone. Removed: `Freq`, `Frequency`, `M`, `N3`, `OTU`, `Occupancy`, `Type`, `Var1`, `Var2`, `data_info`, `p`, `primerIdx`, `sumM`, `w`, `z`, plus `U`, `gt`, `gts`, `computeBscoef` earlier. The remaining `jsdmfun.R` functions and the 8 `RcppExports` wrappers are still to go.
 4.  Only then start item 4 phase 2 (`globalVariables()`), which is blocked on this precisely so the surviving list is enumerated once.
 
 **What "done" looks like:** 167 tests still passing, the NOTE reduced to data-masked column names only, and no entry in it naming a function that no longer exists.
 
 **Risk, stated plainly:** this deletes a lot of Alex's code from the package build. It is recoverable from `deprecated/` and from git, and none of it is reachable, but it is his call whether "not currently reachable" means "not wanted". Worth his sign-off before step 1 rather than after step 4.
 
-1.  `R/mcmcfun.R`: `sample_z()`, `sample_w()` and `sample_cimk()` reference undeclared globals (`M`, `sumM`, `n`, `z`, `w`, `y`); `loglik_sigma1()` (`:547`) is an unfinished stub whose entire body is `p[primerIdx[]]`. All are superseded by the `_cpp` versions.
-
-    CLAUDE TO DEPRECATE, BUT KEEP FOR REFERENCE
+1.  ~~`R/mcmcfun.R` dead samplers~~ **DONE 30 July 2026** (Claude). `sample_z()`, `sample_w()`, `sample_cimk()` and `loglik_sigma1()` moved to `deprecated/R/mcmcfun-dead-samplers.R`, per "DEPRECATE, BUT KEEP FOR REFERENCE". The three samplers referenced undeclared `M`, `sumM`, `n`, `z`, `w`, `y` and are superseded by the `_cpp` versions; `loglik_sigma1()` was an unfinished stub whose entire body was `p[primerIdx[]]`.
 
 2.  `R/jsdmfun.R`. **The four `sample_*` functions are DONE, 30 July 2026** (Claude): `sample_BCsL()`, `sample_U()`, `sample_Br()` and `sample_BL_fixed()` moved to `deprecated/R/jsdmfun-dead-samplers.R`, per Doug's scoping to sampler code only. All four were unreachable (no callers in `R/`, `tests/` or `vignettes/`, not in `NAMESPACE`, no string references so nothing could reach them via `do.call()`/`get()`/`match.fun()`) and all four referenced undefined globals, so none could have run as written. Superseded by the `_cpp` implementations. Measured effect: `R CMD check`'s undefined-globals NOTE fell from 84 symbols to 80, losing exactly `U`, `gt`, `gts` and `computeBscoef`. 167 tests unchanged.
 
@@ -374,9 +372,7 @@ Counts by file: `mcmcfun.R` 17, `jsdmfun.R` 17, `output.R` 3, `diagnostics.R` 1,
 
     ALEX/DOUG TO DECIDE ON THE REMAINING FOUR
 
-3.  `R/output.R`: `plotReadIntensity()` reads `results_output$mu1_output` / `mu0_output` / `sigma1_output` / `sigma0_output` and `infos$maxexplogy1`, none of which `runOccJSDM()` produces any more; `plotOccupancyStates()` references undefined `data_info` / `OTU`.
-
-    CLAUDE TO DEPRECATE BOTH
+3.  ~~`R/output.R` dead plots~~ **DONE 30 July 2026** (Claude). `plotReadIntensity()` and `plotOccupancyStates()` moved to `deprecated/R/output-dead-plots.R`, per "DEPRECATE BOTH". The first read `results_output$mu1_output` / `mu0_output` / `sigma1_output` / `sigma0_output` and `infos$maxexplogy1`, none of which `runOccJSDM()` produces any more; the second referenced undefined `data_info` / `OTU`. Their roxygen blocks moved with them, so nothing re-attached to the following function, and `man/plotReadIntensity.Rd` was removed by `document()` as a consequence. `NAMESPACE` is unchanged: neither was exported.
 
 4.  **Missing imports, and the wider `R CMD check` undefined-globals NOTE.** Plan written 30 July 2026 from a full `R CMD check` run, which corrected this entry's premise.
 
