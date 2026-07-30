@@ -360,19 +360,19 @@ None of this is reachable from an exported function, but it will draw `R CMD che
 
     CLAUDE TO FIX, AFTER ITEMS 1-3 AND THE VIGNETTE
 
-5.  **The vignette still does not build: `plotCovariateEffect()` has no default for `covNames`.** Found 30 July 2026 by `R CMD check`, which fails at `creating vignettes` before it reaches any code inspection.
+5.  **The vignette does not build, and the cause is the stale shipped `sampleresults.rda`, not the plotting function.** Found 30 July 2026 by `R CMD check`, which fails at `creating vignettes` before reaching any code inspection.
 
-    `vignettes/occJSDM.Rmd:369-374` calls `plotCovariateEffect(fitmodel, idx_species = 1:10)` in an evaluated chunk. The signature is `(fitModel, covNames, idx_species, confidence)` and `covNames` has no default, so the chunk errors with `argument "covNames" is missing, with no default`.
+    **First diagnosis was wrong and is corrected here.** This entry originally blamed `plotCovariateEffect()` for having no default for `covNames`. The chunk has since been amended to name a covariate explicitly, which was the right change, but the build still fails: now with `'from' must be a finite number`. The function is not at fault. It works on a fresh fit and fails only on `sampleresults`.
 
-    **This is the second such failure in the same vignette.** Fixed bugs 31 fixed `plotCollectionRates()`, which the vignette also called in an evaluated chunk, and I noted at the time that the vignette could not have been rebuilt in a long while and that more was likely to surface. This is the more.
+    **The mechanism.** `plotCovariateEffect()` reads `fitModel$infos$X0_psi`, the raw covariate values, to build its prediction grid (`R/output.R:552,609`). `X0_psi` was added by `e60e3ad` ("Added GAMs"). `data/sampleresults.rda` was last regenerated on 26 July, *before* that, so the field is absent: `sampleresults$infos$X0_psi` is `NULL`. `min(NULL, na.rm = TRUE)` is `Inf`, and `seq(Inf, -Inf, length.out = n)` throws. Verified that `X0_psi` is the **only** name a fresh fit's `infos` carries and `sampleresults` lacks.
 
-    **Two possible fixes, and it is a design choice.** Either give `covNames` a `NULL` default resolving to all occupancy covariates, matching what Fixed bugs 33 did for `idx_species` on the same two functions; or change the vignette to name a covariate explicitly. The first is more consistent with the rest of `R/output.R`, where every plotting function defaults to "all of them".
+    **So the fix is the refit, not the function.** Regenerating `sampleresults.rda` is already a CRAN blocker in `AGENTS.md` (CRAN plan item 4), gated on the group B fixes so the shipped object is not baked against known-wrong inference. **That gate now also blocks the vignette, and therefore `R CMD check` and item 4 above**, which puts the refit and the group B decisions on the critical path together. Worth saying out loud when deciding how long to leave group B open.
 
-    **A CRAN blocker either way**: `R CMD check` builds vignettes, so the package cannot pass while this stands. Worth fixing before item 4, which cannot even be measured until the check runs to completion.
+    **Worth doing regardless of the refit:** `plotCovariateEffect()` and `returnCovariateEffect()` should detect a fit predating `X0_psi` and say so. Users will hold saved fits from older versions, and `'from' must be a finite number` gives them nothing to act on. A check for `is.null(fitModel$infos$X0_psi)` naming the cause would do it.
 
-    **Do not assume this is the last one.** The right move is to fix it, run `devtools::check()` to completion, and see what the next chunk does, rather than fixing this one and declaring the vignette healthy.
+    **Do not assume this is the last vignette failure.** Two have surfaced (Fixed bugs 31, then this), both only because something forced a real build, and each was hidden behind the previous one. After the refit, run `devtools::check()` to completion and see what the next chunk does.
 
-    CLAUDE TO FIX, THEN RE-RUN check() TO SEE WHAT IS NEXT
+    CLAUDE TO ADD THE STALE-FIT GUARD; THE REFIT IS GATED ON GROUP B
 
 6.  **`sample_rnb()` cannot run as written** (new in `0abb104`, `R/jsdmfun.R:581-614`). Groundwork for the count-data item under *MEE paper*, not yet called from anywhere, but it has a scoping bug that will bite the moment it is wired up: `r_current <- rnb[s]` (`:590`) reads `rnb` inside the `sapply()` at `:588` whose result is *being assigned to* `rnb`, so at that point `rnb` does not exist in the function frame and lookup falls through to the namespace and fails with `object 'rnb' not found`. The current size vector needs to come in as an argument, e.g. `sample_rnb(z, eta, rnb, tune_sd = ...)`. Two more things to settle while there: `tune_sd = 5` is a random-walk SD on the *log* scale, so proposals land a factor of `exp(+/-10)` away and acceptance will be near zero (something in the 0.1-1 range is the usual starting point); and the prior terms are stubbed to `0` with the intended `dgamma()` commented out, referencing `prior_shape`/`prior_rate`, which are not defined anywhere. The Metropolis step itself looks right -- the `log(r_star) - log(r_current)` Jacobian is the correct correction for a log-scale random walk under a flat prior on `r`.
 
