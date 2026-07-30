@@ -312,6 +312,16 @@ output: html_document
 
     ALEX TO DECIDE AND FIX (touches `src/jsdm.cpp`)
 
+5.  **`R CMD check` install WARNING: bitwise `&` on booleans in C++.** Found 30 July 2026, on the first check run that completed. **CRAN does not accept packages with warnings**, so this blocks submission.
+
+    `clang` reports `use of bitwise '&' with boolean operands [-Wbitwise-instead-of-logical]` at `src/functions.cpp:670,672,674,676` (inside `sample_pq_cpp`'s counting loop) and `src/jsdm.cpp:252`.
+
+    **Not a correctness bug, unlike the R-side version of this.** In C++ `==` binds tighter than `&`, so `a == b & c == d` parses as `(a == b) & (c == d)`, which is what was intended, and the operands are plain comparisons with no side effects. The result is right; it simply does not short-circuit. Contrast `predictNewSites()` (Fixed bugs 34), where the same `&`-instead-of-`&&` habit *was* a real bug, because there the unevaluated operand was a missing-argument promise.
+
+    **Fix:** change `&` to `&&` at those five sites. Mechanical, no behaviour change, and it clears the warning.
+
+6.  **`R CMD check` NOTE: `LICENSE` is not mentioned in `DESCRIPTION`.** Found 30 July 2026. The repo has a `LICENSE` file but `DESCRIPTION` has no `License:` field pointing at it, so `R CMD check` flags the file as unexpected at top level. Add the appropriate `License:` field. Trivial, but it is one of the notes standing between here and a clean check.
+
 ## **D. Dead and broken internal code (Alex)**
 
 None of this is reachable from an exported function, but it will draw `R CMD check` "no visible binding" notes and is a trap for anyone reading the source. Suggest moving the genuinely dead functions to `deprecated/` and wiring up the two missing imports.
@@ -356,25 +366,11 @@ None of this is reachable from an exported function, but it will draw `R CMD che
     2.  Add a single `utils::globalVariables()` call in one package-level file for the surviving NSE names, with a comment saying what it is for. Do not scatter it.
     3.  Re-run `R CMD check` and confirm the NOTE is gone rather than merely smaller.
 
-    **Do not attempt this until the vignette builds.** `R CMD check` cannot reach the code-inspection stage while the vignette errors, which it currently does (see item 6). The check above needed `--no-build-vignettes` to get this far.
+    **Unblocked as of 30 July**: the vignette builds again after Doug's refit (Fixed bugs 35), and `devtools::check()` now completes with 0 errors, so this NOTE can be measured properly rather than through `--no-build-vignettes`.
 
     CLAUDE TO FIX, AFTER ITEMS 1-3 AND THE VIGNETTE
 
-5.  **The vignette does not build, and the cause is the stale shipped `sampleresults.rda`, not the plotting function.** Found 30 July 2026 by `R CMD check`, which fails at `creating vignettes` before reaching any code inspection.
-
-    **First diagnosis was wrong and is corrected here.** This entry originally blamed `plotCovariateEffect()` for having no default for `covNames`. The chunk has since been amended to name a covariate explicitly, which was the right change, but the build still fails: now with `'from' must be a finite number`. The function is not at fault. It works on a fresh fit and fails only on `sampleresults`.
-
-    **The mechanism.** `plotCovariateEffect()` reads `fitModel$infos$X0_psi`, the raw covariate values, to build its prediction grid (`R/output.R:552,609`). `X0_psi` was added by `e60e3ad` ("Added GAMs"). `data/sampleresults.rda` was last regenerated on 26 July, *before* that, so the field is absent: `sampleresults$infos$X0_psi` is `NULL`. `min(NULL, na.rm = TRUE)` is `Inf`, and `seq(Inf, -Inf, length.out = n)` throws. Verified that `X0_psi` is the **only** name a fresh fit's `infos` carries and `sampleresults` lacks.
-
-    **So the fix is the refit, not the function.** Regenerating `sampleresults.rda` is already a CRAN blocker in `AGENTS.md` (CRAN plan item 4), gated on the group B fixes so the shipped object is not baked against known-wrong inference. **That gate now also blocks the vignette, and therefore `R CMD check` and item 4 above**, which puts the refit and the group B decisions on the critical path together. Worth saying out loud when deciding how long to leave group B open.
-
-    **Stale-fit guard: DONE 30 July 2026** (Claude, `R/output.R`). Both functions now call a shared `stopIfNoRawCovariates()` helper that errors with the cause named and the remedy stated, rather than failing inside `seq()`. Verified against the real `sampleresults` object, not a synthetic one, and tested both ways: a current fit must carry `X0_psi`, and a fit with it removed must be rejected by name. **This does not fix the vignette**, which still needs the refit; it only turns an unreadable failure into a readable one.
-
-    **Do not assume this is the last vignette failure.** Two have surfaced (Fixed bugs 31, then this), both only because something forced a real build, and each was hidden behind the previous one. After the refit, run `devtools::check()` to completion and see what the next chunk does.
-
-    CLAUDE TO ADD THE STALE-FIT GUARD; THE REFIT IS GATED ON GROUP B
-
-6.  **`sample_rnb()` cannot run as written** (new in `0abb104`, `R/jsdmfun.R:581-614`). Groundwork for the count-data item under *MEE paper*, not yet called from anywhere, but it has a scoping bug that will bite the moment it is wired up: `r_current <- rnb[s]` (`:590`) reads `rnb` inside the `sapply()` at `:588` whose result is *being assigned to* `rnb`, so at that point `rnb` does not exist in the function frame and lookup falls through to the namespace and fails with `object 'rnb' not found`. The current size vector needs to come in as an argument, e.g. `sample_rnb(z, eta, rnb, tune_sd = ...)`. Two more things to settle while there: `tune_sd = 5` is a random-walk SD on the *log* scale, so proposals land a factor of `exp(+/-10)` away and acceptance will be near zero (something in the 0.1-1 range is the usual starting point); and the prior terms are stubbed to `0` with the intended `dgamma()` commented out, referencing `prior_shape`/`prior_rate`, which are not defined anywhere. The Metropolis step itself looks right -- the `log(r_star) - log(r_current)` Jacobian is the correct correction for a log-scale random walk under a flat prior on `r`.
+5.  **`sample_rnb()` cannot run as written** (new in `0abb104`, `R/jsdmfun.R:581-614`). Groundwork for the count-data item under *MEE paper*, not yet called from anywhere, but it has a scoping bug that will bite the moment it is wired up: `r_current <- rnb[s]` (`:590`) reads `rnb` inside the `sapply()` at `:588` whose result is *being assigned to* `rnb`, so at that point `rnb` does not exist in the function frame and lookup falls through to the namespace and fails with `object 'rnb' not found`. The current size vector needs to come in as an argument, e.g. `sample_rnb(z, eta, rnb, tune_sd = ...)`. Two more things to settle while there: `tune_sd = 5` is a random-walk SD on the *log* scale, so proposals land a factor of `exp(+/-10)` away and acceptance will be near zero (something in the 0.1-1 range is the usual starting point); and the prior terms are stubbed to `0` with the intended `dgamma()` commented out, referencing `prior_shape`/`prior_rate`, which are not defined anywhere. The Metropolis step itself looks right -- the `log(r_star) - log(r_current)` Jacobian is the correct correction for a log-scale random walk under a flat prior on `r`.
 
     ALEX's WORK IN PROGRESS FOR THE COUNTS
 
@@ -657,6 +653,16 @@ Items 16 and 18 are marked **partially fixed**: the crash in each is gone, but p
     **Tested beyond absence of error** (`test-api-contracts.R`): each term measurably changes the prediction when toggled, probabilities stay in `[0,1]`, and quantiles stay ordered. Without the first of those the switches could have been cosmetic and the shape assertions would still have passed.
 
     **Noticed, not fixed:** `computeNewOutputs()` prints `Computing species i out of S` to stdout via `Rcout` on every call, unconditionally, and it cannot be silenced. Filed separately in group C.
+
+35. **The vignette could not be built, so `R CMD check` never reached code inspection.** **FIXED 30 July 2026** by Doug regenerating `data/sampleresults.rda`.
+
+    Two failures in sequence, each hidden behind the previous one. First `plotCollectionRates()` errored on every input (Fixed bugs 31). With that fixed, the build failed in `plotCovariateEffect()`, apparently for want of a `covNames` default; naming the covariate in the chunk did not fix it either, and it then failed with `'from' must be a finite number`.
+
+    **The real cause was neither function.** Both read `fitModel$infos$X0_psi`, the raw occupancy covariates, to build a prediction grid. `X0_psi` was added by `e60e3ad` ("Added GAMs"), and the shipped `sampleresults.rda` had last been regenerated on 26 July, before that. `min(NULL, na.rm = TRUE)` is `Inf`, and `seq(Inf, -Inf, ...)` throws. `X0_psi` was the only name a current fit's `infos` carried that the shipped object lacked.
+
+    **Confirmed after the refit:** `X0_psi` is present (100 x 2), `list_X_psi_mat` carries `bs_info`/`target_spline_vars`, both vignette chunks run, and `devtools::check()` completes with **0 errors** for the first time. Remaining status: 2 warnings, 3 notes, tracked separately.
+
+    **The lesson worth keeping**: a stale shipped dataset presents as a bug in whatever function touches it first, and moves to the next function each time one is fixed. Two functions were investigated and one was needlessly suspected before the data was. When an example object fails and a fresh fit does not, suspect the object.
 
 # **Completed work**
 
