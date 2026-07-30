@@ -191,3 +191,28 @@ test_that("the GAM effect functions reject a fit predating infos$X0_psi", {
   expect_error(plotCovariateEffect(stale, "X_psi.EnvCov.1", 1:2),
                "plotCovariateEffect")
 })
+
+test_that("symbols used by live code are actually imported into the namespace", {
+  # Guards TODO.md group D item 4 phase 1. These three are called by live code
+  # but were missing from NAMESPACE, which R CMD check reported only as a NOTE
+  # about undefined globals.
+  #
+  # It was not only a NOTE. pivot_longer is reached in the *categorical*
+  # covariate branch of returnCovariateEffect_base() (R/jsdmfun.R:429) and
+  # plotCovariateEffect_base() (:612); the numeric branch summarises to
+  # quantiles and never calls it. Verified against a properly installed copy
+  # with tidyr unattached: pivot_longer did not resolve from the namespace at
+  # all, so both exported GAM functions would fail with "could not find
+  # function" on any categorical occupancy covariate.
+  #
+  # Asserted on the imports environment rather than by calling the functions,
+  # deliberately. A functional test would pass under devtools::test() whether
+  # or not the import exists, because load_all() resolves unimported symbols
+  # through the global environment. That is exactly how this gap survived a
+  # suite that has caught a lot else. Checking the import directly holds under
+  # both load_all() and R CMD check.
+  imports <- parent.env(asNamespace("occJSDM"))
+  for (fn in c("pivot_longer", "setNames", "rnbinom")) {
+    expect_true(exists(fn, envir = imports, inherits = FALSE), info = fn)
+  }
+})

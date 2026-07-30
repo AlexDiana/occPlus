@@ -362,11 +362,11 @@ None of this is reachable from an exported function, but it will draw `R CMD che
 
     Nobody has hit it because every test and every vignette chunk uses numeric covariates. `create_covariates_matrix()` carries `cat_levels` and `is_numeric`, so categorical covariates are otherwise supported: this is a genuine gap, not an unreachable branch.
 
-    **Phase 1: the three real imports. Do this now, it is not blocked by anything.**
+    **Phase 1: DONE 30 July 2026.** Added `setNames` and `rnbinom` to the `stats` list and a new `@importFrom tidyr pivot_longer`, both in `R/occJSDM-package.R`. **Verified by re-running `devtools::check()`: the "checking dependencies in R code" NOTE is gone entirely** (3 notes down to 2), and `pivot_longer`, `setNames` and `rnbinom` have left the undefined-globals list. `dnbinom` and `bs` remain in it, correctly, since they were deliberately not imported. Steps as executed:
 
     1.  Add to the consolidated tag in `R/occJSDM-package.R`, which is where the package's `@importFrom stats ...` line already lives: `setNames` and `rnbinom` to the existing `stats` list, and a new `@importFrom tidyr pivot_longer`.
     2.  **Do not import `dnbinom` or `bs`.** `dnbinom` is used only by `sample_rnb()` (item 5, not wired up) and `bs` only by `createSplinesObjects()` (dead). `bs` would additionally mean adding `splines` to `DESCRIPTION`, a new declared dependency existing purely to support code that should not ship. Both should go when that code goes.
-    3.  Add a test covering the categorical branch, since that is the failure this fixes and nothing currently exercises it. It must run against an **installed** package, not `load_all()`: `load_all()` resolves unimported symbols through the global environment and would pass either way, which is exactly why this went unnoticed.
+    3.  Added a test, but asserting on the **imports environment** rather than calling the functions. A functional test of the categorical branch would pass under `devtools::test()` whether or not the import existed, because `load_all()` resolves unimported symbols through the global environment: that is precisely how this gap survived the suite. Checking `exists(fn, envir = parent.env(asNamespace("occJSDM")), inherits = FALSE)` holds under both `load_all()` and `R CMD check`. 167 tests passing.
     4.  Re-run `devtools::check()` and confirm the `Namespace in Imports field not imported from: tidyr` NOTE is gone, and that `pivot_longer`, `setNames` and `rnbinom` have left the undefined-globals list.
 
     **Phase 2: `globalVariables()` for the data-masked names. Do this after items 1-3, not before.**
@@ -379,7 +379,7 @@ None of this is reachable from an exported function, but it will draw `R CMD che
 
     **Success criterion for the whole item:** `devtools::check()` reports no NOTE in either "checking dependencies in R code" or "checking R code for possible problems". Shrinking the list is not finishing it.
 
-    CLAUDE TO DO PHASE 1 NOW; PHASE 2 AFTER ITEMS 1-3
+    PHASE 1 DONE. CLAUDE TO DO PHASE 2 AFTER ITEMS 1-3
 
 5.  **`sample_rnb()` cannot run as written** (new in `0abb104`, `R/jsdmfun.R:581-614`). Groundwork for the count-data item under *MEE paper*, not yet called from anywhere, but it has a scoping bug that will bite the moment it is wired up: `r_current <- rnb[s]` (`:590`) reads `rnb` inside the `sapply()` at `:588` whose result is *being assigned to* `rnb`, so at that point `rnb` does not exist in the function frame and lookup falls through to the namespace and fails with `object 'rnb' not found`. The current size vector needs to come in as an argument, e.g. `sample_rnb(z, eta, rnb, tune_sd = ...)`. Two more things to settle while there: `tune_sd = 5` is a random-walk SD on the *log* scale, so proposals land a factor of `exp(+/-10)` away and acceptance will be near zero (something in the 0.1-1 range is the usual starting point); and the prior terms are stubbed to `0` with the intended `dgamma()` commented out, referencing `prior_shape`/`prior_rate`, which are not defined anywhere. The Metropolis step itself looks right -- the `log(r_star) - log(r_current)` Jacobian is the correct correction for a log-scale random walk under a flat prior on `r`.
 

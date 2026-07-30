@@ -112,7 +112,7 @@ MarkdownWrap: None
 
 ## Expected `R CMD check` output: what is settled, what is not
 
-Baseline as of 30 July 2026, first run to complete since the vignette was fixed: **0 errors, 2 warnings, 3 notes.** Check this list before filing anything from a check run. Two of these are closed by decision and re-filing them wastes a round trip; that has already happened once.
+Baseline as of 30 July 2026, after the group D item 4 phase 1 imports: **0 errors, 2 warnings, 2 notes.** (It was 3 notes on the first completing run; the `tidyr` unused-import NOTE is now cleared.) Check this list before filing anything from a check run. Two of these are closed by decision and re-filing them wastes a round trip; that has already happened once.
 
 **Settled, do not re-file:**
 
@@ -122,7 +122,7 @@ Baseline as of 30 July 2026, first run to complete since the vignette was fixed:
 
 - **WARNING: bitwise `&` on boolean operands** (`src/functions.cpp:670-676`, `src/jsdm.cpp:252`). Blocks CRAN. Group C. Not a correctness bug in C++, since `==` binds tighter than `&` and the operands have no side effects; it just does not short-circuit.
 - **WARNING: `plotSpeciesResponseCurve.Rd` documents arguments the function does not have.** Group C. Symptom of that function being exported with an internal helper's signature.
-- **NOTE: "Namespace in Imports field not imported from: tidyr"** and **NOTE: undefined globals** (~90 symbols). Both group D item 4, which separates the real missing imports from data-masked column names and from genuinely undefined objects in dead code.
+- **NOTE: undefined globals.** Group D item 4 phase 2, which separates data-masked column names from genuinely undefined objects in dead code. The companion `tidyr` NOTE is **fixed**: phase 1 added the three imports that live code actually needed. Note this was not purely cosmetic; `pivot_longer` was unresolvable from the installed namespace, so the GAM functions would have failed on any categorical covariate.
 
 **One correction to an older note.** An earlier session recorded the `tidyr` fix as "qualify `tidyr::pivot_longer()` inside `plotCovariateTrend()`". That is the wrong function: `plotCovariateTrend()` is dead, with zero call sites and no export. The live users of `pivot_longer` are `returnCovariateEffect_base()` and `plotCovariateEffect_base()`. See `TODO.md` group D item 4, which was rewritten from a real check run on 30 July.
 
