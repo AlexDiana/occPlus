@@ -228,9 +228,11 @@ Ten dead functions were moved to `deprecated/` on 30 July (section A item 1). Wh
     >
     > Announcing **occJSDM**, an R package for combining occupancy and joint species distribution modelling (<https://github.com/AlexDiana/occJSDM>). The package is 'eDNA-aware' and thus can be used on metabarcoding data.
     >
-    > Note this is **beta software**, under active development.
+    > Note this is **beta software**, under active development. We are validating it against simulated data where the true parameters are known, and the results so far are uneven: environmental effects on occupancy, trait-by-environment interactions, and Stage 2 false-positive rates all recover well, but we would treat pairwise species correlations, the spatial term, and collection-covariate effects with caution for now, and we are working on them.
     >
     > occJSDM extends the occPlus two-stage eDNA occupancy model of Ji et al. (2025, *Ecology Letters*, <doi:10.1111/ele.70302>) by adding a JSDM layer.
+    >
+    > Unusually for an occupancy model, false positives are estimated explicitly rather than assumed away, at both the field and lab stages and separately for each species and each primer. This is what lets the model use metabarcoding data, where contamination and mis-assignment are expected rather than exceptional.
     >
     > Highlights:
     >
@@ -274,6 +276,13 @@ Ten dead functions were moved to `deprecated/` on 30 July (section A item 1). Wh
     **The borrowing-strength contrast is accurate**, and an earlier version of this review wrongly said otherwise. An MSOM's community mean is estimated most sharply by well-sampled species, so rare species are in practice pulled toward what common species look like. And occJSDM genuinely differs: `sample_sigmab()` takes the residual after `computeBtcoef(G, Tr, A, C, ...)`, which is `Tr %*% G + A %*% C + Btilde`, so the shrinkage target is the trait-predicted value rather than a community mean. The `A %*% C` term is why "including inferred traits" is right to add. This is also the best-validated claim in the announcement.
 
     **Ordering.** The genuinely distinctive claim is false positives modelled at both stages, per species and per primer. False-positive occupancy models are rare, and combining one with a JSDM appears to be new. It is currently the densest paragraph in the list. Consider leading with it in one short sentence before the detail.
+
+    **Two sentences added to the draft on Doug's instruction, 30 July 2026.**
+
+    - A calibration caveat attached to the beta notice, naming what recovers well (environmental effects, trait-by-environment, Stage 2 false positives) and what to treat with caution (pairwise species correlations, the spatial term, collection-covariate effects). Framed as "we are validating against simulated data", which is itself a credibility signal most packages cannot make, so it should read as rigour rather than apology. `B0`'s bias was deliberately left out: its *coverage* is fine, the problem is only visible in the bias, and naming it would need more explanation than an announcement can carry. Worth revisiting if it is not fixed before release.
+    - A lead sentence on false positives, placed before "Highlights" so the distinguishing feature is stated once in plain terms before the dense paragraph.
+
+    **One thing to check before sending.** The false-positive sentence claims this is "unusual", which is safe. It stops short of claiming it is novel to combine false-positive occupancy with a JSDM, which is what I suspect is true but have not verified against the literature. If you are confident of it, that is a stronger sentence and worth making; the claim is yours to stand behind, not mine.
 
     DOUG TO REVISE
 
