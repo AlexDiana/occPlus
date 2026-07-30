@@ -174,23 +174,23 @@ Ten dead functions were moved to `deprecated/` on 30 July (section A item 1). Wh
 
 1.  Listserv announcement (beta release), drafted July 20 2026:
 
-    > Subject: New R package (beta) — occJSDM, a combined occupancy and joint species distribution model
+    > Subject: New R package (beta) - occJSDM, a combined occupancy and joint species distribution model
     >
     > Hi all,
     >
-    > Announcing **occJSDM**, an R package for combining occupancy and joint species distribution modelling (<https://github.com/AlexDiana/occJSDM>). The package is \`eDNA-aware' and thus can be used on metabarcoding data.
+    > Announcing **occJSDM**, an R package for combining occupancy and joint species distribution modelling (<https://github.com/AlexDiana/occJSDM>).
     >
-    > Note this is **beta software**, under active development.
+    > occJSDM extends the occPlus two-stage eDNA occupancy model of Ji et al. (2025, *Ecology Letters*, <doi:10.1111/ele.70302>) by adding a JSDM layer. Unusually for an occupancy model, false positives are estimated explicitly at both the field and lab stages and separately for each species and each primer.
     >
-    > occJSDM extends the occPlus two-stage eDNA occupancy model of Ji et al. (2025, *Ecology Letters*, <doi:10.1111/ele.70302>) by adding a JSDM layer.
+    > Note this is **beta software**. We are validating it against simulated data. Environmental effects on occupancy, trait-by-environment interactions, and Stage 2 false-positive rates recover well, but we would treat pairwise species correlations, the spatial term, and collection-covariate effects with caution for now.
     >
     > Highlights:
     >
     > - Occupancy modelling: Accounts for both false-negative and false-positive error at two stages (field and lab), per species. Stage 1: estimates species eDNA collection probability in the field, given true eDNA presence at the site, and contamination probability, given true eDNA absence at the site. Stage 2: estimates species eDNA detection probability in the lab (i.e. successful DNA extraction, PCR, and sequencing), given successful eDNA collection in Stage 1, and contamination probability, given eDNA non-collection in Stage 1. In datasets where multiple primers have been used, each species' detection probability is estimated per primer (allowing one to compare each primer's efficiency for each species), while species occupancies are estimated using information across all primers. Both environmental and detection covariates are supported.
-    > - JSDM: Integrates the occupancy model with a full-featured JSDM: species fit jointly, with latent-factor residual correlations. The JSDM optionally supports species traits shaping occupancy responses (trait X env interaction, aka \`fourth-corner analyses') and spatial autocorrelation (GP kernel) across sites.
-    > - occJSDM not only fits a full-featured two-stage occupancy model (both field and PCR replicates required), but if given simpler study designs, can collapse to a classical occupancy model (field replicates only) or to a pure JSDM (no replicates).
+    > - JSDM: Integrates the occupancy model with a JSDM: species fit jointly with nonlinear response curves and latent-factor residual correlations. The JSDM optionally supports species traits shaping occupancy responses (trait x env interactions, aka 'fourth-corner analyses') and spatial autocorrelation (GP kernel) across sites. Occupancies predicted at unsampled sites.
+    > - occJSDM not only fits a two-stage occupancy model (both field and PCR replicates required), but if given simpler study designs, can collapse to a classical occupancy model (field replicates only) or to a pure JSDM (no replicates).
     > - MCMC fitting with diagnostics, variance partitioning, ordination, and pairwise residual correlation outputs built in.
-    > - occJSDM leverages the taxonomic breadth of eDNA datasets by using ordination (each site's position on the latent axes, and each species' loadings on those axes) to predict species occupancies. Thus, each species' predicted occupancy at a site is informed by the estimated occupancies of the other species at that site, thereby using co-occurrence structure. We also allow species to borrow strength from other species sharing similar traits, in contrast to the classical approach of having rare species borrow strength from abundant species, as is used in multi-species occupancy models.
+    > - occJSDM leverages the taxonomic breadth of eDNA datasets by using ordination (each site's position on the latent axes, and each species' loadings on those axes) to predict species occupancies. Thus, each species' predicted occupancy at a site is informed by the estimated occupancies of the other species at that site, thereby using co-occurrence structure. We also allow species to borrow strength from other species sharing similar traits, including inferred traits, in contrast to the classical approach of having rare species borrow strength from abundant species, as is used in multi-species occupancy models.
     >
     > Vignettes included for data simulation and model fitting/interpretation.
     >
