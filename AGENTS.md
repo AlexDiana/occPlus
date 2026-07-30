@@ -1,397 +1,71 @@
 # occJSDM
 
-R package for fitting occupancy models to eDNA metabarcoding reads data
-(joint species distribution model / JSDM framework), accounting for a
-two-stage detection process (field collection + PCR amplification/lab
-detection), species traits, and optional spatial autocorrelation.
+R package for fitting occupancy models to eDNA metabarcoding reads data (joint species distribution model / JSDM framework), accounting for a two-stage detection process (field collection + PCR amplification/lab detection), species traits, and optional spatial autocorrelation.
 
 ## Package layout
 
-- `R/runOccJSDM.R` -- main model-fitting entry point (`runOccJSDM()`),
-  plus data-prep helpers (`process_covariates()`, `createDataIdx()`,
-  `get_param()`).
-- `R/jsdmfun.R` -- core JSDM machinery, including `simulateData()` (the
-  lower-level data simulator) and coefficient/variance-partitioning
-  helpers (`computeBtcoef()`, `computePsiCoef()`,
-  `computeVariancePartitioning()`).
-- `R/simulateData.R` -- exports `simulateOccJSDMData()`, which now takes
-  an explicit `model` argument (`"binary"`, `"occupancy"`,
-  `"continuous"`, or `"two_stage"`) and directly returns `data_list`
-  already in the `runOccJSDM()`-ready `info`/`OTU`/`traits` shape (as of
-  Alex's `a9700ab` refactor, below). This merged the former
-  `simulateOccJSDMDataGeneral()` into `simulateOccJSDMData()` and
-  **removed** the separate `toRunOccJSDMFormat()` conversion step
-  entirely -- neither `simulateOccJSDMDataGeneral()` nor
-  `toRunOccJSDMFormat()` exist in the source anymore (dropped from
-  `NAMESPACE` too), even though
-  `tests/testthat/test-toRunOccJSDMFormat.R` and a
-  `\link{toRunOccJSDMFormat}` in `R/data.R`'s roxygen docs still
-  reference the removed function. **This is a live regression** -- the
-  old two-step simulate-then-convert workflow described in
-  `vignettes/simulateOccJSDMData.Rmd` may now be stale; check/update
-  that vignette and the orphaned test before relying on either.
-- `R/mcmcfun.R`, `R/output.R`, `R/diagnostics.R` -- MCMC sampling and
-  post-processing/output/plotting functions used after `runOccJSDM()`
-  (e.g. `returnOccupancyCovariates()`, `plotVariancePartitioning()`,
-  `returnLatentPresences()`, `plotResidualCorrelationMatrix()`,
-  `returnOrdinationScores()`/`plotOrdinationScores()`/`returnFactorLoadings()`/`plotFactorLoadings()`;
-  see NAMESPACE for the full exported list).
-- `src/jsdm.cpp`, `src/functions.cpp` (via `RcppExports.R`) --
-  Rcpp/Armadillo backend, including the spatial kernel `K2()`
-  (squared-exponential GP kernel over site coordinates) and
-  `sample_w_cpp()` (samples latent collection state `w` from continuous
-  read intensities; currently unused in `runOccJSDM()` since
-  `threshold < 1` is unsupported).
-- `vignettes/occJSDM.Rmd` -- walkthrough of fitting a model with
-  `runOccJSDM()` and using the output/plotting functions.
-- `vignettes/simulateOccJSDMData.Rmd` -- walkthrough of
-  `simulateOccJSDMData()`: parameter lists, simulating with/without
-  spatial autocorrelation via `useSpatField`, checking variance
-  partitioning, visualizing occupancy and the linear predictor
-  spatially, and how trait covariates (`Tr`) shape species-specific
-  occupancy coefficients via the `G` matrix. **Likely stale**: as of
-  Alex's `a9700ab` refactor, `simulateOccJSDMData()` takes a `model`
-  argument and returns `runOccJSDM()`-ready data directly, so any
-  vignette content describing a separate `toRunOccJSDMFormat()`
-  conversion step needs updating.
-- `TODO.md` -- structured outstanding feature list, organized as
-  **v0.1.0-beta Public release** (Alex to dos / Doug to dos), **MEE
-  paper** (Doug to dos / Alex to dos), and **Future versions**. See
-  "Current work status" below for the current item list.
-- `analysis/analysis.R` -- ad hoc analysis script (not part of package
-  build).
-- `tests/testthat/` -- unit tests (testthat edition 3, set up via
-  `usethis::use_testthat(3)`); `test-toRunOccJSDMFormat.R` covers
-  `toRunOccJSDMFormat()` (dimensions, column names, intercept handling,
-  mismatched-dimension errors), but that function no longer exists in
-  `R/` as of Alex's `a9700ab` refactor -- this test file is now orphaned
-  and will fail/error until reconciled with the new
-  `simulateOccJSDMData(model = ...)` API.
-- `data/` -- `sampledata.rda` / `sampledata_orig.rda` (example dataset
-  used in `occJSDM.Rmd`), `sampleresults.rda` (precomputed fit used by
-  the vignette, `nchain=2, nburn=5000, niter=5000, nthin=1`; **refit and
-  overwritten this session**, see "Current work status" below),
-  `data_out_env_trait.rdata`, and `CaiWang_data/` (a data directory the
-  user is actively reorganizing; `traitdata_caiwang.rdata` was recently
-  removed in favor of this).
+- `R/runOccJSDM.R` -- main model-fitting entry point (`runOccJSDM()`), plus data-prep helpers (`process_covariates()`, `createDataIdx()`, `get_param()`).
+- `R/jsdmfun.R` -- core JSDM machinery, including `simulateData()` (the lower-level data simulator) and coefficient/variance-partitioning helpers (`computeBtcoef()`, `computePsiCoef()`, `computeVariancePartitioning()`).
+- `R/simulateData.R` -- exports `simulateOccJSDMData()`, which now takes an explicit `model` argument (`"binary"`, `"occupancy"`, `"continuous"`, or `"two_stage"`) and directly returns `data_list` already in the `runOccJSDM()`-ready `info`/`OTU`/`traits` shape (as of Alex's `a9700ab` refactor, below). This merged the former `simulateOccJSDMDataGeneral()` into `simulateOccJSDMData()` and **removed** the separate `toRunOccJSDMFormat()` conversion step entirely -- neither `simulateOccJSDMDataGeneral()` nor `toRunOccJSDMFormat()` exist in the source anymore (dropped from `NAMESPACE` too), even though `tests/testthat/test-toRunOccJSDMFormat.R` and a `\link{toRunOccJSDMFormat}` in `R/data.R`'s roxygen docs still reference the removed function. **This is a live regression** -- the old two-step simulate-then-convert workflow described in `vignettes/simulateOccJSDMData.Rmd` may now be stale; check/update that vignette and the orphaned test before relying on either.
+- `R/mcmcfun.R`, `R/output.R`, `R/diagnostics.R` -- MCMC sampling and post-processing/output/plotting functions used after `runOccJSDM()` (e.g. `returnOccupancyCovariates()`, `plotVariancePartitioning()`, `returnLatentPresences()`, `plotResidualCorrelationMatrix()`, `returnOrdinationScores()`/`plotOrdinationScores()`/`returnFactorLoadings()`/`plotFactorLoadings()`; see NAMESPACE for the full exported list).
+- `src/jsdm.cpp`, `src/functions.cpp` (via `RcppExports.R`) -- Rcpp/Armadillo backend, including the spatial kernel `K2()` (squared-exponential GP kernel over site coordinates) and `sample_w_cpp()` (samples latent collection state `w` from continuous read intensities; currently unused in `runOccJSDM()` since `threshold < 1` is unsupported).
+- `vignettes/occJSDM.Rmd` -- walkthrough of fitting a model with `runOccJSDM()` and using the output/plotting functions.
+- `vignettes/simulateOccJSDMData.Rmd` -- walkthrough of `simulateOccJSDMData()`: parameter lists, simulating with/without spatial autocorrelation via `useSpatField`, checking variance partitioning, visualizing occupancy and the linear predictor spatially, and how trait covariates (`Tr`) shape species-specific occupancy coefficients via the `G` matrix. **Likely stale**: as of Alex's `a9700ab` refactor, `simulateOccJSDMData()` takes a `model` argument and returns `runOccJSDM()`-ready data directly, so any vignette content describing a separate `toRunOccJSDMFormat()` conversion step needs updating.
+- `TODO.md` -- structured outstanding feature list, organized as **v0.1.0-beta Public release** (Alex to dos / Doug to dos), **MEE paper** (Doug to dos / Alex to dos), and **Future versions**. See "Current work status" below for the current item list.
+- `analysis/analysis.R` -- ad hoc analysis script (not part of package build).
+- `tests/testthat/` -- unit tests (testthat edition 3, set up via `usethis::use_testthat(3)`); `test-toRunOccJSDMFormat.R` covers `toRunOccJSDMFormat()` (dimensions, column names, intercept handling, mismatched-dimension errors), but that function no longer exists in `R/` as of Alex's `a9700ab` refactor -- this test file is now orphaned and will fail/error until reconciled with the new `simulateOccJSDMData(model = ...)` API.
+- `data/` -- `sampledata.rda` / `sampledata_orig.rda` (example dataset used in `occJSDM.Rmd`), `sampleresults.rda` (precomputed fit used by the vignette, `nchain=2, nburn=5000, niter=5000, nthin=1`; **refit and overwritten this session**, see "Current work status" below), `data_out_env_trait.rdata`, and `CaiWang_data/` (a data directory the user is actively reorganizing; `traitdata_caiwang.rdata` was recently removed in favor of this).
 - `CITATION.cff` -- citation metadata; primary citation is the Ji et al.
-  (2025) *Ecology Letters* methods paper, secondary is the software repo
-  (`https://github.com/AlexDiana/occJSDM`). No CRAN/Zenodo listing
-  exists, so this positioning follows standard practice for a research
-  tool wrapping a published method.
-- `README.md` -- minimal readme with install instructions, vignette
-  pointers, and a "How to cite" section (since GitHub's citation button
-  is easy to miss).
-- `DESCRIPTION` -- `Authors@R` lists Alex Diana
-  (`Alex.diana92@yahoo.it`, maintainer/`"cre"`) and Douglas W. Yu
-  (`dougwyu@mac.com`, `"aut"`).
+  (2025) *Ecology Letters* methods paper, secondary is the software repo (`https://github.com/AlexDiana/occJSDM`). No CRAN/Zenodo listing exists, so this positioning follows standard practice for a research tool wrapping a published method.
+- `README.md` -- minimal readme with install instructions, vignette pointers, and a "How to cite" section (since GitHub's citation button is easy to miss).
+- `DESCRIPTION` -- `Authors@R` lists Alex Diana (`Alex.diana92@yahoo.it`, maintainer/`"cre"`) and Douglas W. Yu (`dougwyu@mac.com`, `"aut"`).
 
 ## Data structures
 
-**Model input (`runOccJSDM()`)**: a list with `info` (data.frame, one
-row per PCR replicate, with `Site`, `Sample`, `Primer`, occupancy
-covariates `X_psi.*`, and collection covariates `X_theta.*`) and `OTU`
-(matrix of read counts, rows matching `info`, columns = species).
+**Model input (`runOccJSDM()`)**: a list with `info` (data.frame, one row per PCR replicate, with `Site`, `Sample`, `Primer`, occupancy covariates `X_psi.*`, and collection covariates `X_theta.*`) and `OTU` (matrix of read counts, rows matching `info`, columns = species).
 
-The `threshold` argument to `runOccJSDM()` controls how `OTU` is
-interpreted: `threshold >= 1` (default `1`) truncates reads to binary
-presence/absence (`OTU >= threshold` -\> detection) and samples `w` via
-`sample_w_cim_cipp()`. `threshold < 1` (including `threshold = 0`) is
-currently unsupported and raises an error
-(`stop("Threshold has to be greater than 0")`). Note that while
-`simulateOccJSDMData()` simulates continuous read counts for two-stage
-models via a log-normal mixture (`mu1`, `sigma1`, `mu0`, `sigma0`),
-`runOccJSDM()` truncates these to binary observations at fit time.
+The `threshold` argument to `runOccJSDM()` controls how `OTU` is interpreted: `threshold >= 1` (default `1`) truncates reads to binary presence/absence (`OTU >= threshold` -\> detection) and samples `w` via `sample_w_cim_cipp()`. `threshold < 1` (including `threshold = 0`) is currently unsupported and raises an error (`stop("Threshold has to be greater than 0")`). Note that while `simulateOccJSDMData()` simulates continuous read counts for two-stage models via a log-normal mixture (`mu1`, `sigma1`, `mu0`, `sigma0`), `runOccJSDM()` truncates these to binary observations at fit time.
 
-**Simulated data (`simulateOccJSDMData()`)**, as of Alex's `a9700ab`
-refactor, now takes an explicit `model` argument (one of `"binary"`,
-`"occupancy"`, `"continuous"`, `"two_stage"`) and returns
-`list(true_params, data_list)` where **`data_list` is already in
-`runOccJSDM()`-ready form**: `list(info, OTU, traits)` (no separate
-conversion step needed anymore -- see "Package layout" above for what
-changed and what's now stale as a result). `true_params` still carries
-the true occupancy/detection states and coefficients (`jsdmParams_true`,
-`beta_theta_true`, `z_true`, and for `"two_stage"` also
-`w_true`/`p_true`/`q_true`), and read counts for `"two_stage"` are
-generated the same way as before: `y = round(exp(logy1) - 1)` where
-`logy1` is drawn per-replicate from `Normal(mu1, sigma1)` (true
-detections), `Normal(mu0, sigma0)` (false-positive/contamination), or
-`0` (no reads) -- `mu1`/`sigma1`/`mu0`/`sigma0` still come from
-`list_params` (defaulting to `5`, `1`, `1.5`, `1`). **This section needs
-re-verification against the current source** (`R/simulateData.R`) next
-time simulated data is used, since the exact argument list
-(`list_datasettings`, `list_params`, `list_jsdmParams`) may have shifted
-along with the `model` argument addition -- confirm before relying on
-details above.
+**Simulated data (`simulateOccJSDMData()`)**, as of Alex's `a9700ab` refactor, now takes an explicit `model` argument (one of `"binary"`, `"occupancy"`, `"continuous"`, `"two_stage"`) and returns `list(true_params, data_list)` where **`data_list` is already in `runOccJSDM()`-ready form**: `list(info, OTU, traits)` (no separate conversion step needed anymore -- see "Package layout" above for what changed and what's now stale as a result). `true_params` still carries the true occupancy/detection states and coefficients (`jsdmParams_true`, `beta_theta_true`, `z_true`, and for `"two_stage"` also `w_true`/`p_true`/`q_true`), and read counts for `"two_stage"` are generated the same way as before: `y = round(exp(logy1) - 1)` where `logy1` is drawn per-replicate from `Normal(mu1, sigma1)` (true detections), `Normal(mu0, sigma0)` (false-positive/contamination), or `0` (no reads) -- `mu1`/`sigma1`/`mu0`/`sigma0` still come from `list_params` (defaulting to `5`, `1`, `1.5`, `1`). **This section needs re-verification against the current source** (`R/simulateData.R`) next time simulated data is used, since the exact argument list (`list_datasettings`, `list_params`, `list_jsdmParams`) may have shifted along with the `model` argument addition -- confirm before relying on details above.
 
 ## Known issues in existing code
 
-**SIX GROUP A (INFERENCE-AFFECTING) ITEMS REMAIN, as of 29 July 2026.**
-Three were open before the re-run; the 29 July R = 100 re-run added
-three more (items 4-6: `beta_theta`'s residual undercoverage, `theta0`
-overcovering, and `B0`'s doubled bias). Alex's 28-29 July pulls fixed
-three earlier ones and wired a fourth; a fifth turned out not to be a
-defect. Alex's 28-29 July pulls fixed three (`sigma_h`, the
-collection-covariate prior mean, the OpenMP RNG race) and wired a
-fourth; a fifth turned out not to be a defect at all. `TODO.md`'s
-**Fixed bugs** section is the authoritative record. Currently open in
-group A:
+**SIX GROUP A (INFERENCE-AFFECTING) ITEMS REMAIN, as of 29 July 2026.** Three were open before the re-run; the 29 July R = 100 re-run added three more (items 4-6: `beta_theta`'s residual undercoverage, `theta0` overcovering, and `B0`'s doubled bias). Alex's 28-29 July pulls fixed three earlier ones and wired a fourth; a fifth turned out not to be a defect. Alex's 28-29 July pulls fixed three (`sigma_h`, the collection-covariate prior mean, the OpenMP RNG race) and wired a fourth; a fifth turned out not to be a defect at all. `TODO.md`'s **Fixed bugs** section is the authoritative record. Currently open in group A:
 
-- **`sample_ls()` evaluates the wrong density, so the GP length-scale is
-  never recovered** (TODO.md A.1). Found 27 July while writing the
-  tier-1 tests. `idx_ls` walks to the top of `l_s_grid` and stays there
-  for every true `l_s` tried, across seeds. Biases every
-  `useSpatField = TRUE` fit. **Note the diagnosis changed**: this was
-  originally filed as "`sigma_s` is never sampled", with a proposed fix
-  of sampling it. That diagnosis was wrong and the fix is disproven --
-  the defect is in the density being scored, which is a modelling
-  change, not a parameter addition. See TODO.md A.1 "What was ruled
-  out".
-- **`reparamFactorModel()` breaks the identity that residual covariance
-  = `t(L) %*% L`** (TODO.md A.2), inflating reported species
-  correlations. **Disputed by Alex** -- see "Open disagreement" under
-  Current work status.
-- **Choose the informative Stage 2 priors** (TODO.md A.3). Not a bug: an
-  open modelling decision. See the correction below.
+- **`sample_ls()` evaluates the wrong density, so the GP length-scale is never recovered** (TODO.md A.1). Found 27 July while writing the tier-1 tests. `idx_ls` walks to the top of `l_s_grid` and stays there for every true `l_s` tried, across seeds. Biases every `useSpatField = TRUE` fit. **Note the diagnosis changed**: this was originally filed as "`sigma_s` is never sampled", with a proposed fix of sampling it. That diagnosis was wrong and the fix is disproven -- the defect is in the density being scored, which is a modelling change, not a parameter addition. See TODO.md A.1 "What was ruled out".
+- **`reparamFactorModel()` breaks the identity that residual covariance = `t(L) %*% L`** (TODO.md A.2), inflating reported species correlations. **Disputed by Alex** -- see "Open disagreement" under Current work status.
+- **Choose the informative Stage 2 priors** (TODO.md A.3). Not a bug: an open modelling decision. See the correction below.
 
-**Correction, 29 July: the hard-coded `Beta(5, 1)` on `p` is NOT a
-bug.** An earlier version of this file asserted that it was, on the
-strength of a flat-prior experiment that moved `p`'s coverage from 0.903
-to 0.944. That experiment was misleading. `p` and `q` enter
-`sample_pq_cpp()` perfectly symmetrically and no `p > q` constraint
-exists, so the likelihood is invariant under swapping *(collected, p)*
-with *(not collected, q)* -- the label-switching multimodality of
-false-positive occupancy models. The informative prior is what selects
-the correct mode; flattening it leaves the model unidentified, and only
-appeared to work because `p` was well separated from `q` in that
-scenario. Doug raised this and was right. What `low_information`
-measures is the *cost of the identifiability constraint*, not a defect.
-**Do not "fix" this by flattening the prior.**
+**Correction, 29 July: the hard-coded `Beta(5, 1)` on `p` is NOT a bug.** An earlier version of this file asserted that it was, on the strength of a flat-prior experiment that moved `p`'s coverage from 0.903 to 0.944. That experiment was misleading. `p` and `q` enter `sample_pq_cpp()` perfectly symmetrically and no `p > q` constraint exists, so the likelihood is invariant under swapping *(collected, p)* with *(not collected, q)* -- the label-switching multimodality of false-positive occupancy models. The informative prior is what selects the correct mode; flattening it leaves the model unidentified, and only appeared to work because `p` was well separated from `q` in that scenario. Doug raised this and was right. What `low_information` measures is the *cost of the identifiability constraint*, not a defect. **Do not "fix" this by flattening the prior.**
 
-**Reproducibility is fixed as of 29 July** (TODO.md Fixed bugs 28).
-Closing the OpenMP race left the package unreproducible: the
-`thread_local` engines never read R's RNG state, so `set.seed()` did not
-control the sampler. `src/rng.h` (new) now seeds one shared per-thread
-`mt19937` from a base seed that `runOccJSDM()` draws from R via
-`setOccJSDMSeed()`. Three traps are documented there and worth knowing
-before touching it: a `thread_local` engine is constructed once per
-thread and needs a generation counter to re-seed; that generation must
-**not** be seed material; and `std::normal_distribution` caches the
-second Box-Muller deviate across `rng.seed()`, so it needs an explicit
-`reset()`. `arma::randn()` was never affected -- RcppArmadillo routes it
-to R's RNG via `ARMA_RNG_ALT`.
+**Reproducibility is fixed as of 29 July** (TODO.md Fixed bugs 28). Closing the OpenMP race left the package unreproducible: the `thread_local` engines never read R's RNG state, so `set.seed()` did not control the sampler. `src/rng.h` (new) now seeds one shared per-thread `mt19937` from a base seed that `runOccJSDM()` draws from R via `setOccJSDMSeed()`. Three traps are documented there and worth knowing before touching it: a `thread_local` engine is constructed once per thread and needs a generation counter to re-seed; that generation must **not** be seed material; and `std::normal_distribution` caches the second Box-Muller deviate across `rng.seed()`, so it needs an explicit `reset()`. `arma::randn()` was never affected -- RcppArmadillo routes it to R's RNG via `ARMA_RNG_ALT`.
 
-**OpenMP is inert on the macOS dev machine.**
-`R CMD config SHLIB_OPENMP_CXXFLAGS` is empty, so
-`$(SHLIB_OPENMP_CXXFLAGS)` in `src/Makevars` expands to nothing, every
-`#pragma omp` compiles to a no-op, and
-`nm -u src/occJSDM.so | grep -c '__kmpc\|_GOMP'` returns 0 -- despite
-`libomp.dylib` showing in `otool -L` (pulled in by R's own libraries).
-Consequences: the OpenMP race could never have manifested locally,
-thread count does not affect results here, and timings measured on this
-machine say nothing about a Linux build. Filed under TODO.md group D.
-**Check this before profiling or investing in the parallelism items.**
+**OpenMP is inert on the macOS dev machine.** `R CMD config SHLIB_OPENMP_CXXFLAGS` is empty, so `$(SHLIB_OPENMP_CXXFLAGS)` in `src/Makevars` expands to nothing, every `#pragma omp` compiles to a no-op, and `nm -u src/occJSDM.so | grep -c '__kmpc\|_GOMP'` returns 0 -- despite `libomp.dylib` showing in `otool -L` (pulled in by R's own libraries). Consequences: the OpenMP race could never have manifested locally, thread count does not affect results here, and timings measured on this machine say nothing about a Linux build. Filed under TODO.md group D. **Check this before profiling or investing in the parallelism items.**
 
-One group B item is still only **partially** fixed: `thinOutput()` runs,
-but still thins 2-D posterior-mean matrices by row (dropping *sites*)
-and still drops the scalar `WAIC` (TODO.md group B item 2). The
-`computeSpeciesDetected()` residual was fully closed on 27 July (TODO.md
-Fixed bugs 23), as was the `sample_ls()` non-spatial crash regression
-(Fixed bugs 22).
+One group B item is still only **partially** fixed: `thinOutput()` runs, but still thins 2-D posterior-mean matrices by row (dropping *sites*) and still drops the scalar `WAIC` (TODO.md group B item 2). The `computeSpeciesDetected()` residual was fully closed on 27 July (TODO.md Fixed bugs 23), as was the `sample_ls()` non-spatial crash regression (Fixed bugs 22).
 
-The `simulateOccJSDMData(model = "occupancy")` bug was pre-fixed in
-Alex's `0abb104`.
+The `simulateOccJSDMData(model = "occupancy")` bug was pre-fixed in Alex's `0abb104`.
 
-Prior session notes (kept for reference but now stale): -
-**`model`-used-before-assignment bug in `runOccJSDM()` is fixed**
-(superseding the earlier note this replaced):
-`model <- inferDataModel(data)` is now assigned at line \~439, before
-its first use. Confirmed by successfully running `runOccJSDM()` live
-this session on both a working two-stage-derived occupancy dataset and,
-separately, a JSDM-only dataset that got well past this point before
-hitting the *different* `M`-not-found bug below. `TODO.md` item 1.2
-already marked fixed. - **`runOccJSDM() object 'M' not found` bug for
-JSDM-only data is fixed** (Alex, commit `c1f9cec` "Fix M"): the "samples
-per site" `else` branch (`model %in% c("binary","continuous")`, no
-`Site` column) now sets `M <- NULL` alongside the existing
-`siteNames <- 1:n` (`R/runOccJSDM.R` \~565); `K` was already `NULL` in
-this case via the separate "pcr per marker" block's own `else` branch.
-The final `infos` list references both unconditionally but tolerates
-`NULL`. Same commit also added an internal `computeSpeciesDetected_M()`
-helper (`R/output.R`, `@noRd`) alongside the pre-existing
-`computeSpeciesDetected()`, plus a `set.seed(1)` inside
-`computeSpeciesDetected()` for reproducibility -- purpose/caller of the
-new function not yet investigated. TODO.md's former item 1.7 for this
-bug has been removed accordingly (items renumbered; the remaining open
-simulate-side bug is now item 1.8, formerly 1.8 too but content
-unchanged). - **`simulateOccJSDMData(model = "occupancy")` errors with
-`arguments imply differing number of rows: 0, N`.** Its `data_info`
-construction (`R/simulateData.R`) binds
-`Site = idx_z_k`/`X_psi = X_psi[idx_z_k,]`/`Xs = Xs[idx_z_k,]`, but
-`idx_z_k` is only populated by `createDataIdx()` when `twostage = TRUE`
--- for `model == "occupancy"` (`twostage = FALSE`), `idx_z_k` is `NULL`.
-Confirmed live. This is now `TODO.md` item 1.2 (renumbered as of
-`1c25529`, which pruned several other resolved Alex-to-do items -- see
-"Current work status"; the only other remaining Alex-to-do item, 1.1, is
-"Allow for different primers per sample", unrelated to this bug). Fix:
-use `idx_z_w` (populated regardless of `twostage`) instead of `idx_z_k`.
-**Workaround**: simulate via `model = "two_stage"` with trivial `P = 1`,
-`K = rep(1, N)`, which routes through the working `idx_z_k`-populated
-two-stage path and, once fed to `runOccJSDM()`, gets classified as
-classical occupancy (`Site` repeats, `Sample` doesn't) since `K=P=1`
-collapses detection to one Bernoulli draw per sample. **Still open** as
-of this session (July 24 2026) -- not addressed by `1c25529` or any
-other recent commit. - **`computeSpeciesDetected_M()` no longer exists**
-(superseding the earlier note below about its purpose being
-uninvestigated): as of `1c25529`, `plotCumulativeSpeciesDetections()`
-was reworked to support both `M` and `K` on the x-axis via a single new
-`computeSpeciesDetected(beta_theta_output, p_output, M, K, primer, alpha)`
-that bootstraps Stage 1 (`w`, from `beta_theta_output`) and Stage 2
-(detection, from `p_output`) draws directly per species/sample/replicate
-(`B = 200`), replacing the old Beta-approximation approach entirely. The
-function now requires `fitModel$infos$model == "two_stage"` (errors
-otherwise). See "Current work status" for full detail. -
-`predictOccupancyProbs()` was renamed `predictNewSites()` (plus a new
-helper `createSpatialPredMatrix()`) in Alex's `a9700ab` refactor.
-**Status of the previously-flagged `X_ord` bug is now unclear** -- see
-the more specific note below (this bullet superseded). -
-`computeAverageCollectionProbs()` and
-`computeConditionalSamplePresenceProbs()` were confirmed working (via
-live testing against fitted model objects) as long as the fitted model
-actually populated `results_output$theta_output` /
-`results_output$w_output` (always true for a fresh `runOccJSDM()` fit
-with default `summarisedLatentPresences = TRUE`). - `computeMinESS()`
-(`R/diagnostics.R`) -- the `ESS_beta0psi`-not-populated bug (introduced
-in `af5ebe3`, TODO.md item 1.5) **has been fixed** by Alex in `a9700ab`:
-`ESS_beta0psi` is now computed from `beta0_psi_output` directly and
-included in the final `min()`, and the function also guards against
-`NULL`/zero-row edge cases (`beta_theta_output` absent,
-`beta_psi_output` with 1 row, `L_output` with 0 rows). TODO.md item
-removed accordingly. - `plotFPTPStage2Rates()` (`R/output.R:748-824`)
-**ignores its own `primerName` argument**: `p_output`/`q_output` are 4-D
-arrays `[primer, species, niter, nchain]`, but the function does
-`apply(p_output, 2, quantile, ...)`, which pools over
-primer/iteration/chain regardless of `primerName` (which is only ever
-used to set a default, never to index/subset the array). There's also
-dead code -- `idx_speciesprimer <- stringr::str_match(...)` extracts
-species/primer indices from rownames but the result is never used. Net
-effect: the plotted CI is always pooled across all primers no matter
-what `primerName` is passed. Confirmed live (changing `primerName`
-produces an identical plot). **FIXED 27 July 2026** (TODO.md Fixed bugs
-21): `p_output`/`q_output` are now subset to the requested primer before
-quantiles are computed, `primerName` is matched against `fitModel`
-(accepting integer or character), and an unknown primer errors. This
-supersedes both the earlier "not yet in TODO.md" note and the fix
-suggestion below. Fix: subset
-`p_output[primer_idx, , , ]`/`q_output[primer_idx, , , ]` (matching
-`primerName` to `fitModel$infos$primerNames`) before computing
-quantiles. - Trait-reading fragility in `runOccJSDM()`: it checks
-`data$traits` via partial name-matching against `data$traitsMatrix`
-(relying on `$`'s partial matching, since `traitsMatrix` is the only
-element of `data` starting with `"traits"`), not the unused
-`traitsMatrix` function argument. Still flagged as TODO.md item (Alex to
-dos). - Ordination (TODO.md former item 1.1) has been addressed:
-`returnOrdination()`/`plotOrdinationScores()` were renamed/cleaned up as
-`returnOrdinationScores()`/`plotOrdinationScores()`, and new
-`returnFactorLoadings()`/`plotFactorLoadings()` (plus internal
-`returnFactorLoadings_jsdm()`/`plotFactorLoadings_jsdm()` in
-`R/jsdmfun.R`) now cover species loading scores, which were previously
-missing. Removed from TODO.md accordingly. - Counts model
-(`data_type == "counts"`, auto-detected from `OTU` values) is
-unsupported downstream: `stop("Counts model not supported yet")`. No
-explicit user-facing `count=` argument exists (see TODO.md item under
-MEE paper / Alex to dos, "ability to analyse count data"). - MCMC
-diagnostics (Rhat/ESS/trace plots) ported from `~/src/Cowork/GLGS-eDNA`
-into `R/diagnostics.R` -- see "MCMC diagnostics" section below. This is
-now **committed and documented** (vignette section + `NAMESPACE`/`man/`
-regenerated), not stashed/dropped as an earlier version of this memory
-file claimed -- see "Current work status" below. -
-`returnLatentPresences()`'s roxygen `@note` (`R/output.R` \~line
-1671-1675) still describes an old bug (referencing an undefined
-`varPart_output`), but the current function body (verified by reading it
-directly) does **not** actually reference `varPart_output` anywhere and
-runs successfully in the vignette
-(`returnLatentPresences(fitmodel, idx_species = 1)`, confirmed via live
-rendering). The bug appears already fixed; only the stale `@note`
-comment needs deleting. - `predictNewSites()`'s current roxygen docs
-(`R/output.R:1401-1422`) no longer contain an `@note` about the `X_ord`
-bug previously flagged in this memory file -- unclear whether the
-underlying bug is actually fixed or just undocumented; **needs live
-testing to confirm** before trusting either way.
+Prior session notes (kept for reference but now stale): - **`model`-used-before-assignment bug in `runOccJSDM()` is fixed** (superseding the earlier note this replaced): `model <- inferDataModel(data)` is now assigned at line \~439, before its first use. Confirmed by successfully running `runOccJSDM()` live this session on both a working two-stage-derived occupancy dataset and, separately, a JSDM-only dataset that got well past this point before hitting the *different* `M`-not-found bug below. `TODO.md` item 1.2 already marked fixed. - **`runOccJSDM() object 'M' not found` bug for JSDM-only data is fixed** (Alex, commit `c1f9cec` "Fix M"): the "samples per site" `else` branch (`model %in% c("binary","continuous")`, no `Site` column) now sets `M <- NULL` alongside the existing `siteNames <- 1:n` (`R/runOccJSDM.R` \~565); `K` was already `NULL` in this case via the separate "pcr per marker" block's own `else` branch. The final `infos` list references both unconditionally but tolerates `NULL`. Same commit also added an internal `computeSpeciesDetected_M()` helper (`R/output.R`, `@noRd`) alongside the pre-existing `computeSpeciesDetected()`, plus a `set.seed(1)` inside `computeSpeciesDetected()` for reproducibility -- purpose/caller of the new function not yet investigated. TODO.md's former item 1.7 for this bug has been removed accordingly (items renumbered; the remaining open simulate-side bug is now item 1.8, formerly 1.8 too but content unchanged). - **`simulateOccJSDMData(model = "occupancy")` errors with `arguments imply differing number of rows: 0, N`.** Its `data_info` construction (`R/simulateData.R`) binds `Site = idx_z_k`/`X_psi = X_psi[idx_z_k,]`/`Xs = Xs[idx_z_k,]`, but `idx_z_k` is only populated by `createDataIdx()` when `twostage = TRUE` -- for `model == "occupancy"` (`twostage = FALSE`), `idx_z_k` is `NULL`. Confirmed live. This is now `TODO.md` item 1.2 (renumbered as of `1c25529`, which pruned several other resolved Alex-to-do items -- see "Current work status"; the only other remaining Alex-to-do item, 1.1, is "Allow for different primers per sample", unrelated to this bug). Fix: use `idx_z_w` (populated regardless of `twostage`) instead of `idx_z_k`. **Workaround**: simulate via `model = "two_stage"` with trivial `P = 1`, `K = rep(1, N)`, which routes through the working `idx_z_k`-populated two-stage path and, once fed to `runOccJSDM()`, gets classified as classical occupancy (`Site` repeats, `Sample` doesn't) since `K=P=1` collapses detection to one Bernoulli draw per sample. **Still open** as of this session (July 24 2026) -- not addressed by `1c25529` or any other recent commit. - **`computeSpeciesDetected_M()` no longer exists** (superseding the earlier note below about its purpose being uninvestigated): as of `1c25529`, `plotCumulativeSpeciesDetections()` was reworked to support both `M` and `K` on the x-axis via a single new `computeSpeciesDetected(beta_theta_output, p_output, M, K, primer, alpha)` that bootstraps Stage 1 (`w`, from `beta_theta_output`) and Stage 2 (detection, from `p_output`) draws directly per species/sample/replicate (`B = 200`), replacing the old Beta-approximation approach entirely. The function now requires `fitModel$infos$model == "two_stage"` (errors otherwise). See "Current work status" for full detail. - `predictOccupancyProbs()` was renamed `predictNewSites()` (plus a new helper `createSpatialPredMatrix()`) in Alex's `a9700ab` refactor. **Status of the previously-flagged `X_ord` bug is now unclear** -- see the more specific note below (this bullet superseded). - `computeAverageCollectionProbs()` and `computeConditionalSamplePresenceProbs()` were confirmed working (via live testing against fitted model objects) as long as the fitted model actually populated `results_output$theta_output` / `results_output$w_output` (always true for a fresh `runOccJSDM()` fit with default `summarisedLatentPresences = TRUE`). - `computeMinESS()` (`R/diagnostics.R`) -- the `ESS_beta0psi`-not-populated bug (introduced in `af5ebe3`, TODO.md item 1.5) **has been fixed** by Alex in `a9700ab`: `ESS_beta0psi` is now computed from `beta0_psi_output` directly and included in the final `min()`, and the function also guards against `NULL`/zero-row edge cases (`beta_theta_output` absent, `beta_psi_output` with 1 row, `L_output` with 0 rows). TODO.md item removed accordingly. - `plotFPTPStage2Rates()` (`R/output.R:748-824`) **ignores its own `primerName` argument**: `p_output`/`q_output` are 4-D arrays `[primer, species, niter, nchain]`, but the function does `apply(p_output, 2, quantile, ...)`, which pools over primer/iteration/chain regardless of `primerName` (which is only ever used to set a default, never to index/subset the array). There's also dead code -- `idx_speciesprimer <- stringr::str_match(...)` extracts species/primer indices from rownames but the result is never used. Net effect: the plotted CI is always pooled across all primers no matter what `primerName` is passed. Confirmed live (changing `primerName` produces an identical plot). **FIXED 27 July 2026** (TODO.md Fixed bugs 21): `p_output`/`q_output` are now subset to the requested primer before quantiles are computed, `primerName` is matched against `fitModel` (accepting integer or character), and an unknown primer errors. This supersedes both the earlier "not yet in TODO.md" note and the fix suggestion below. Fix: subset `p_output[primer_idx, , , ]`/`q_output[primer_idx, , , ]` (matching `primerName` to `fitModel$infos$primerNames`) before computing quantiles. - Trait-reading fragility in `runOccJSDM()`: it checks `data$traits` via partial name-matching against `data$traitsMatrix` (relying on `$`'s partial matching, since `traitsMatrix` is the only element of `data` starting with `"traits"`), not the unused `traitsMatrix` function argument. Still flagged as TODO.md item (Alex to dos). - Ordination (TODO.md former item 1.1) has been addressed: `returnOrdination()`/`plotOrdinationScores()` were renamed/cleaned up as `returnOrdinationScores()`/`plotOrdinationScores()`, and new `returnFactorLoadings()`/`plotFactorLoadings()` (plus internal `returnFactorLoadings_jsdm()`/`plotFactorLoadings_jsdm()` in `R/jsdmfun.R`) now cover species loading scores, which were previously missing. Removed from TODO.md accordingly. - Counts model (`data_type == "counts"`, auto-detected from `OTU` values) is unsupported downstream: `stop("Counts model not supported yet")`. No explicit user-facing `count=` argument exists (see TODO.md item under MEE paper / Alex to dos, "ability to analyse count data"). - MCMC diagnostics (Rhat/ESS/trace plots) ported from `~/src/Cowork/GLGS-eDNA` into `R/diagnostics.R` -- see "MCMC diagnostics" section below. This is now **committed and documented** (vignette section + `NAMESPACE`/`man/` regenerated), not stashed/dropped as an earlier version of this memory file claimed -- see "Current work status" below. - `returnLatentPresences()`'s roxygen `@note` (`R/output.R` \~line 1671-1675) still describes an old bug (referencing an undefined `varPart_output`), but the current function body (verified by reading it directly) does **not** actually reference `varPart_output` anywhere and runs successfully in the vignette (`returnLatentPresences(fitmodel, idx_species = 1)`, confirmed via live rendering). The bug appears already fixed; only the stale `@note` comment needs deleting. - `predictNewSites()`'s current roxygen docs (`R/output.R:1401-1422`) no longer contain an `@note` about the `X_ord` bug previously flagged in this memory file -- unclear whether the underlying bug is actually fixed or just undocumented; **needs live testing to confirm** before trusting either way.
 
 ## MCMC diagnostics
 
-`R/diagnostics.R` has, in addition to the pre-existing unexported
-`computeESSparams()`/`computeMinESS()`:
+`R/diagnostics.R` has, in addition to the pre-existing unexported `computeESSparams()`/`computeMinESS()`:
 
-- `as4d()` (internal) -- pads 2D (`[niter, nchain]`, scalar params like
-  `theta0`/`sigmab`) or 3D (`[dim1, niter, nchain]`, e.g. species-only
-  `B0_output`) posterior arrays up to the common
-  `[dim1, dim2, niter, nchain]` shape, so every downstream function can
-  treat any parameter uniformly regardless of how many index dimensions
-  it has.
-- `computeRhat(param_output)` -- per-element Gelman-Rubin Rhat via
-  `coda::gelman.diag()`; returns `NA` for elements with a constant
-  (zero-variance) chain or fewer than 2 chains, since `gelman.diag()`
-  errors in those cases. **`@noRd` (unexported)** -- de-exported as of
-  this session because it's redundant with
-  `returnConvergenceDiagnostics()` as a user-facing function; remains an
-  internal helper.
-- `summarisePosterior(param_output, param_name, dimnames1, dimnames2)`
-  -- tidy tibble (`param`, `idx1`, `idx2`, `label1`, `label2`, `mean`,
-  `sd`, `q2.5`, `q97.5`, `rhat`, `ess`) for every element of a posterior
-  array, pooling draws across chains for the summary stats. **`@noRd`
-  (unexported)**, de-exported for the same reason as `computeRhat()`.
-- `paramOutputToLong()` (internal) -- long-format tibble of every draw,
-  feeding `plotTraceplot()`.
-- `plotTraceplot(param_output, param_name, dimnames1, dimnames2)`
-  (exported) -- faceted per-chain ggplot trace plots. Expects a 4-D
-  array (`[covariate/primer, species, niter, nchain]`); to plot a single
-  covariate/primer, slice it out with `drop = FALSE` first (see the
-  vignette's `extractCovariateSlice()` helper below).
-- `returnConvergenceDiagnostics(fitmodel)` (exported) -- assembles one
-  tidy table across `beta0_psi` (`jsdm_output$B0_output`), `beta_psi`
-  (`jsdm_output$B_output`), `beta_theta`, `p`, `q`, `theta0`, labelled
-  with species/covariate/primer names from
-  `fitmodel$infos$speciesNames`/`colnames(fitmodel$X_psi)`/`colnames(fitmodel$X_theta)`/`fitmodel$infos$primerNames`.
-  Components absent from a given fit (e.g. `beta_theta`/`p`/`q` for a
-  JSDM-only model) are silently skipped. Only exported user-facing
-  function for tabular diagnostics (calls
-  `computeRhat()`/`summarisePosterior()` internally).
+- `as4d()` (internal) -- pads 2D (`[niter, nchain]`, scalar params like `theta0`/`sigmab`) or 3D (`[dim1, niter, nchain]`, e.g. species-only `B0_output`) posterior arrays up to the common `[dim1, dim2, niter, nchain]` shape, so every downstream function can treat any parameter uniformly regardless of how many index dimensions it has.
+- `computeRhat(param_output)` -- per-element Gelman-Rubin Rhat via `coda::gelman.diag()`; returns `NA` for elements with a constant (zero-variance) chain or fewer than 2 chains, since `gelman.diag()` errors in those cases. **`@noRd` (unexported)** -- de-exported as of this session because it's redundant with `returnConvergenceDiagnostics()` as a user-facing function; remains an internal helper.
+- `summarisePosterior(param_output, param_name, dimnames1, dimnames2)` -- tidy tibble (`param`, `idx1`, `idx2`, `label1`, `label2`, `mean`, `sd`, `q2.5`, `q97.5`, `rhat`, `ess`) for every element of a posterior array, pooling draws across chains for the summary stats. **`@noRd` (unexported)**, de-exported for the same reason as `computeRhat()`.
+- `paramOutputToLong()` (internal) -- long-format tibble of every draw, feeding `plotTraceplot()`.
+- `plotTraceplot(param_output, param_name, dimnames1, dimnames2)` (exported) -- faceted per-chain ggplot trace plots. Expects a 4-D array (`[covariate/primer, species, niter, nchain]`); to plot a single covariate/primer, slice it out with `drop = FALSE` first (see the vignette's `extractCovariateSlice()` helper below).
+- `returnConvergenceDiagnostics(fitmodel)` (exported) -- assembles one tidy table across `beta0_psi` (`jsdm_output$B0_output`), `beta_psi` (`jsdm_output$B_output`), `beta_theta`, `p`, `q`, `theta0`, labelled with species/covariate/primer names from `fitmodel$infos$speciesNames`/`colnames(fitmodel$X_psi)`/`colnames(fitmodel$X_theta)`/`fitmodel$infos$primerNames`. Components absent from a given fit (e.g. `beta_theta`/`p`/`q` for a JSDM-only model) are silently skipped. Only exported user-facing function for tabular diagnostics (calls `computeRhat()`/`summarisePosterior()` internally).
 
-**Only `plotTraceplot()` and `returnConvergenceDiagnostics()` are
-exported/user-facing** (confirmed in `NAMESPACE`);
-`computeRhat()`/`summarisePosterior()`/`computeESSparams()`/`computeMinESS()`/`as4d()`/`paramOutputToLong()`
-are all internal.
+**Only `plotTraceplot()` and `returnConvergenceDiagnostics()` are exported/user-facing** (confirmed in `NAMESPACE`); `computeRhat()`/`summarisePosterior()`/`computeESSparams()`/`computeMinESS()`/`as4d()`/`paramOutputToLong()` are all internal.
 
-Not ported: `compare_to_true()`/`plot_estimated_vs_true()` from
-GLGS-eDNA, since those need `true_params` from a simulation rather than
-just a fitted model -- left as a possible future item. No testthat test
-exists yet for `R/diagnostics.R`.
+Not ported: `compare_to_true()`/`plot_estimated_vs_true()` from GLGS-eDNA, since those need `true_params` from a simulation rather than just a fitted model -- left as a possible future item. No testthat test exists yet for `R/diagnostics.R`.
 
-`DESCRIPTION` has `coda`, `purrr`, `tibble` in `Imports` (this also
-fixed a pre-existing gap: `coda::` was already called in the old
-`computeESSparams()`/`computeMinESS()` but `coda` was never listed as a
-dependency).
+`DESCRIPTION` has `coda`, `purrr`, `tibble` in `Imports` (this also fixed a pre-existing gap: `coda::` was already called in the old `computeESSparams()`/`computeMinESS()` but `coda` was never listed as a dependency).
 
-`vignettes/occJSDM.Rmd`'s **"Model diagnostics" section** (added and
-committed this session, `882cffe`) demonstrates
-`returnConvergenceDiagnostics()` (with a table explaining each
-coefficient block and its `idx1`/`idx2`/`label1`/`label2` columns:
-`beta0_psi` species intercepts, `beta_psi` occupancy covariate slopes,
-`beta_theta` Stage 1/field-collection covariate effects including an
-auto-added `(Intercept)` column, `p`/`q` Stage 2/lab-PCR true-detection
-vs. false-positive rates per primer, `theta0` per-species Stage 1
-false-positive collection rate) and a chunk flagging parameters
-exceeding `Rhat > 1.01` or `ess < 400`. A separate **"Traceplots for a
-single covariate" subsection** (moved by Doug in a follow-up commit,
-`e817bd1`, from right after "Model diagnostics" to the end of the
-vignette, after the "Latent presence table" section and before
-"Prediction at new sites") provides a reusable
-`extractCovariateSlice(param_output, covNames, covName)` helper (matches
-a covariate/primer name, slices with `drop = FALSE` to keep the array
-4-D) plus a lookup table mapping each covariate/parameter type to its
-column-names source and coefficient array in `results_output`:
+`vignettes/occJSDM.Rmd`'s **"Model diagnostics" section** (added and committed this session, `882cffe`) demonstrates `returnConvergenceDiagnostics()` (with a table explaining each coefficient block and its `idx1`/`idx2`/`label1`/`label2` columns: `beta0_psi` species intercepts, `beta_psi` occupancy covariate slopes, `beta_theta` Stage 1/field-collection covariate effects including an auto-added `(Intercept)` column, `p`/`q` Stage 2/lab-PCR true-detection vs. false-positive rates per primer, `theta0` per-species Stage 1 false-positive collection rate) and a chunk flagging parameters exceeding `Rhat > 1.01` or `ess < 400`. A separate **"Traceplots for a single covariate" subsection** (moved by Doug in a follow-up commit, `e817bd1`, from right after "Model diagnostics" to the end of the vignette, after the "Latent presence table" section and before "Prediction at new sites") provides a reusable `extractCovariateSlice(param_output, covNames, covName)` helper (matches a covariate/primer name, slices with `drop = FALSE` to keep the array 4-D) plus a lookup table mapping each covariate/parameter type to its column-names source and coefficient array in `results_output`:
 
 | Covariate/parameter | Column names | Coefficient array |
 |----|----|----|
@@ -403,1497 +77,282 @@ column-names source and coefficient array in `results_output`:
 
 ## Model inference logic (`inferDataModel()`, `R/runOccJSDM.R:110-155`)
 
-`runOccJSDM()` classifies the fitted model type based on **row-level
-duplication of `Site`/`Sample` in `data$info`**, not directly on
-M/K/P: - No repeated values in `Site` → JSDM-only (M=K=P=1). - `Site`
-repeats, `Sample` does not → classical occupancy model (M\>1, K=P=1). -
-`Sample` repeats (due to K\>1 and/or P\>1) → two-stage eDNA model,
-including the case M=1 with K\>1 or P\>1 (a single site sampled with
-multiple PCR replicates/primers).
+`runOccJSDM()` classifies the fitted model type based on **row-level duplication of `Site`/`Sample` in `data$info`**, not directly on M/K/P: - No repeated values in `Site` → JSDM-only (M=K=P=1). - `Site` repeats, `Sample` does not → classical occupancy model (M\>1, K=P=1). - `Sample` repeats (due to K\>1 and/or P\>1) → two-stage eDNA model, including the case M=1 with K\>1 or P\>1 (a single site sampled with multiple PCR replicates/primers).
 
 ## Output functions of note
 
-- `returnVariancePartitioning(fitModel)` -- per-species table of (Env,
-  Spatial, Biotic, StDev) variance fractions; feeds
-  `plotVariancePartitioning()`.
-- `returnResidualCorrelationMatrix(fitModel, confidence = .95)` --
-  returns a 3 × S × S array (quantile × species × species) of posterior
-  credible intervals for pairwise residual correlations. The 50% slice
-  gives the median correlation matrix; comparing bounds' signs gives a
-  significance flag.
-- `plotCumulativeSpeciesDetections(fitModel, K, primer = 0, alpha = .95)`
-  -- credible interval for cumulative species detected as a function of
-  PCR replicates (K), via bootstrapped per-species Beta-distributed
-  detection probabilities. No M-based (sample/visit-level) equivalent
-  exists yet (TODO.md, MEE paper / Alex to dos).
-- Ordination is now more complete (as of Alex's `a9700ab` refactor):
-  `returnOrdinationScores()`/`plotOrdinationScores()` (renamed from
-  `returnOrdination()`) cover site factor scores, and new
-  `returnFactorLoadings()`/`plotFactorLoadings()` cover species loading
-  scores -- both exported with roxygen docs. The former TODO.md item
-  calling for this has been removed accordingly.
+- `returnVariancePartitioning(fitModel)` -- per-species table of (Env, Spatial, Biotic, StDev) variance fractions; feeds `plotVariancePartitioning()`.
+- `returnResidualCorrelationMatrix(fitModel, confidence = .95)` -- returns a 3 × S × S array (quantile × species × species) of posterior credible intervals for pairwise residual correlations. The 50% slice gives the median correlation matrix; comparing bounds' signs gives a significance flag.
+- `plotCumulativeSpeciesDetections(fitModel, K, primer = 0, alpha = .95)` -- credible interval for cumulative species detected as a function of PCR replicates (K), via bootstrapped per-species Beta-distributed detection probabilities. No M-based (sample/visit-level) equivalent exists yet (TODO.md, MEE paper / Alex to dos).
+- Ordination is now more complete (as of Alex's `a9700ab` refactor): `returnOrdinationScores()`/`plotOrdinationScores()` (renamed from `returnOrdination()`) cover site factor scores, and new `returnFactorLoadings()`/`plotFactorLoadings()` cover species loading scores -- both exported with roxygen docs. The former TODO.md item calling for this has been removed accordingly.
 
 ## Editing the planning docs
 
-**Do not hard-wrap `TODO.md`, `PLAN.md` or `AGENTS.md`. Write each
-paragraph as a single line. And do not use em-dashes anywhere: use a
-plain double hyphen.**
+**Do not hard-wrap `TODO.md`, `PLAN.md` or `AGENTS.md`. Write each paragraph as a single line. And do not use em-dashes anywhere: use a plain double hyphen.**
 
 Changed 30 July 2026, replacing a 72-column rule that did not work.
 
-**Why the old rule failed.** Doug edits these in RStudio's *Visual* mode,
-which rewrites a file to canonical form on every save. While the wrap was
-set to 72 columns, text written by hand or by an agent was reflowed on the
-next open, producing a diff nobody authored, repeatedly. Wrapping "to 72"
-is not sufficient: RStudio greedy-fills each line to the column limit, so
-a break placed even one word early gets pulled back, cascading through the
-rest of the paragraph.
+**Why the old rule failed.** Doug edits these in RStudio's *Visual* mode, which rewrites a file to canonical form on every save. While the wrap was set to 72 columns, text written by hand or by an agent was reflowed on the next open, producing a diff nobody authored, repeatedly. Wrapping "to 72" is not sufficient: RStudio greedy-fills each line to the column limit, so a break placed even one word early gets pulled back, cascading through the rest of the paragraph.
 
-**And it is not fixable by matching.** Measured 30 July: feeding RStudio's
-*own output* back through pandoc changes 234 of 768 lines on `PLAN.md`,
-and no combination of flags tried (`-smart`, table extensions, ATX
-headings) got below that. RStudio's canonicalisation is not reproducible
-outside RStudio, so neither hand-wrapping nor a post-edit hook can
-converge. The fix is to remove the line-breaking step: with
-`MarkdownWrap: None` there is no algorithm left to mismatch.
+**And it is not fixable by matching.** Measured 30 July: feeding RStudio's *own output* back through pandoc changes 234 of 768 lines on `PLAN.md`, and no combination of flags tried (`-smart`, table extensions, ATX headings) got below that. RStudio's canonicalisation is not reproducible outside RStudio, so neither hand-wrapping nor a post-edit hook can converge. The fix is to remove the line-breaking step: with `MarkdownWrap: None` there is no algorithm left to mismatch.
 
 The setting is project-level, in `occJSDM.Rproj`:
 
-```
+```         
 MarkdownWrap: None
 ```
 
-`TODO.md` no longer carries a per-document `editor_options: markdown:
-wrap:` block. Do not reinstate one.
+`TODO.md` no longer carries a per-document `editor_options: markdown: wrap:` block. Do not reinstate one.
 
-**No em-dashes.** They were the single largest driver of the old churn:
-pandoc writes an em-dash as `---`, two characters wider than `—`, so every
-wrap point after one shifted. With wrapping off they are harmless
-mechanically, but Doug has asked for them gone regardless. Use `--`.
+**No em-dashes.** They were the single largest driver of the old churn: pandoc writes an em-dash as `---`, two characters wider than `—`, so every wrap point after one shifted. With wrapping off they are harmless mechanically, but Doug has asked for them gone regardless. Use `--`.
 
-**Keep inline code spans short.** Under the old wrap, a span landing on
-the column boundary could be mangled: in `2242b34` a rewrap escaped the
-opening backtick, ate the surrounding spaces, and turned `* 2` into `- 2`
-in a note about a Cholesky log-determinant, where the factor of two was
-the entire point. Restored in `006b16f`. Less dangerous now, but still
-worth doing.
+**Keep inline code spans short.** Under the old wrap, a span landing on the column boundary could be mangled: in `2242b34` a rewrap escaped the opening backtick, ate the surrounding spaces, and turned `* 2` into `- 2` in a note about a Cholesky log-determinant, where the factor of two was the entire point. Restored in `006b16f`. Less dangerous now, but still worth doing.
 
-**The tradeoff, stated honestly.** Unwrapped paragraphs make git diffs
-paragraph-granular rather than line-granular. `git diff --word-diff`
-recovers most of the readability. This was accepted deliberately as the
-lesser cost against recurring phantom diffs.
+**The tradeoff, stated honestly.** Unwrapped paragraphs make git diffs paragraph-granular rather than line-granular. `git diff --word-diff` recovers most of the readability. This was accepted deliberately as the lesser cost against recurring phantom diffs.
 
 ## Git and build artifacts
 
-- **`src/*.o`/`src/*.so` tracking is fixed**: confirmed this session
-  (`git ls-files 'src/*.o' 'src/*.so'` returns nothing) -- no longer
-  tracked, despite the earlier note in this file claiming they were.
-  Superseded.
-- **`src/occJSDM.dll` untracking is fixed** (this session, `1b4b8ad`):
-  `.gitignore` already had `src/*.dll` (so new dll files won't get
-  re-added), but the file itself was still tracked from before that rule
-  existed (`git check-ignore` doesn't flag already-tracked files even
-  when a matching ignore rule exists). Ran
-  `git rm --cached src/occJSDM.dll` and committed -- the file remains on
-  disk locally (needed for Doug's Windows build) but git no longer
-  tracks it. Still exists in git *history* (introduced by Alex's
-  `a9700ab` commit, \~8.6 MB compiled Windows binary) -- purging history
-  would need the same reclone coordination with Alex as the
-  `traitdata_caiwang.rdata` item below.
-- `.gitignore` also changed in `a9700ab`: added a blanket `/deprecated/`
-  rule (replacing the narrower `deprecated/analysis/`).
+- **`src/*.o`/`src/*.so` tracking is fixed**: confirmed this session (`git ls-files 'src/*.o' 'src/*.so'` returns nothing) -- no longer tracked, despite the earlier note in this file claiming they were. Superseded.
+- **`src/occJSDM.dll` untracking is fixed** (this session, `1b4b8ad`): `.gitignore` already had `src/*.dll` (so new dll files won't get re-added), but the file itself was still tracked from before that rule existed (`git check-ignore` doesn't flag already-tracked files even when a matching ignore rule exists). Ran `git rm --cached src/occJSDM.dll` and committed -- the file remains on disk locally (needed for Doug's Windows build) but git no longer tracks it. Still exists in git *history* (introduced by Alex's `a9700ab` commit, \~8.6 MB compiled Windows binary) -- purging history would need the same reclone coordination with Alex as the `traitdata_caiwang.rdata` item below.
+- `.gitignore` also changed in `a9700ab`: added a blanket `/deprecated/` rule (replacing the narrower `deprecated/analysis/`).
 
 ## ggtern and plotting
 
-- `plotVariancePartitioning()` (via `plotVarPart()` in `R/jsdmfun.R`,
-  line 1466) produces a warning: "Ignoring unknown labels: L, T, R"
-  because it calls
-  `labs(L = "Environment", T = "Biotic", R = "Spatial")`. The
-  `ggplot2::labs()` function doesn't recognize ternary-axis parameters
-  `L`, `T`, `R`. **Fix**: Remove the `labs()` call entirely -- the axis
-  labels are correctly set by the aesthetic names (`Env`, `Biotic`,
-  `Spatial`) in the `aes()` mapping and don't require additional
-  specification. The theme elements `tern.axis.title.T`,
-  `tern.axis.title.L`, `tern.axis.title.R` already control styling.
+- `plotVariancePartitioning()` (via `plotVarPart()` in `R/jsdmfun.R`, line 1466) produces a warning: "Ignoring unknown labels: L, T, R" because it calls `labs(L = "Environment", T = "Biotic", R = "Spatial")`. The `ggplot2::labs()` function doesn't recognize ternary-axis parameters `L`, `T`, `R`. **Fix**: Remove the `labs()` call entirely -- the axis labels are correctly set by the aesthetic names (`Env`, `Biotic`, `Spatial`) in the `aes()` mapping and don't require additional specification. The theme elements `tern.axis.title.T`, `tern.axis.title.L`, `tern.axis.title.R` already control styling.
 
 ## `man/*.Rd` tracking
 
-`man/*.Rd` files are currently tracked and committed in git (not
-gitignored), despite an earlier commit (`dd158a9`, prior to this
-session) whose message claimed intent to "stop generating/tracking
-man/\*.Rd" -- that intent was never followed through in `.gitignore`.
-Regenerating docs via `devtools::document()` after adding/changing
-roxygen tags will produce `man/*.Rd` diffs that should be committed (or
-the gitignore situation resolved) deliberately.
+`man/*.Rd` files are currently tracked and committed in git (not gitignored), despite an earlier commit (`dd158a9`, prior to this session) whose message claimed intent to "stop generating/tracking man/\*.Rd" -- that intent was never followed through in `.gitignore`. Regenerating docs via `devtools::document()` after adding/changing roxygen tags will produce `man/*.Rd` diffs that should be committed (or the gitignore situation resolved) deliberately.
 
 ## Current work status
 
-- **This session, 30 July 2026: tested the M-ladder's leading
-  hypothesis directly, and it failed.** Doug's follow-up to the M
-  ladder: re-run beta_theta at high M with a tighter slope prior,
-  since 13.7 pointed at B_betatheta's diag(2) variance as the likely
-  cause of coverage worsening with M. 100 fits, R = 50, 97 min, 0
-  failures (`PLAN.md` 13.8-13.9).
+- **This session, 30 July 2026: tested the M-ladder's leading hypothesis directly, and it failed.** Doug's follow-up to the M ladder: re-run beta_theta at high M with a tighter slope prior, since 13.7 pointed at B_betatheta's diag(2) variance as the likely cause of coverage worsening with M. 100 fits, R = 50, 97 min, 0 failures (`PLAN.md` 13.8-13.9).
 
-  **Result: no effect.** Tightening the slope variance 4x (SD 1.41 ->
-  0.71) moved beta_theta coverage by 0.001-0.003 at both M10 and M20 --
-  noise against the 3.1% SE. Every other block was equally unmoved,
-  confirming the change was clean and isolated. The prior's width is
-  not what makes the interval overconfident.
+  **Result: no effect.** Tightening the slope variance 4x (SD 1.41 -\> 0.71) moved beta_theta coverage by 0.001-0.003 at both M10 and M20 -- noise against the 3.1% SE. Every other block was equally unmoved, confirming the change was clean and isolated. The prior's width is not what makes the interval overconfident.
 
-  **Checked a second candidate before writing this up, and it is also
-  dead**: whether the M samples at a site share a covariate value
-  (pseudo-replication), which would make added M look like independent
-  information without being any. `X_theta` is drawn independently per
-  sample, not per site (`R/simulateData.R:126`), so that is not it
-  either.
+  **Checked a second candidate before writing this up, and it is also dead**: whether the M samples at a site share a covariate value (pseudo-replication), which would make added M look like independent information without being any. `X_theta` is drawn independently per sample, not per site (`R/simulateData.R:126`), so that is not it either.
 
-  **Where this leaves item 4.** Two plausible mechanisms ruled out in
-  two days. The overconfidence has to be in the likelihood or the
-  sampler's variance computation for beta_theta -- how the latent
-  w/z state is aggregated across a site's M samples, or a numerical
-  issue in the Polya-Gamma update. That is a C++/sampler
-  investigation, filed for Alex rather than pursued further by more
-  simulation.
+  **Where this leaves item 4.** Two plausible mechanisms ruled out in two days. The overconfidence has to be in the likelihood or the sampler's variance computation for beta_theta -- how the latent w/z state is aggregated across a site's M samples, or a numerical issue in the Polya-Gamma update. That is a C++/sampler investigation, filed for Alex rather than pursued further by more simulation.
 
-  **Added a real capability along the way**:
-  `listPriors$b_betatheta_slope_var` (`R/runOccJSDM.R`), which did not
-  exist before -- this prior was hard-coded with no override, unlike
-  p/q/theta0. Default unchanged at 2, so nothing changes unless a
-  caller sets it. Verified it actually reaches the sampler before
-  trusting the null result: refit one dataset under both priors with a
-  short chain, holding data and seed fixed, and the slope posterior
-  spread shrank under the tighter setting. Also caught and fixed a bug
-  in my own first version of that test: it used `fit_fixture()`, which
-  never passes `collCovariates`, so the fixture fits an intercept-only
-  Stage 1 and there is no slope row for the override to touch --
-  `sd()` of an empty array is `NA`, and `NA >= NA` fails silently
-  rather than loudly. Fixed by building a custom `runOccJSDM()` call
-  with `collCovariates = "X_theta"`, matching what `simstudy_fit()`
-  already does.
+  **Added a real capability along the way**: `listPriors$b_betatheta_slope_var` (`R/runOccJSDM.R`), which did not exist before -- this prior was hard-coded with no override, unlike p/q/theta0. Default unchanged at 2, so nothing changes unless a caller sets it. Verified it actually reaches the sampler before trusting the null result: refit one dataset under both priors with a short chain, holding data and seed fixed, and the slope posterior spread shrank under the tighter setting. Also caught and fixed a bug in my own first version of that test: it used `fit_fixture()`, which never passes `collCovariates`, so the fixture fits an intercept-only Stage 1 and there is no slope row for the override to touch -- `sd()` of an empty array is `NA`, and `NA >= NA` fails silently rather than loudly. Fixed by building a custom `runOccJSDM()` call with `collCovariates = "X_theta"`, matching what `simstudy_fit()` already does.
 
-  **A negative result, stated plainly rather than reframed as
-  progress**: the cause of item 4 is not identified. Both experiments
-  ruled things out; neither found the answer. Worth recording as-is,
-  since the alternative -- searching for a way to call this an
-  advance -- would misrepresent where the investigation actually
-  stands.
+  **A negative result, stated plainly rather than reframed as progress**: the cause of item 4 is not identified. Both experiments ruled things out; neither found the answer. Worth recording as-is, since the alternative -- searching for a way to call this an advance -- would misrepresent where the investigation actually stands.
 
-- **This session, later still on July 29 2026: ran the M ladder Doug
-  commissioned for group B items 4-6.** 250 fits, R = 50, 189 min, 0
-  failures. Validity check passed: the `M2` arm agrees with the
-  existing base cell within noise. Results in `PLAN.md` 13.7.
+- **This session, later still on July 29 2026: ran the M ladder Doug commissioned for group B items 4-6.** 250 fits, R = 50, 189 min, 0 failures. Validity check passed: the `M2` arm agrees with the existing base cell within noise. Results in `PLAN.md` 13.7.
 
-  **Not the clean story any of us expected.** `theta0` (item 5)
-  confirmed cleanly: overcoverage falls toward nominal as M rises
-  (0.986 -> 0.944), while the matched control (`K30`, same rows, wrong
-  stage) makes it worse (0.996) -- Stage 1 under-identification,
-  pending an R = 200 confirmation before closing. `B0` (item 6)
-  partially confirmed: bias collapses with M, but the control also
-  improves it somewhat, so the mechanism is not cleanly
-  Stage-1-specific.
+  **Not the clean story any of us expected.** `theta0` (item 5) confirmed cleanly: overcoverage falls toward nominal as M rises (0.986 -\> 0.944), while the matched control (`K30`, same rows, wrong stage) makes it worse (0.996) -- Stage 1 under-identification, pending an R = 200 confirmation before closing. `B0` (item 6) partially confirmed: bias collapses with M, but the control also improves it somewhat, so the mechanism is not cleanly Stage-1-specific.
 
-  **`beta_theta` (item 4) went the other way, and that is the
-  important result.** Coverage fell *monotonically* with M -- 0.747 ->
-  0.579 -- while bias stayed small and flat. Shrinking intervals
-  around a bias that is not shrinking is the signature of a real
-  defect being exposed by more information, not fixed by it. This
-  rules out under-identification as the explanation and points back at
-  the `diag(2)` prior-variance widening (Fixed bugs 25) as needing a
-  second look, not an extension.
+  **`beta_theta` (item 4) went the other way, and that is the important result.** Coverage fell *monotonically* with M -- 0.747 -\> 0.579 -- while bias stayed small and flat. Shrinking intervals around a bias that is not shrinking is the signature of a real defect being exposed by more information, not fixed by it. This rules out under-identification as the explanation and points back at the `diag(2)` prior-variance widening (Fixed bugs 25) as needing a second look, not an extension.
 
-  **One finding the ladder was not built to answer**: `q` degrades
-  hard with `K` (0.945 -> 0.614 at `K30`), worse than any M arm. Filed
-  as group B item 7, with a hypothesis that it is the same
-  prior-driven cost-of-identifiability pattern as `beta_theta`,
-  sharpened by more PCR replicates.
+  **One finding the ladder was not built to answer**: `q` degrades hard with `K` (0.945 -\> 0.614 at `K30`), worse than any M arm. Filed as group B item 7, with a hypothesis that it is the same prior-driven cost-of-identifiability pattern as `beta_theta`, sharpened by more PCR replicates.
 
-  **Two things worth carrying forward.** First, the outcome table I
-  wrote into `PLAN.md` 13.4 in advance had four boxes and the actual
-  result fit none of them cleanly -- it was a mixture across the three
-  items. Worth remembering that a real result can be more interesting
-  than any of the outcomes anticipated, and the write-up should say so
-  plainly rather than forcing it into the nearest box. Second, the
-  sample-size projections for the ladder's own runtime were off in the
-  same direction as the main study's: I estimated ~10 min for the R =
-  4 sanity pass and it was still running at 9 min with half the work
-  left, because the arms are heterogeneous (an M20 or K30 fit costs
-  4.5x an M2 fit) and the runner's chunk barrier makes every chunk
-  wait for its slowest job, holding effective speedup to ~3.7-3.8x
-  rather than the ~4.3x measured on the uniform 10-cell grid.
+  **Two things worth carrying forward.** First, the outcome table I wrote into `PLAN.md` 13.4 in advance had four boxes and the actual result fit none of them cleanly -- it was a mixture across the three items. Worth remembering that a real result can be more interesting than any of the outcomes anticipated, and the write-up should say so plainly rather than forcing it into the nearest box. Second, the sample-size projections for the ladder's own runtime were off in the same direction as the main study's: I estimated \~10 min for the R = 4 sanity pass and it was still running at 9 min with half the work left, because the arms are heterogeneous (an M20 or K30 fit costs 4.5x an M2 fit) and the runner's chunk barrier makes every chunk wait for its slowest job, holding effective speedup to \~3.7-3.8x rather than the \~4.3x measured on the uniform 10-cell grid.
 
-- **This session, later on July 29 2026: re-ran the full R = 100 study
-  post-fix. 1000 fits, 10 cells, 0 failures, 285 min.** Results in
-  `PLAN.md` §12; the pre-fix table is retained at §12.6.
+- **This session, later on July 29 2026: re-ran the full R = 100 study post-fix. 1000 fits, 10 cells, 0 failures, 285 min.** Results in `PLAN.md` §12; the pre-fix table is retained at §12.6.
 
-  **It is a paired comparison, which is the single most useful property
-  of this run.** `draw_truth()` seeds on (scenario, replicate), so the
-  simulated data and true values are bit-identical between the pre- and
-  post-fix runs -- verified, `max|truth difference| = 0`. Every
-  difference is attributable to the code, not to sampling variation
-  between runs. **Do not change `simstudy_seed()`**: doing so forfeits
-  comparability with both existing runs, and with it statements like
-  "only 104 of 49,978 `resid_cor` decisions flipped".
+  **It is a paired comparison, which is the single most useful property of this run.** `draw_truth()` seeds on (scenario, replicate), so the simulated data and true values are bit-identical between the pre- and post-fix runs -- verified, `max|truth difference| = 0`. Every difference is attributable to the code, not to sampling variation between runs. **Do not change `simstudy_seed()`**: doing so forfeits comparability with both existing runs, and with it statements like "only 104 of 49,978 `resid_cor` decisions flipped".
 
-  **Scorecard.** `beta_theta` improved but is not fixed (0.719 -\>
-  0.766, bias +0.112 -\> +0.038): Alex's prior-mean correction was a
-  real cause but not the only one, and the residue is still flat across
-  every design axis. `resid_cor` is untouched (0.775 -\> 0.777,
-  104/49,978 decisions flipped) -- that is `reparamFactorModel()`,
-  unfixed and disputed, and the paired design makes the evidence much
-  harder to dismiss than before. `p` is unchanged and correctly so:
-  `low_information` at 0.109 is the cost of the identifiability
-  constraint, not a defect.
+  **Scorecard.** `beta_theta` improved but is not fixed (0.719 -\> 0.766, bias +0.112 -\> +0.038): Alex's prior-mean correction was a real cause but not the only one, and the residue is still flat across every design axis. `resid_cor` is untouched (0.775 -\> 0.777, 104/49,978 decisions flipped) -- that is `reparamFactorModel()`, unfixed and disputed, and the paired design makes the evidence much harder to dismiss than before. `p` is unchanged and correctly so: `low_information` at 0.109 is the cost of the identifiability constraint, not a defect.
 
-  **Two new findings, both filed as group A.** `B0`'s bias roughly
-  doubled in nine of ten cells (-0.135 -\> -0.228) while **coverage
-  stayed at 0.943** -- invisible in the headline table, visible only in
-  the bias column, which is the argument for tracking both. Nothing in
-  the four fixes should move species intercepts; the likeliest candidate
-  is the 421-line `jsdmfun.R` rewrite in the same pull. And `theta0`
-  flipped from near-nominal to overcovering at 0.978-0.985, probably the
-  widened `diag(2)` prior variance overshooting -- same edit as the
-  `beta_theta` residue, so worth examining together.
+  **Two new findings, both filed as group A.** `B0`'s bias roughly doubled in nine of ten cells (-0.135 -\> -0.228) while **coverage stayed at 0.943** -- invisible in the headline table, visible only in the bias column, which is the argument for tracking both. Nothing in the four fixes should move species intercepts; the likeliest candidate is the 421-line `jsdmfun.R` rewrite in the same pull. And `theta0` flipped from near-nominal to overcovering at 0.978-0.985, probably the widened `diag(2)` prior variance overshooting -- same edit as the `beta_theta` residue, so worth examining together.
 
-  **Timing correction.** 285 min for 1000 fits on 5 cores, flat
-  throughput throughout. The 474 min recorded for the 28 July grid was
-  wall time inflated by the laptop sleeping; its compute rate was the
-  same \~4 fits/min. I had carried that inflated figure into `PLAN.md`
-  as "measured, not projected" and built a \~8 h estimate on it --
-  wrong, and the kind of error that comes from reusing a number without
-  re-reading the trace it came from. **Throughput is not a reliable
-  throttling detector either**: cpu/wall stays flat under throttling,
-  because a throttled core still accrues a CPU-second per wall-second.
-  Only fits/min reveals it.
+  **Timing correction.** 285 min for 1000 fits on 5 cores, flat throughput throughout. The 474 min recorded for the 28 July grid was wall time inflated by the laptop sleeping; its compute rate was the same \~4 fits/min. I had carried that inflated figure into `PLAN.md` as "measured, not projected" and built a \~8 h estimate on it -- wrong, and the kind of error that comes from reusing a number without re-reading the trace it came from. **Throughput is not a reliable throttling detector either**: cpu/wall stays flat under throttling, because a throttled core still accrues a CPU-second per wall-second. Only fits/min reveals it.
 
-  Also fixed this session: `plotCollectionRates()`, which errored on
-  every input (Fixed bugs 31) and is called from an evaluated vignette
-  chunk -- so the vignette has been unbuildable, a CRAN blocker. Filed
-  for Alex's review as to-do item 3, alongside the RNG fix as item 2.
+  Also fixed this session: `plotCollectionRates()`, which errored on every input (Fixed bugs 31) and is called from an evaluated vignette chunk -- so the vignette has been unbuildable, a CRAN blocker. Filed for Alex's review as to-do item 3, alongside the RNG fix as item 2.
 
-- **This session (July 29 2026): augmented the test suite, then fixed
-  the reproducibility bug it exposed.** 95 -\> 112 tier-1 tests. No
-  study re-run yet.
+- **This session (July 29 2026): augmented the test suite, then fixed the reproducibility bug it exposed.** 95 -\> 112 tier-1 tests. No study re-run yet.
 
-  **The tests.** Regression tests for Alex's four fixes (Fixed bugs
-  24-27) plus smoke coverage for the two usable GAM exports. Two design
-  notes worth carrying forward. Fixed bugs 25 is asserted on the *prior*
-  (`b_betatheta <- rep(0, ...)` in the source) rather than on parameter
-  recovery, because recovery is stochastic and belongs in tiers 2-3,
-  whereas the prior is a fact about the code and is what actually
-  regressed. And Fixed bugs 27 uses `Beta(1, 50)` against the
-  `Beta(5, 1)` default -- a shift large enough that the posterior must
-  move on a short chain, so the test does not depend on numeric
-  reproducibility.
+  **The tests.** Regression tests for Alex's four fixes (Fixed bugs 24-27) plus smoke coverage for the two usable GAM exports. Two design notes worth carrying forward. Fixed bugs 25 is asserted on the *prior* (`b_betatheta <- rep(0, ...)` in the source) rather than on parameter recovery, because recovery is stochastic and belongs in tiers 2-3, whereas the prior is a fact about the code and is what actually regressed. And Fixed bugs 27 uses `Beta(1, 50)` against the `Beta(5, 1)` default -- a shift large enough that the posterior must move on a short chain, so the test does not depend on numeric reproducibility.
 
-  **Writing the reproducibility test found the bug, again.** This is the
-  third time an assertion has caught something that reading the code did
-  not. The intended test -- same seed, same answer -- simply failed.
-  Cause: Fixed bugs 26 closed the OpenMP data race but the replacement
-  engines never consulted R's RNG, so `set.seed()` had no effect. Two
-  fits under one seed differed by 5.09 on `B0_output`. Fixed the same
-  day; see "Known issues" above and TODO.md Fixed bugs 28.
+  **Writing the reproducibility test found the bug, again.** This is the third time an assertion has caught something that reading the code did not. The intended test -- same seed, same answer -- simply failed. Cause: Fixed bugs 26 closed the OpenMP data race but the replacement engines never consulted R's RNG, so `set.seed()` had no effect. Two fits under one seed differed by 5.09 on `B0_output`. Fixed the same day; see "Known issues" above and TODO.md Fixed bugs 28.
 
-  **Three debugging rounds, each worth recording because none was
-  visible from the code.** (1) My first fix mixed the generation counter
-  into the seed material, so the same base seed gave a different stream
-  on the second fit of a session. The tell was a max difference
-  identical to three decimals under both 1 and 4 threads --
-  deterministic carried state, not a race. (2)
-  `std::normal_distribution` caches the second Box-Muller deviate and
-  the cache survives `rng.seed()`, so reproducibility depended on the
-  parity of normal draws earlier in the process; the test passed
-  standalone and failed inside the suite, which is the signature of
-  exactly this. (3) Chasing why thread count did not matter revealed
-  that OpenMP is not compiled in at all here.
+  **Three debugging rounds, each worth recording because none was visible from the code.** (1) My first fix mixed the generation counter into the seed material, so the same base seed gave a different stream on the second fit of a session. The tell was a max difference identical to three decimals under both 1 and 4 threads -- deterministic carried state, not a race. (2) `std::normal_distribution` caches the second Box-Muller deviate and the cache survives `rng.seed()`, so reproducibility depended on the parity of normal draws earlier in the process; the test passed standalone and failed inside the suite, which is the signature of exactly this. (3) Chasing why thread count did not matter revealed that OpenMP is not compiled in at all here.
 
-  **Consequence for the study.** The old literal seed was per *process*,
-  so replicates at the same position in different PSOCK workers shared
-  random numbers -- the R = 100 coverage SE of +-2.2% was understated.
-  Now verified: a repeated replicate reproduces exactly, two replicates
-  differ on every column. `PLAN.md` 8 records this; its 12 numbers
-  predate the fix and should be **replaced** by the re-run, not
-  reconciled with it.
+  **Consequence for the study.** The old literal seed was per *process*, so replicates at the same position in different PSOCK workers shared random numbers -- the R = 100 coverage SE of +-2.2% was understated. Now verified: a repeated replicate reproduces exactly, two replicates differ on every column. `PLAN.md` 8 records this; its 12 numbers predate the fix and should be **replaced** by the re-run, not reconciled with it.
 
-  **Also filed** (TODO.md group B): neither GAM effect function defaults
-  `idx_species`, the same gap as `predictNewSites()`; and
-  `plotSpeciesResponseCurve()` is exported with an internal helper's
-  signature (raw MCMC pieces, no `fitModel`), so a user holding a fit
-  cannot call it -- which is why it has no smoke test.
+  **Also filed** (TODO.md group B): neither GAM effect function defaults `idx_species`, the same gap as `predictNewSites()`; and `plotSpeciesResponseCurve()` is exported with an internal helper's signature (raw MCMC pieces, no `fitModel`), so a user holding a fit cannot call it -- which is why it has no smoke test.
 
-  **Process note.** Rendering `TODO.md` as a parse check writes
-  `TODO.html`, and `git add -A` swept it into two commits before Doug
-  caught it. Now in `.gitignore`. **Check `git status` before
-  `git add -A` in a directory where an Rmd has just been rendered.**
+  **Process note.** Rendering `TODO.md` as a parse check writes `TODO.html`, and `git add -A` swept it into two commits before Doug caught it. Now in `.gitignore`. **Check `git status` before `git add -A` in a directory where an Rmd has just been rendered.**
 
-- **Provenance of the group A items (moved here from TODO.md, 29
-  July).** TODO is now to-dos only; this is the history behind them. Of
-  the six group A items that existed after the coverage study, **three
-  were found by the study rather than by reading code** -- the
-  collection-covariate prior mean, `reparamFactorModel()` breaking the
-  residual-correlation identity, and the Stage 2 detection prior. A
-  static audit had already been over the same files and walked past all
-  three. That is the case for the simulation suite in one line, and the
-  reason the *MEE paper* item treats re-running it after fixes as
-  evidence rather than repetition.
+- **Provenance of the group A items (moved here from TODO.md, 29 July).** TODO is now to-dos only; this is the history behind them. Of the six group A items that existed after the coverage study, **three were found by the study rather than by reading code** -- the collection-covariate prior mean, `reparamFactorModel()` breaking the residual-correlation identity, and the Stage 2 detection prior. A static audit had already been over the same files and walked past all three. That is the case for the simulation suite in one line, and the reason the *MEE paper* item treats re-running it after fixes as evidence rather than repetition.
 
-  **Correction, 29 July:** the Stage 2 prior was filed as a defect and
-  is not one. `p` and `q` enter `sample_pq_cpp()` perfectly
-  symmetrically and no `p > q` constraint exists in the code, so the
-  augmented likelihood is invariant under swapping *(collected, p)* with
-  *(not collected, q)* -- the label-switching multimodality of
-  false-positive occupancy models. The informative `Beta(5, 1)` /
-  `Beta(1, 20)` pair is what selects the correct mode; flattening it
-  leaves the model unidentified. Doug raised this and was right. The
-  flat-prior experiment that appeared to "fix" coverage was therefore
-  actively misleading: it only held because `p` was well separated from
-  `q` in that scenario. What the study measured in `low_information` is
-  the *cost of the identifiability constraint*, not a bug, and the open
-  task is choosing how informative the default should be -- Alex's note
-  in TODO reads "NEED TO CHOOSE THE INFORMATIVE PRIORS".
+  **Correction, 29 July:** the Stage 2 prior was filed as a defect and is not one. `p` and `q` enter `sample_pq_cpp()` perfectly symmetrically and no `p > q` constraint exists in the code, so the augmented likelihood is invariant under swapping *(collected, p)* with *(not collected, q)* -- the label-switching multimodality of false-positive occupancy models. The informative `Beta(5, 1)` / `Beta(1, 20)` pair is what selects the correct mode; flattening it leaves the model unidentified. Doug raised this and was right. The flat-prior experiment that appeared to "fix" coverage was therefore actively misleading: it only held because `p` was well separated from `q` in that scenario. What the study measured in `low_information` is the *cost of the identifiability constraint*, not a bug, and the open task is choosing how informative the default should be -- Alex's note in TODO reads "NEED TO CHOOSE THE INFORMATIVE PRIORS".
 
-  **Open disagreement on `reparamFactorModel()`.** Alex's note says it
-  is a non-issue for logistic models, since only the correlation matrix
-  is recoverable. The premise is right but the measurement is already of
-  the correlation: `cov2cor()` output changes by up to 0.612 under the
-  reparameterisation, because `diag(1/diag(R))` rescales per *factor*
-  while `cov2cor()` normalises per *species*, so the normalisation does
-  not absorb it. `Var(U)` afterwards is `diag(0.23, 2.01)` rather than
-  the identity. Recorded in TODO for Alex to look at again rather than
-  closed either way.
+  **Open disagreement on `reparamFactorModel()`.** Alex's note says it is a non-issue for logistic models, since only the correlation matrix is recoverable. The premise is right but the measurement is already of the correlation: `cov2cor()` output changes by up to 0.612 under the reparameterisation, because `diag(1/diag(R))` rescales per *factor* while `cov2cor()` normalises per *species*, so the normalisation does not absorb it. `Var(U)` afterwards is `diag(0.23, 2.01)` rather than the identity. Recorded in TODO for Alex to look at again rather than closed either way.
 
-- **Alex's pulls, 28-29 July 2026 (`e60e3ad` "Added GAMs", `42198d9`
-  "Fixed many bugs", `59eb56b`).** Verified against the code, not the
-  messages. **Fixed:** group A item 1 (`sigma_h` now sampled via a new
-  `sample_sigmah()`), item 3 (collection-covariate prior mean corrected
-  to `rep(0, ...)`, variance widened to `diag(2)`), item 5 (`randinvg()`
-  now uses the `thread_local` RNG, closing the OpenMP race). **Fixed,
-  and the remaining half turned out not to be a defect:** item 6 -- all
-  four Stage 2 hyperparameters now read from `listPriors` and the docs
-  match the code. This entry previously called the surviving
-  `Beta(5, 1)` default "the half that drives coverage to 0.103 where
-  detection is low". That is wrong; the informative prior is
-  load-bearing for identifiability. See the correction under "Known
-  issues". **Not fixed:** item 2 (`sample_ls` still scores `SE` as a GP
-  draw with `sigma_s = 1`), item 4 (`reparamFactorModel()` unchanged),
-  `predictNewSites()` defaults (group B item 3 in the current
-  numbering). **Fixed but unlogged, found 29 July by a gap in the group
-  B numbering:** the GP knot floor and the `ds = 0` null field, now
-  Fixed bugs 29 and 30 -- both had been deleted from group B by this
-  pull with no Fixed-bugs entry. Also new: a GAM feature
-  (`plotCovariateEffect()`, `plotSpeciesResponseCurve()`,
-  `returnCovariateEffect()`), discharging "GAMs for JSDM" under Alex's
-  MEE to-dos and not yet covered by any test.
+- **Alex's pulls, 28-29 July 2026 (`e60e3ad` "Added GAMs", `42198d9` "Fixed many bugs", `59eb56b`).** Verified against the code, not the messages. **Fixed:** group A item 1 (`sigma_h` now sampled via a new `sample_sigmah()`), item 3 (collection-covariate prior mean corrected to `rep(0, ...)`, variance widened to `diag(2)`), item 5 (`randinvg()` now uses the `thread_local` RNG, closing the OpenMP race). **Fixed, and the remaining half turned out not to be a defect:** item 6 -- all four Stage 2 hyperparameters now read from `listPriors` and the docs match the code. This entry previously called the surviving `Beta(5, 1)` default "the half that drives coverage to 0.103 where detection is low". That is wrong; the informative prior is load-bearing for identifiability. See the correction under "Known issues". **Not fixed:** item 2 (`sample_ls` still scores `SE` as a GP draw with `sigma_s = 1`), item 4 (`reparamFactorModel()` unchanged), `predictNewSites()` defaults (group B item 3 in the current numbering). **Fixed but unlogged, found 29 July by a gap in the group B numbering:** the GP knot floor and the `ds = 0` null field, now Fixed bugs 29 and 30 -- both had been deleted from group B by this pull with no Fixed-bugs entry. Also new: a GAM feature (`plotCovariateEffect()`, `plotSpeciesResponseCurve()`, `returnCovariateEffect()`), discharging "GAMs for JSDM" under Alex's MEE to-dos and not yet covered by any test.
 
-  **Two consequences.** *Superseded on the first count:* closing item 5
-  was recorded here as removing the reproducibility obstacle to a refit
-  and to CRAN item 16. It did not -- it closed the data race but left
-  `set.seed()` with no effect on the sampler, which is Fixed bugs 28,
-  fixed 29 July. The obstacle is gone now, but for a different reason
-  than this entry claimed. And the R = 100 coverage table is partly
-  stale: items 1, 3 and 6's wiring all change fitted values, so a re-run
-  is needed -- which is exactly the evidence that the fixes worked.
+  **Two consequences.** *Superseded on the first count:* closing item 5 was recorded here as removing the reproducibility obstacle to a refit and to CRAN item 16. It did not -- it closed the data race but left `set.seed()` with no effect on the sampler, which is Fixed bugs 28, fixed 29 July. The obstacle is gone now, but for a different reason than this entry claimed. And the R = 100 coverage table is partly stale: items 1, 3 and 6's wiring all change fitted values, so a re-run is needed -- which is exactly the evidence that the fixes worked.
 
-  The pull broke one tier-1 test, and it was **our** test at fault: the
-  row-shuffle check compared `data_info` including `row.names`, which
-  are inherited from the caller's row order and cosmetic. Content, key
-  sequence and both design matrices were identical. Relaxed with
-  `ignore_attr = TRUE`; suite back to 95 passing (112 as of 29 July).
+  The pull broke one tier-1 test, and it was **our** test at fault: the row-shuffle check compared `data_info` including `row.names`, which are inherited from the caller's row order and cosmetic. Content, key sequence and both design matrices were identical. Relaxed with `ignore_attr = TRUE`; suite back to 95 passing (112 as of 29 July).
 
-- **This session (July 28 2026): ran the full R = 100 coverage study;
-  all 10 cells, 1000 fits, 0 failures, \~497 min.** Two parts: `base`
-  alone on 27 July (100 fits, 22.9 min) to settle the open empirical
-  question first, then the other 9 cells on 28 July (900 fits, 474 min).
-  Results in `dev/simstudy/results/` and tabulated in `PLAN.md` §12.
-  **Three of the four defects it found are now traced to specific lines
-  of code** (group A items 3, 4 and 6); the fourth (`low_information`
-  degraded across the board) is those three compounding when data are
-  thin.
+- **This session (July 28 2026): ran the full R = 100 coverage study; all 10 cells, 1000 fits, 0 failures, \~497 min.** Two parts: `base` alone on 27 July (100 fits, 22.9 min) to settle the open empirical question first, then the other 9 cells on 28 July (900 fits, 474 min). Results in `dev/simstudy/results/` and tabulated in `PLAN.md` §12. **Three of the four defects it found are now traced to specific lines of code** (group A items 3, 4 and 6); the fourth (`low_information` degraded across the board) is those three compounding when data are thin.
 
-  The three headline results: `beta_theta` undercovers in **every** cell
-  (0.676-0.730), flat across model type, primer count, species count and
-  factor misspecification -- structural, and it is the prior-mean-1 bug.
-  `resid_cor` sits at 0.74-0.77 in nine of ten cells, the exception
-  being `d_underfit` which *over*covers at 0.980, so the
-  reparameterisation defect is masked when the ordination is
-  under-fitted. And `p` collapses to **0.103 with bias +0.49** in
-  `low_information` against 0.90-0.92 elsewhere -- the hard-coded
-  `Beta(5,1)` prior meeting a true `p` of 0.1-0.3, which is the regime
-  the package exists for.
+  The three headline results: `beta_theta` undercovers in **every** cell (0.676-0.730), flat across model type, primer count, species count and factor misspecification -- structural, and it is the prior-mean-1 bug. `resid_cor` sits at 0.74-0.77 in nine of ten cells, the exception being `d_underfit` which *over*covers at 0.980, so the reparameterisation defect is masked when the ordination is under-fitted. And `p` collapses to **0.103 with bias +0.49** in `low_information` against 0.90-0.92 elsewhere -- the hard-coded `Beta(5,1)` prior meeting a true `p` of 0.1-0.3, which is the regime the package exists for.
 
-  What holds: `G` (fourth-corner), `q`, `B0` and `B` are at or near
-  nominal everywhere except `low_information`. The quantities most
-  likely to appear in a paper are trustworthy as they stand.
+  What holds: `G` (fourth-corner), `q`, `B0` and `B` are at or near nominal everywhere except `low_information`. The quantities most likely to appear in a paper are trustworthy as they stand.
 
-  **Two process failures worth not repeating.** An earlier attempt at
-  this grid died after ten hours because I edited `run_study.R` while it
-  was executing -- Rscript parses incrementally, so the running master
-  hit a torn read. And when the laptop later slept mid-run I diagnosed
-  thermal throttling and reported it twice; Doug identified the real
-  cause. The runner now has checkpointing with `--resume`,
-  `--caffeinate`, a trailing-window ETA and a cpu/wall ratio, the last
-  of which makes a sleeping machine unmistakable.
+  **Two process failures worth not repeating.** An earlier attempt at this grid died after ten hours because I edited `run_study.R` while it was executing -- Rscript parses incrementally, so the running master hit a torn read. And when the laptop later slept mid-run I diagnosed thermal throttling and reported it twice; Doug identified the real cause. The runner now has checkpointing with `--resume`, `--caffeinate`, a trailing-window ETA and a cpu/wall ratio, the last of which makes a sleeping machine unmistakable.
 
-- **Earlier (July 27 2026): built the test suite (stages 1, 3-5 of
-  `dev/simstudy/PLAN.md`).** Commits `6d9526d` (tier 1), `6123036`
-  (`helper-simstudy.R`), `f63eeeb` (tiers 2-3 + runner), `2e4a5be`
-  (deprecation). Tier 1 is 89 structural assertions in \~7 s and **ships
-  to CRAN**; tier 2 is a `skip_on_cran()` recovery canary (\~30 s) with
-  thresholds set from measurement across three seed sets; tier 3 is
-  env-gated on `OCCJSDM_SIMSTUDY`, with `dev/simstudy/run_study.R` as
-  the parallel runner (PSOCK, not `mclapply()`). Only the full R = 100
-  run remains.
+- **Earlier (July 27 2026): built the test suite (stages 1, 3-5 of `dev/simstudy/PLAN.md`).** Commits `6d9526d` (tier 1), `6123036` (`helper-simstudy.R`), `f63eeeb` (tiers 2-3 + runner), `2e4a5be` (deprecation). Tier 1 is 89 structural assertions in \~7 s and **ships to CRAN**; tier 2 is a `skip_on_cran()` recovery canary (\~30 s) with thresholds set from measurement across three seed sets; tier 3 is env-gated on `OCCJSDM_SIMSTUDY`, with `dev/simstudy/run_study.R` as the parallel runner (PSOCK, not `mclapply()`). Only the full R = 100 run remains.
 
-  **Writing the tests found two package bugs that reading the code had
-  not**, which is the argument for having done it: `sigma_s` is never
-  sampled (now **group A item 2**) -- it exists in the simulator but
-  only as a hard-coded `sigma_s = 1` at the `sample_ls()` call site, so
-  the GP length-scale absorbs the amplitude misspecification and rails
-  at the top of `l_s_grid` for every true value tried; and
-  `predictNewSites()` still lacks its documented `X_psi`/`X_s` defaults
-  (**group B item 3** in the current numbering), correcting Fixed
-  bugs 18. Measuring the GP knot floor also produced an item, since
-  fixed (Fixed bugs 29).
+  **Writing the tests found two package bugs that reading the code had not**, which is the argument for having done it: `sigma_s` is never sampled (now **group A item 2**) -- it exists in the simulator but only as a hard-coded `sigma_s = 1` at the `sample_ls()` call site, so the GP length-scale absorbs the amplitude misspecification and rails at the top of `l_s_grid` for every true value tried; and `predictNewSites()` still lacks its documented `X_psi`/`X_s` defaults (**group B item 3** in the current numbering), correcting Fixed bugs 18. Measuring the GP knot floor also produced an item, since fixed (Fixed bugs 29).
 
-  **Four test assertions had to be rewritten after running them**, each
-  because the premise was wrong in a way only execution revealed:
-  `psi_output` is not produced by `binary`/`continuous` fits;
-  `tau_output` is NA by design outside `model == "continuous"`; PCR
-  replicates share a non-unique key and are exchangeable, so row-for-row
-  `OTU` equality is the wrong bar for shuffle-invariance; and `idx_ls`
-  is constant for a reason unrelated to the fix it appeared to test.
-  **Lesson: do not write assertions from reading the code alone** --
-  four of these would have encoded false expectations, and one would
-  have masked the `sigma_s` bug by asserting behaviour that looked right
-  for the wrong reason.
+  **Four test assertions had to be rewritten after running them**, each because the premise was wrong in a way only execution revealed: `psi_output` is not produced by `binary`/`continuous` fits; `tau_output` is NA by design outside `model == "continuous"`; PCR replicates share a non-unique key and are exchangeable, so row-for-row `OTU` equality is the wrong bar for shuffle-invariance; and `idx_ls` is constant for a reason unrelated to the fix it appeared to test. **Lesson: do not write assertions from reading the code alone** -- four of these would have encoded false expectations, and one would have masked the `sigma_s` bug by asserting behaviour that looked right for the wrong reason.
 
-  **One empirical question is open.** `beta_theta` and `resid_cor` came
-  out at 0.78-0.80 and 0.76-0.79 across three independent seed sets
-  against a nominal 0.95. Consistent enough that chance is unlikely, but
-  R = 5 is too small to call; the full run settles it. See `PLAN.md`
-  §10.3.
+  **One empirical question is open.** `beta_theta` and `resid_cor` came out at 0.78-0.80 and 0.76-0.79 across three independent seed sets against a nominal 0.95. Consistent enough that chance is unlikely, but R = 5 is too small to call; the full run settles it. See `PLAN.md` §10.3.
 
-- **This session (July 27 2026): reconciled `TODO.md` against the code;
-  no code changes.** Doc-only work, but it corrected the record in three
-  ways. (1) **`b7b6aa2` fixed 10 audit items, not 8.** Two were never
-  logged: the **WAIC iteration-counter fix** (a dedicated
-  `currentWAICiter`, initialised at `R/runOccJSDM.R:831`, incremented
-  only inside the WAIC block at `:1200`, with an assertion guard at
-  `:1251` -- confirmed via `git log -S currentWAICiter`), and a
-  **partial fix to the OpenMP RNG race** (`sample_beta_nocov_cpp_TS()`
-  now calls the thread-safe `sample_beta_cpp_TS()`). Both are now
-  entries 9 and 10 in TODO.md's **Fixed bugs**. (2) **Two "fixed" items
-  were only partially fixed** and now carry residual entries in TODO.md
-  group B: `thinOutput()` runs and honours `thin`, but still thins 2-D
-  posterior-mean matrices *by row* -- dropping sites from
-  `psi_output`/`w_output`/`theta_output`, whose rows are sites, not
-  iterations -- and still drops the scalar `WAIC` via
-  `print("Dimension not recognised")`; `computeSpeciesDetected()` no
-  longer crashes (`B <- length(idxObs)`, `R/output.R:2222`, which also
-  guards the fewer-than-500-draws case) but still takes the *first*
-  `min(500, niter)` rows of an array flattened iter-within-chain, i.e.
-  chain 1 only whenever per-chain `niter >= 500`. (3) **Two group A
-  items were never fixed** and had been dropped from both lists -- see
-  "Known issues" above. Also fixed stale cross-references throughout
-  TODO.md (groups C/D and the *MEE paper* testing item referenced the
-  original audit numbering, which no longer exists) and rewrote the *MEE
-  paper* simulation-testing item, which had assumed all the audited bugs
-  were still extant. **Lesson for future sessions: when bugs are fixed
-  in a batch, verify each claimed fix against the code rather than
-  trusting the commit message or the to-do markers** -- three of the
-  discrepancies above were invisible from the commit message alone.
+- **This session (July 27 2026): reconciled `TODO.md` against the code; no code changes.** Doc-only work, but it corrected the record in three ways. (1) **`b7b6aa2` fixed 10 audit items, not 8.** Two were never logged: the **WAIC iteration-counter fix** (a dedicated `currentWAICiter`, initialised at `R/runOccJSDM.R:831`, incremented only inside the WAIC block at `:1200`, with an assertion guard at `:1251` -- confirmed via `git log -S currentWAICiter`), and a **partial fix to the OpenMP RNG race** (`sample_beta_nocov_cpp_TS()` now calls the thread-safe `sample_beta_cpp_TS()`). Both are now entries 9 and 10 in TODO.md's **Fixed bugs**. (2) **Two "fixed" items were only partially fixed** and now carry residual entries in TODO.md group B: `thinOutput()` runs and honours `thin`, but still thins 2-D posterior-mean matrices *by row* -- dropping sites from `psi_output`/`w_output`/`theta_output`, whose rows are sites, not iterations -- and still drops the scalar `WAIC` via `print("Dimension not recognised")`; `computeSpeciesDetected()` no longer crashes (`B <- length(idxObs)`, `R/output.R:2222`, which also guards the fewer-than-500-draws case) but still takes the *first* `min(500, niter)` rows of an array flattened iter-within-chain, i.e. chain 1 only whenever per-chain `niter >= 500`. (3) **Two group A items were never fixed** and had been dropped from both lists -- see "Known issues" above. Also fixed stale cross-references throughout TODO.md (groups C/D and the *MEE paper* testing item referenced the original audit numbering, which no longer exists) and rewrote the *MEE paper* simulation-testing item, which had assumed all the audited bugs were still extant. **Lesson for future sessions: when bugs are fixed in a batch, verify each claimed fix against the code rather than trusting the commit message or the to-do markers** -- three of the discrepancies above were invisible from the commit message alone.
 
-- **Earlier (July 26 2026): Alex fixed 8 inference-affecting bugs from
-  the static audit (commit `b7b6aa2`)** -- *superseded: the true count
-  is 10, see the July 27 entry above*. Each is a one-off edit with
-  specific line numbers documented in TODO.md's "Fixed bugs" section; no
-  broad refactoring involved. Summary: (1) `data$OTU` not re-sorted with
-  `data_info` (`:476-558`); (2) Stage 2 false-positive counts inflated
-  by a catch-all `else` in `sample_pq_cpp()` (C++ version now gates
-  cases on primer index, `:652-668`); (3) `sampleBuniv()` operator
-  precedence drops residual precision (`:579`); (4) `Bs` read from wrong
-  key in `list_params` (`:940`); (5) `sigma_bs` sampled but never used
-  in prior covariance (`:711-713`); (6) `useBiotic` ignored in
-  `computeNewOutputs()` (src C++, `:501`); (7) spatial field added after
-  response draws instead of before (jsdmfun `:429-461`); (8)
-  `tau_output` returned all NA (runOccJSDM output loop `:934-1236`).
-  **All 8 are marked `FIXED` in TODO.md as of this commit.** These are
-  the same bugs from the "group A" (inference-affecting) section of the
-  static audit from July 25 -- no new bugs discovered, just these
-  getting addresses via direct code edits. **Implication for CRAN:
-  `sampleresults.rda` must now be regenerated**, since bugs 2, 4, 5, 7
-  change fitted values (Stage 2 `q`, trait coefficients `C`/`G`, spatial
-  parameters, `tau`); bug 1 changes the order of inference results if
-  data is re-sorted; and bug 8 means previous fits were missing a
-  parameter block. Doug's vignette values (WAIC, occupancy probs, etc.)
-  will change when re-rendered against the corrected code. This is the
-  required refit condition identified in the CRAN plan's consistency
-  pass (July 25).
+- **Earlier (July 26 2026): Alex fixed 8 inference-affecting bugs from the static audit (commit `b7b6aa2`)** -- *superseded: the true count is 10, see the July 27 entry above*. Each is a one-off edit with specific line numbers documented in TODO.md's "Fixed bugs" section; no broad refactoring involved. Summary: (1) `data$OTU` not re-sorted with `data_info` (`:476-558`); (2) Stage 2 false-positive counts inflated by a catch-all `else` in `sample_pq_cpp()` (C++ version now gates cases on primer index, `:652-668`); (3) `sampleBuniv()` operator precedence drops residual precision (`:579`); (4) `Bs` read from wrong key in `list_params` (`:940`); (5) `sigma_bs` sampled but never used in prior covariance (`:711-713`); (6) `useBiotic` ignored in `computeNewOutputs()` (src C++, `:501`); (7) spatial field added after response draws instead of before (jsdmfun `:429-461`); (8) `tau_output` returned all NA (runOccJSDM output loop `:934-1236`). **All 8 are marked `FIXED` in TODO.md as of this commit.** These are the same bugs from the "group A" (inference-affecting) section of the static audit from July 25 -- no new bugs discovered, just these getting addresses via direct code edits. **Implication for CRAN: `sampleresults.rda` must now be regenerated**, since bugs 2, 4, 5, 7 change fitted values (Stage 2 `q`, trait coefficients `C`/`G`, spatial parameters, `tau`); bug 1 changes the order of inference results if data is re-sorted; and bug 8 means previous fits were missing a parameter block. Doug's vignette values (WAIC, occupancy probs, etc.) will change when re-rendered against the corrected code. This is the required refit condition identified in the CRAN plan's consistency pass (July 25).
 
-- **Earlier the same day (July 25 2026), a comprehensive static audit**
-  (described in the CRAN submission plan below) catalogued **22
-  blocking/should-fix CRAN issues plus 3 structured bug groups** (group
-  A: inference-affecting; group B: crashes/API bugs; group C: dead code
-  with stale imports) across `R/`, `src/`, and DESCRIPTION/NAMESPACE.
-  Bugs in groups B/C were already documented via prior sessions; group
-  A's 8 bugs were newly identified, and 7 of them were fixed today by
-  Alex (the `idx_z_k` bug for `model = "occupancy"` was actually
-  pre-fixed by Alex's `0abb104` which switched to `idx_z_w`). The audit
-  is comprehensive enough to serve as a roadmap for the next 20+
-  commits.
+- **Earlier the same day (July 25 2026), a comprehensive static audit** (described in the CRAN submission plan below) catalogued **22 blocking/should-fix CRAN issues plus 3 structured bug groups** (group A: inference-affecting; group B: crashes/API bugs; group C: dead code with stale imports) across `R/`, `src/`, and DESCRIPTION/NAMESPACE. Bugs in groups B/C were already documented via prior sessions; group A's 8 bugs were newly identified, and 7 of them were fixed today by Alex (the `idx_z_k` bug for `model = "occupancy"` was actually pre-fixed by Alex's `0abb104` which switched to `idx_z_w`). The audit is comprehensive enough to serve as a roadmap for the next 20+ commits.
 
-- **Earlier: July 24 2026, a second AI-driven pass**: (1) resaved
-  `data/sampleresults.rda` by assigning the live session's `fitmodel`
-  object to `sampleresults` and running
-  `usethis::use_data(sampleresults, overwrite = TRUE)`, at Doug's
-  explicit request. **Not yet confirmed**: whether that fit was against
-  the current lower-probability `sampledata` from `876eb15`. (2)
-  Committed the previously-flagged uncommitted `vignettes/occJSDM.Rmd`
-  diff as `763e738` ("Update occJSDM.Rmd: M+K cumulative detections
-  prose, refreshed WAIC values"). **Stale as of the July 26 fixes
-  above**: that `fitmodel` was fit against buggy code, so its WAIC
-  values are now stale and must be regenerated.
+- **Earlier: July 24 2026, a second AI-driven pass**: (1) resaved `data/sampleresults.rda` by assigning the live session's `fitmodel` object to `sampleresults` and running `usethis::use_data(sampleresults, overwrite = TRUE)`, at Doug's explicit request. **Not yet confirmed**: whether that fit was against the current lower-probability `sampledata` from `876eb15`. (2) Committed the previously-flagged uncommitted `vignettes/occJSDM.Rmd` diff as `763e738` ("Update occJSDM.Rmd: M+K cumulative detections prose, refreshed WAIC values"). **Stale as of the July 26 fixes above**: that `fitmodel` was fit against buggy code, so its WAIC values are now stale and must be regenerated.
 
-- **This session (July 24 2026): reconciled memory with a batch of
-  commits made directly by Alex/Doug since the last AI session; no
-  AI-driven code changes this turn.** Working tree had one uncommitted
-  change at session start: `vignettes/occJSDM.Rmd` (a
-  `devtools::load_all()` comment added to the setup chunk, and the
-  "Cumulative species detections" section's prose/chunks updated to
-  reflect `plotCumulativeSpeciesDetections()` now supporting both `M`
-  and `K` -- see below -- with Alex's old "For Doug:" TODO comment
-  removed). Commits absorbed (oldest to newest):
+- **This session (July 24 2026): reconciled memory with a batch of commits made directly by Alex/Doug since the last AI session; no AI-driven code changes this turn.** Working tree had one uncommitted change at session start: `vignettes/occJSDM.Rmd` (a `devtools::load_all()` comment added to the setup chunk, and the "Cumulative species detections" section's prose/chunks updated to reflect `plotCumulativeSpeciesDetections()` now supporting both `M` and `K` -- see below -- with Alex's old "For Doug:" TODO comment removed). Commits absorbed (oldest to newest):
 
-  - `1c25529` "Added diagnostics and plot function" (Alex) -- the
-    largest substantive change this batch:
-    - **New `computeDiagnostics(results_output)`** (`R/diagnostics.R`,
-      exported) replaces the old `computeMinESS()`-based single-number
-      check at the end of `runOccJSDM()`: it now prints
-      per-parameter-block Rhat/ESS diagnostics to the console (covering
-      `beta0_psi`, `beta_psi`, `beta_theta`, `p`, `q`, `theta0`,
-      skipping latent-state components
-      `z_output`/`w_output`/`theta_output`/`idx_ls_output`/`varPart_output`
-      and any all-constant block), warning if any block's max Rhat \>
-      1.1 or min ESS \< 50. Called automatically at the end of
-      `runOccJSDM()` (`computeDiagnostics(results_output)`, replacing
-      the old
-      `minESS <- computeMinESS(results_output); if (minESS < 50) print(...)`).
-      This resolves the former `TODO.md` item "Report MCMC diagnostics
-      by blocks of parameters."
-    - **`plotReadIntensity()` de-exported** (`@export` tag removed) --
-      now internal/`@noRd` in effect (still has full roxygen otherwise;
-      not re-verified whether `@noRd` was added explicitly or just
-      `@export` dropped).
-    - **`plotCumulativeSpeciesDetections()` reworked to support both `M`
-      (environmental samples) and `K` (PCR replicates)**, not just `K`
-      -- new signature
-      `plotCumulativeSpeciesDetections(fitModel, M, K, primer = 0, alpha = .95, byK = TRUE)`.
-      `byK = TRUE` (default) facets by `M` with `K` on the x-axis;
-      `byK = FALSE` facets by `K` with `M` on the x-axis. Requires
-      `fitModel$infos$model == "two_stage"` (errors otherwise).
-      Internally rewritten: the old Beta-approximation-based
-      `computeSpeciesDetected()`/`computeSpeciesDetected_M()` pair
-      (which fit a Beta distribution to `p_output` moments) was replaced
-      by a single new `computeSpeciesDetected()` with signature
-      `(beta_theta_output, p_output, M, K, primer, alpha)` that directly
-      bootstraps (`B = 200` reps, `set.seed(1)`) collection (`w`, via
-      `beta_theta_output`/Stage 1) and detection (via `p_output`/Stage
-      2) draws per species/sample/PCR-replicate, rather than
-      approximating via a Beta-Binomial mixture. **This makes the
-      earlier memory note about `computeSpeciesDetected_M()`'s
-      "purpose/caller ... not yet investigated" stale** -- it no longer
-      exists; superseded by this unified function.
-    - `process_covariates()` gained input validation: errors on
-      `Inf`/`NaN` values in covariates, and on any covariate column with
-      zero variance (constant values) with an informative message naming
-      the offending columns.
-    - `inferDataModel()`/`runOccJSDM()` switched from `print()` to
-      `message()` throughout for status output (more idiomatic for a
-      package -- `message()` respects `suppressMessages()`/goes to
-      stderr, `print()` doesn't).
-    - `runOccJSDM()`'s threshold validation tightened: now explicitly
-      checks `is.numeric(threshold)` and `length(threshold) == 1` before
-      the `threshold <= 0` check (previously just `threshold >= 1` vs.
-      the `else` stop-with-message branch); same behavior for valid
-      input, clearer errors for malformed input.
-    - `runOccJSDM()` gained new validation: errors on duplicated species
-      names (in `OTU` colnames or in `data$traits` rownames), and errors
-      if `P` (primers per sample) differs across samples ("Cannot have
-      different number of primers for each sample").
-    - **`MCMCparams` list elements now have defaults** via
-      `get_param()`: `nchain` defaults to 2, `nburn`/`niter` to 1000,
-      `nthin` to 1, instead of requiring the caller to supply a complete
-      `MCMCparams` list (previously `nchain <- MCMCparams$nchain` etc.
-      with no fallback, which would silently propagate `NULL` if
-      omitted). **This may affect `helper-sim.R`'s planned
-      `minimal_mcmc` object in the not-yet-implemented test suite** --
-      worth confirming defaults still get overridden correctly when only
-      some elements are supplied.
-    - `sample_betatheta_cpp` calls replaced with
-      `sample_betatheta_cpp_parallel` (new Rcpp export,
-      `R/RcppExports.R`/`src/RcppExports.cpp`/`src/functions.cpp`) --
-      presumably a parallelized version; not yet benchmarked/verified
-      for behavioral equivalence.
-    - `TODO.md` heavily pruned in this commit: several previously-open
-      Alex-to-do items (trait-reading fragility fix confirmation, `.dll`
-      gitignore, `predictNewSites()` for non-surveyed sites, `Xs`
-      recycling bug, `computeMinESS()` copy-paste bug) were struck
-      through as done/resolved and then the strikethrough text removed
-      entirely (condensed to just the two remaining open items: "Allow
-      for different primers per sample" and the
-      `simulateOccJSDMData(model = "occupancy")` `idx_z_k` bug,
-      renumbered 1.1/1.2). In the MEE-paper section, "Switch to
-      integrated WAIC" was promoted higher in Alex's list and
-      "`plotCumulativeSpeciesDetections()` for different values of M"
-      was removed as an open item (now done, per the `output.R` change
-      above).
-    - Also touched `vignettes/occJSDM.Rmd` (18 lines) -- superseded by
-      Doug's follow-up commits below for the final vignette wording.
-  - `4e786e8` "Update TODO.md" (Doug, minor tweak before the above
-    landed/was reconciled).
-  - `84a3f20` "Fix multi-line @importFrom roxygen tag (must be single
-    line)" (Doug) -- `R/occJSDM-package.R`'s `@importFrom` block had
-    been split across multiple lines at some point (roxygen requires
-    each `@importFrom pkg fn1 fn2 ...` tag on one line); collapsed back
-    to a single line.
-  - `40f9596` "Fix stale computeSpeciesDetected_MK call to match actual
-    function name" (Doug) -- `plotCumulativeSpeciesDetections()` in
-    `1c25529` called a function named `computeSpeciesDetected_MK()`,
-    which doesn't exist (the actual helper, per the diff above, is named
-    `computeSpeciesDetected()`); fixed the call site and regenerated
-    `man/plotCumulativeSpeciesDetections.Rd`.
-  - `6ca8dc0` "Ignore scratch
-    data/sampledata_highp_highthetabaseline.rda" (Doug) -- added to
-    `.gitignore`; an ad hoc/scratch simulated dataset variant (higher
-    `p`/`theta_baseline`), not tracked.
-  - `901c50c` "Fix copy-pasted roxygen docs for computeDiagnostics()"
-    (Doug) -- `computeDiagnostics()`'s roxygen `@param`/`@return` had
-    been copy-pasted from a different function (describing
-    `param_output`/`param_name`/`dimnames1`/`dimnames2` args and a
-    ggplot return, none of which match its actual single-argument
-    `results_output`, side-effect/console-print signature). Rewrote the
-    docs to match reality and added explicit `invisible(NULL)` at the
-    end of the function body to match the corrected
-    `@return NULL, invisibly` doc. Regenerated
-    `man/computeDiagnostics.Rd`/`NAMESPACE`.
-  - `45dada8` "Regenerate occJSDM-package.Rd to include Alex Diana as
-    author" (Doug) -- `DESCRIPTION`'s `Authors@R` already listed Alex
-    Diana, but `man/occJSDM-package.Rd` (auto-generated authors section)
-    hadn't been regenerated since; ran `devtools::document()` to sync
-    it.
-  - `876eb15` "new sampledata with lower collection and detection
-    probabilities" (Doug) -- regenerated `data/sampledata.rda` (26,723
-    -\> 22,593 bytes) using new `list_params` values in
-    `vignettes/simulateOccJSDMData.Rmd`: `p` (Stage 2 true-positive PCR
-    detection rate) lowered from `runif(P*S, 0.6, 0.95)` to
-    `runif(P*S, 0.3, 0.6)`, and `theta_baseline` (Stage 1 baseline
-    field-collection probability given present) lowered from
-    `runif(S, 0.3, 0.7)` to `runif(S, 0.15, 0.4)`. Rationale (per new
-    vignette comments): with the old higher rates, a single PCR
-    replicate/field sample already detected most present species, so
-    cumulative-detection plots (`plotCumulativeSpeciesDetections()`)
-    barely changed with more replicates `K`/samples `M` -- the new lower
-    rates make detection genuinely improve with more effort, which is
-    the point of that plot. **`data/sampleresults.rda` was NOT
-    regenerated in this commit** -- it was fit against the *old*
-    higher-probability `sampledata.rda`, so `vignettes/occJSDM.Rmd`
-    (which loads `sampleresults` as a precomputed fit) may now be
-    showing a fit against stale/mismatched simulated data. **Needs
-    checking**: whether `occJSDM.Rmd` still references `sampledata`
-    directly anywhere in a way that would break, or whether it only uses
-    `sampleresults` (in which case it's merely
-    inconsistent-but-functional, not broken).
+  - `1c25529` "Added diagnostics and plot function" (Alex) -- the largest substantive change this batch:
+    - **New `computeDiagnostics(results_output)`** (`R/diagnostics.R`, exported) replaces the old `computeMinESS()`-based single-number check at the end of `runOccJSDM()`: it now prints per-parameter-block Rhat/ESS diagnostics to the console (covering `beta0_psi`, `beta_psi`, `beta_theta`, `p`, `q`, `theta0`, skipping latent-state components `z_output`/`w_output`/`theta_output`/`idx_ls_output`/`varPart_output` and any all-constant block), warning if any block's max Rhat \> 1.1 or min ESS \< 50. Called automatically at the end of `runOccJSDM()` (`computeDiagnostics(results_output)`, replacing the old `minESS <- computeMinESS(results_output); if (minESS < 50) print(...)`). This resolves the former `TODO.md` item "Report MCMC diagnostics by blocks of parameters."
+    - **`plotReadIntensity()` de-exported** (`@export` tag removed) -- now internal/`@noRd` in effect (still has full roxygen otherwise; not re-verified whether `@noRd` was added explicitly or just `@export` dropped).
+    - **`plotCumulativeSpeciesDetections()` reworked to support both `M` (environmental samples) and `K` (PCR replicates)**, not just `K` -- new signature `plotCumulativeSpeciesDetections(fitModel, M, K, primer = 0, alpha = .95, byK = TRUE)`. `byK = TRUE` (default) facets by `M` with `K` on the x-axis; `byK = FALSE` facets by `K` with `M` on the x-axis. Requires `fitModel$infos$model == "two_stage"` (errors otherwise). Internally rewritten: the old Beta-approximation-based `computeSpeciesDetected()`/`computeSpeciesDetected_M()` pair (which fit a Beta distribution to `p_output` moments) was replaced by a single new `computeSpeciesDetected()` with signature `(beta_theta_output, p_output, M, K, primer, alpha)` that directly bootstraps (`B = 200` reps, `set.seed(1)`) collection (`w`, via `beta_theta_output`/Stage 1) and detection (via `p_output`/Stage
+      2)  draws per species/sample/PCR-replicate, rather than approximating via a Beta-Binomial mixture. **This makes the earlier memory note about `computeSpeciesDetected_M()`'s "purpose/caller ... not yet investigated" stale** -- it no longer exists; superseded by this unified function.
+    - `process_covariates()` gained input validation: errors on `Inf`/`NaN` values in covariates, and on any covariate column with zero variance (constant values) with an informative message naming the offending columns.
+    - `inferDataModel()`/`runOccJSDM()` switched from `print()` to `message()` throughout for status output (more idiomatic for a package -- `message()` respects `suppressMessages()`/goes to stderr, `print()` doesn't).
+    - `runOccJSDM()`'s threshold validation tightened: now explicitly checks `is.numeric(threshold)` and `length(threshold) == 1` before the `threshold <= 0` check (previously just `threshold >= 1` vs. the `else` stop-with-message branch); same behavior for valid input, clearer errors for malformed input.
+    - `runOccJSDM()` gained new validation: errors on duplicated species names (in `OTU` colnames or in `data$traits` rownames), and errors if `P` (primers per sample) differs across samples ("Cannot have different number of primers for each sample").
+    - **`MCMCparams` list elements now have defaults** via `get_param()`: `nchain` defaults to 2, `nburn`/`niter` to 1000, `nthin` to 1, instead of requiring the caller to supply a complete `MCMCparams` list (previously `nchain <- MCMCparams$nchain` etc. with no fallback, which would silently propagate `NULL` if omitted). **This may affect `helper-sim.R`'s planned `minimal_mcmc` object in the not-yet-implemented test suite** -- worth confirming defaults still get overridden correctly when only some elements are supplied.
+    - `sample_betatheta_cpp` calls replaced with `sample_betatheta_cpp_parallel` (new Rcpp export, `R/RcppExports.R`/`src/RcppExports.cpp`/`src/functions.cpp`) -- presumably a parallelized version; not yet benchmarked/verified for behavioral equivalence.
+    - `TODO.md` heavily pruned in this commit: several previously-open Alex-to-do items (trait-reading fragility fix confirmation, `.dll` gitignore, `predictNewSites()` for non-surveyed sites, `Xs` recycling bug, `computeMinESS()` copy-paste bug) were struck through as done/resolved and then the strikethrough text removed entirely (condensed to just the two remaining open items: "Allow for different primers per sample" and the `simulateOccJSDMData(model = "occupancy")` `idx_z_k` bug, renumbered 1.1/1.2). In the MEE-paper section, "Switch to integrated WAIC" was promoted higher in Alex's list and "`plotCumulativeSpeciesDetections()` for different values of M" was removed as an open item (now done, per the `output.R` change above).
+    - Also touched `vignettes/occJSDM.Rmd` (18 lines) -- superseded by Doug's follow-up commits below for the final vignette wording.
+  - `4e786e8` "Update TODO.md" (Doug, minor tweak before the above landed/was reconciled).
+  - `84a3f20` "Fix multi-line @importFrom roxygen tag (must be single line)" (Doug) -- `R/occJSDM-package.R`'s `@importFrom` block had been split across multiple lines at some point (roxygen requires each `@importFrom pkg fn1 fn2 ...` tag on one line); collapsed back to a single line.
+  - `40f9596` "Fix stale computeSpeciesDetected_MK call to match actual function name" (Doug) -- `plotCumulativeSpeciesDetections()` in `1c25529` called a function named `computeSpeciesDetected_MK()`, which doesn't exist (the actual helper, per the diff above, is named `computeSpeciesDetected()`); fixed the call site and regenerated `man/plotCumulativeSpeciesDetections.Rd`.
+  - `6ca8dc0` "Ignore scratch data/sampledata_highp_highthetabaseline.rda" (Doug) -- added to `.gitignore`; an ad hoc/scratch simulated dataset variant (higher `p`/`theta_baseline`), not tracked.
+  - `901c50c` "Fix copy-pasted roxygen docs for computeDiagnostics()" (Doug) -- `computeDiagnostics()`'s roxygen `@param`/`@return` had been copy-pasted from a different function (describing `param_output`/`param_name`/`dimnames1`/`dimnames2` args and a ggplot return, none of which match its actual single-argument `results_output`, side-effect/console-print signature). Rewrote the docs to match reality and added explicit `invisible(NULL)` at the end of the function body to match the corrected `@return NULL, invisibly` doc. Regenerated `man/computeDiagnostics.Rd`/`NAMESPACE`.
+  - `45dada8` "Regenerate occJSDM-package.Rd to include Alex Diana as author" (Doug) -- `DESCRIPTION`'s `Authors@R` already listed Alex Diana, but `man/occJSDM-package.Rd` (auto-generated authors section) hadn't been regenerated since; ran `devtools::document()` to sync it.
+  - `876eb15` "new sampledata with lower collection and detection probabilities" (Doug) -- regenerated `data/sampledata.rda` (26,723 -\> 22,593 bytes) using new `list_params` values in `vignettes/simulateOccJSDMData.Rmd`: `p` (Stage 2 true-positive PCR detection rate) lowered from `runif(P*S, 0.6, 0.95)` to `runif(P*S, 0.3, 0.6)`, and `theta_baseline` (Stage 1 baseline field-collection probability given present) lowered from `runif(S, 0.3, 0.7)` to `runif(S, 0.15, 0.4)`. Rationale (per new vignette comments): with the old higher rates, a single PCR replicate/field sample already detected most present species, so cumulative-detection plots (`plotCumulativeSpeciesDetections()`) barely changed with more replicates `K`/samples `M` -- the new lower rates make detection genuinely improve with more effort, which is the point of that plot. **`data/sampleresults.rda` was NOT regenerated in this commit** -- it was fit against the *old* higher-probability `sampledata.rda`, so `vignettes/occJSDM.Rmd` (which loads `sampleresults` as a precomputed fit) may now be showing a fit against stale/mismatched simulated data. **Needs checking**: whether `occJSDM.Rmd` still references `sampledata` directly anywhere in a way that would break, or whether it only uses `sampleresults` (in which case it's merely inconsistent-but-functional, not broken).
 
-- **Not yet addressed this session**: the uncommitted
-  `vignettes/occJSDM.Rmd` diff (still open in the editor, not yet
-  committed as of this memory update) -- just the `devtools::load_all()`
-  comment and the "Cumulative species detections" section's M+K
-  prose/chunk update, consistent with the `1c25529`/`40f9596` code
-  changes above. The `data/sampleresults.rda`-vs-`sampledata.rda`
-  mismatch flagged above is unresolved. Item 4 of the CRAN submission
-  plan (`sampleresults.rda` is 62MB) is presumably still open and now
-  further complicated by this potential mismatch -- **do not regenerate
-  `sampleresults.rda` without first confirming with Doug**, since he may
-  already be tracking this via a still-open editor session.
+- **Not yet addressed this session**: the uncommitted `vignettes/occJSDM.Rmd` diff (still open in the editor, not yet committed as of this memory update) -- just the `devtools::load_all()` comment and the "Cumulative species detections" section's M+K prose/chunk update, consistent with the `1c25529`/`40f9596` code changes above. The `data/sampleresults.rda`-vs-`sampledata.rda` mismatch flagged above is unresolved. Item 4 of the CRAN submission plan (`sampleresults.rda` is 62MB) is presumably still open and now further complicated by this potential mismatch -- **do not regenerate `sampleresults.rda` without first confirming with Doug**, since he may already be tracking this via a still-open editor session.
 
-- **Previous session (July 22 2026): reconciled memory with commits made
-  directly by Alex/Doug since the last AI session; no AI-driven code
-  changes that turn.** Working tree was already clean and
-  `main`/`origin/main` identical at session start. Commits absorbed:
-  `c1f9cec` "Fix M" (Alex) -- see "Known issues" above, this is the fix
-  for the previously-open `object 'M' not found` bug; `96a226d` "Update
-  AGENTS.md" and `13bb50d` "Update TODO.md" (Doug) -- `TODO.md`'s "Alex
-  to dos" sub-list was renumbered (old item 1.7, the `M`-bug,
-  removed/resolved; old item 1.8, the
-  `simulateOccJSDMData(model = "occupancy")` row-mismatch bug, is now
-  item 1.8 with unchanged content) and gained a new first sub-item,
-  "Report MCMC diagnostics by blocks of parameters" (not otherwise
-  elaborated in `TODO.md` or here yet). **Net effect: the only remaining
-  open simulate-side bug is the
-  `simulateOccJSDMData(model = "occupancy")` row-mismatch** (`idx_z_k`
-  is `NULL` when `twostage = FALSE`) -- any references elsewhere in this
-  file to "two known bugs" or "`TODO.md` items 1.7/1.8" (both plural)
-  are now stale and should be read as referring only to the remaining
-  occupancy-model bug (former item 1.8). `vignettes/occJSDM.Rmd` shows
-  as modified/open in the editor this session (edited directly by Doug,
-  per this file's usual pattern) -- diff not yet inspected.
+- **Previous session (July 22 2026): reconciled memory with commits made directly by Alex/Doug since the last AI session; no AI-driven code changes that turn.** Working tree was already clean and `main`/`origin/main` identical at session start. Commits absorbed: `c1f9cec` "Fix M" (Alex) -- see "Known issues" above, this is the fix for the previously-open `object 'M' not found` bug; `96a226d` "Update AGENTS.md" and `13bb50d` "Update TODO.md" (Doug) -- `TODO.md`'s "Alex to dos" sub-list was renumbered (old item 1.7, the `M`-bug, removed/resolved; old item 1.8, the `simulateOccJSDMData(model = "occupancy")` row-mismatch bug, is now item 1.8 with unchanged content) and gained a new first sub-item, "Report MCMC diagnostics by blocks of parameters" (not otherwise elaborated in `TODO.md` or here yet). **Net effect: the only remaining open simulate-side bug is the `simulateOccJSDMData(model = "occupancy")` row-mismatch** (`idx_z_k` is `NULL` when `twostage = FALSE`) -- any references elsewhere in this file to "two known bugs" or "`TODO.md` items 1.7/1.8" (both plural) are now stale and should be read as referring only to the remaining occupancy-model bug (former item 1.8). `vignettes/occJSDM.Rmd` shows as modified/open in the editor this session (edited directly by Doug, per this file's usual pattern) -- diff not yet inspected.
 
-- **This session (July 21 2026): triaged `devtools::check()`'s 1 warning
-  / 3 notes, one item fixed, two deliberately deferred.** Ran a fresh
-  `devtools::check()` and kept the result in the live session as `res`
-  (an `rcmdcheck` object -- `res$warnings`/`res$notes` are useful for
-  pulling exact diagnostic text without re-running the full check).
-  Findings and actions:
+- **This session (July 21 2026): triaged `devtools::check()`'s 1 warning / 3 notes, one item fixed, two deliberately deferred.** Ran a fresh `devtools::check()` and kept the result in the live session as `res` (an `rcmdcheck` object -- `res$warnings`/`res$notes` are useful for pulling exact diagnostic text without re-running the full check). Findings and actions:
 
-  - **LICENSE NOTE**: see CRAN submission plan item 11 below -- deleted
-    then restored the file, ending in "keep + accept the cosmetic NOTE."
-  - **`tidyr` unused-import NOTE**: unchanged/still open this session --
-    discussed the fix (`tidyr::pivot_longer()` qualification inside
-    `plotCovariateTrend()`) but did not implement it.
-  - **"no visible binding" NOTE, base-R-function half**: **fixed and
-    committed** (`ef77c4c`, "Import base stats functions to resolve
-    no-visible-binding NOTE") -- added
-    `@importFrom stats binomial cov cov2cor dbinom dgamma dnorm dpois glm kmeans logLik median predict quantile rbeta rbinom reorder rgamma rnorm rpois runif sd var`
-    to `R/occJSDM-package.R`'s package-doc roxygen block (which already
-    had one `@importFrom` tag, for `Rcpp::evalCpp`), then ran
-    `devtools::document()` and confirmed all 22 `importFrom(stats, ...)`
-    lines landed correctly in `NAMESPACE`.
-  - **"no visible binding" NOTE, NSE-column half** (e.g.
-    `Species`/`x`/`y`/`Site`/`` `2.5%` `` flagged across many `plot*()`
-    functions in `R/jsdmfun.R`/`R/output.R`): **the user explicitly
-    decided to leave this unfixed** -- discussed but did not implement
-    either standard remedy (`utils::globalVariables()` vs. rewriting
-    call sites with `.data$colname`). Treat as an accepted, permanent
-    NOTE going forward, not a to-do.
-  - **C++ bitwise-operator warning**: pinpointed the exact 7 warning
-    sites (see CRAN submission plan item 9) but the fix itself was not
-    started -- a `bash`/`sed` attempt to view the relevant
-    `functions.cpp` lines was declined by the user mid-session.
-  - Net effect on `check()` note/warning count not yet re-measured after
-    `ef77c4c` -- **rerun `devtools::check()`** to get a fresh baseline
-    before further triage.
+  - **LICENSE NOTE**: see CRAN submission plan item 11 below -- deleted then restored the file, ending in "keep + accept the cosmetic NOTE."
+  - **`tidyr` unused-import NOTE**: unchanged/still open this session -- discussed the fix (`tidyr::pivot_longer()` qualification inside `plotCovariateTrend()`) but did not implement it.
+  - **"no visible binding" NOTE, base-R-function half**: **fixed and committed** (`ef77c4c`, "Import base stats functions to resolve no-visible-binding NOTE") -- added `@importFrom stats binomial cov cov2cor dbinom dgamma dnorm dpois glm kmeans logLik median predict quantile rbeta rbinom reorder rgamma rnorm rpois runif sd var` to `R/occJSDM-package.R`'s package-doc roxygen block (which already had one `@importFrom` tag, for `Rcpp::evalCpp`), then ran `devtools::document()` and confirmed all 22 `importFrom(stats, ...)` lines landed correctly in `NAMESPACE`.
+  - **"no visible binding" NOTE, NSE-column half** (e.g. `Species`/`x`/`y`/`Site`/`` `2.5%` `` flagged across many `plot*()` functions in `R/jsdmfun.R`/`R/output.R`): **the user explicitly decided to leave this unfixed** -- discussed but did not implement either standard remedy (`utils::globalVariables()` vs. rewriting call sites with `.data$colname`). Treat as an accepted, permanent NOTE going forward, not a to-do.
+  - **C++ bitwise-operator warning**: pinpointed the exact 7 warning sites (see CRAN submission plan item 9) but the fix itself was not started -- a `bash`/`sed` attempt to view the relevant `functions.cpp` lines was declined by the user mid-session.
+  - Net effect on `check()` note/warning count not yet re-measured after `ef77c4c` -- **rerun `devtools::check()`** to get a fresh baseline before further triage.
 
-- **Most recent commits** (as of this session, July 20 2026, newest
-  first, all now pushed to `origin/main` -- confirmed
-  `git rev-parse main origin/main` identical): `f594ea4` "Add
-  placeholder test after removing orphaned test-toRunOccJSDMFormat.R"
-  (added `tests/testthat/test-placeholder.R` with a trivial passing
-  test, since `testthat::test_check()` errors with "No test files found"
-  if `tests/testthat/` is completely empty); `00233a1` "Remove orphaned
-  test-toRunOccJSDMFormat.R" (deleted the test file entirely via
-  `git rm` -- it tested the removed `toRunOccJSDMFormat()` function and
-  errored before ever reaching it; comprehensive tests against the
-  current `simulateOccJSDMData(model = ...)` API are a separate future
-  task); `1a898ad` "Fix vignettes to use library(occJSDM) instead of
-  devtools::load_all()" (both vignette setup chunks called
-  `devtools::load_all()`, which has the side effect of attaching Imports
-  to the search path and silently allowing unqualified tidyverse/ggplot2
-  calls; `R CMD check` rebuilds vignettes in an isolated environment
-  without `devtools` installed, so this failed with "there is no package
-  called devtools" -- fixed by switching to `library(occJSDM)` and
-  qualifying two bare `count()` calls as `dplyr::count()` and two bare
-  `ylim()` calls as `ggplot2::ylim()`; also repaired incidental
-  corruption where `library(occJSDM)` had been merged into
-  `traitsSummary`); `2b2426d` "Fix DESCRIPTION dependency declarations"
-  (added `FastGP` to Imports -- used in `R/output.R`/`R/jsdmfun.R` for
-  GP kernel math but never declared, masked locally since it was already
-  installed; added `patchwork` to Suggests -- used in the vignette for
-  combining plots; bumped `Depends` to `R (>= 4.1.0)` since the code
-  already uses the native pipe `|>` and `\(...)` lambda shorthand);
-  `45afe09` "Remove redundant @import tidyverse (undeclared dependency)"
-  (`R/simulateData.R` had `@import tidyverse` but `tidyverse` itself was
-  never in DESCRIPTION -- DESCRIPTION already declares the specific
-  tidyverse packages actually used, so the tag was just removed and
-  `NAMESPACE` regenerated). Earlier history (`44c0b03` and everything
-  before it, described below) is unchanged from previous sessions'
-  notes.
+- **Most recent commits** (as of this session, July 20 2026, newest first, all now pushed to `origin/main` -- confirmed `git rev-parse main origin/main` identical): `f594ea4` "Add placeholder test after removing orphaned test-toRunOccJSDMFormat.R" (added `tests/testthat/test-placeholder.R` with a trivial passing test, since `testthat::test_check()` errors with "No test files found" if `tests/testthat/` is completely empty); `00233a1` "Remove orphaned test-toRunOccJSDMFormat.R" (deleted the test file entirely via `git rm` -- it tested the removed `toRunOccJSDMFormat()` function and errored before ever reaching it; comprehensive tests against the current `simulateOccJSDMData(model = ...)` API are a separate future task); `1a898ad` "Fix vignettes to use library(occJSDM) instead of devtools::load_all()" (both vignette setup chunks called `devtools::load_all()`, which has the side effect of attaching Imports to the search path and silently allowing unqualified tidyverse/ggplot2 calls; `R CMD check` rebuilds vignettes in an isolated environment without `devtools` installed, so this failed with "there is no package called devtools" -- fixed by switching to `library(occJSDM)` and qualifying two bare `count()` calls as `dplyr::count()` and two bare `ylim()` calls as `ggplot2::ylim()`; also repaired incidental corruption where `library(occJSDM)` had been merged into `traitsSummary`); `2b2426d` "Fix DESCRIPTION dependency declarations" (added `FastGP` to Imports -- used in `R/output.R`/`R/jsdmfun.R` for GP kernel math but never declared, masked locally since it was already installed; added `patchwork` to Suggests -- used in the vignette for combining plots; bumped `Depends` to `R (>= 4.1.0)` since the code already uses the native pipe `|>` and `\(...)` lambda shorthand); `45afe09` "Remove redundant @import tidyverse (undeclared dependency)" (`R/simulateData.R` had `@import tidyverse` but `tidyverse` itself was never in DESCRIPTION -- DESCRIPTION already declares the specific tidyverse packages actually used, so the tag was just removed and `NAMESPACE` regenerated). Earlier history (`44c0b03` and everything before it, described below) is unchanged from previous sessions' notes.
 
-- **This session's work (July 20 2026)**: two separate efforts. (1)
-  **Git history purge**: used
-  `git filter-repo --path data/traitdata_caiwang.rdata --invert-paths --force`
-  to permanently remove `data/traitdata_caiwang.rdata` from all commits
-  in `main`'s lineage from `11c5449` onward, then force-pushed to
-  `origin` (`AlexDiana/occJSDM`) -- confirmed the file is gone from the
-  working tree, local history, and the remote. **This resolves the
-  previously-open TODO.md item** ("purge traitdata_caiwang.rdata from
-  git history") described in the older TODO.md-structure bullet below,
-  which is now stale on that point. **Action needed**: Alex needs to
-  re-clone or
-  `git fetch origin && git reset --hard origin/main && git clean -fd`
-  his local copy, since his history now diverges from the rewritten
-  remote -- **this message has not yet been sent to him**; still an open
-  task for the user. Note the parallel `src/occJSDM.dll`-in-history item
-  (see "Git and build artifacts" above) was *not* addressed this session
-  and remains open, unpurged. (2) **Fixed `devtools::check()` from
-  erroring out entirely**: after killing \~60 stuck R processes and 143
-  leftover temp build dirs left over from repeated retries (which had
-  made `check()` merely *look* permanently hung, not actually broken --
-  `tools::buildVignettes()` and a full `R CMD INSTALL` both completed in
-  \~30s in isolation), found and fixed 5 real packaging bugs (the 5
-  commits above: `45afe09`, `2b2426d`, `1a898ad`, `00233a1`, `f594ea4`).
-  **Current `devtools::check()` status: 0 errors, 2 warnings, 5 notes.**
-  Warnings: benign C++ compiler warnings, and undocumented Rd `@param`s
-  for `predictNewSites` (missing `useEnvCov`/`useSpatial`/`useBiotic`)
-  and `runOccJSDM` (missing `traitsMatrix`) -- **not yet fixed, low
-  priority**. Notes are cosmetic (file timestamps, LICENSE/DESCRIPTION
-  mismatch, non-standard top-level files, CITATION.cff placement, unused
-  declared imports, no-visible-global-variable) and not yet triaged
-  individually.
+- **This session's work (July 20 2026)**: two separate efforts. (1) **Git history purge**: used `git filter-repo --path data/traitdata_caiwang.rdata --invert-paths --force` to permanently remove `data/traitdata_caiwang.rdata` from all commits in `main`'s lineage from `11c5449` onward, then force-pushed to `origin` (`AlexDiana/occJSDM`) -- confirmed the file is gone from the working tree, local history, and the remote. **This resolves the previously-open TODO.md item** ("purge traitdata_caiwang.rdata from git history") described in the older TODO.md-structure bullet below, which is now stale on that point. **Action needed**: Alex needs to re-clone or `git fetch origin && git reset --hard origin/main && git clean -fd` his local copy, since his history now diverges from the rewritten remote -- **this message has not yet been sent to him**; still an open task for the user. Note the parallel `src/occJSDM.dll`-in-history item (see "Git and build artifacts" above) was *not* addressed this session and remains open, unpurged. (2) **Fixed `devtools::check()` from erroring out entirely**: after killing \~60 stuck R processes and 143 leftover temp build dirs left over from repeated retries (which had made `check()` merely *look* permanently hung, not actually broken -- `tools::buildVignettes()` and a full `R CMD INSTALL` both completed in \~30s in isolation), found and fixed 5 real packaging bugs (the 5 commits above: `45afe09`, `2b2426d`, `1a898ad`, `00233a1`, `f594ea4`). **Current `devtools::check()` status: 0 errors, 2 warnings, 5 notes.** Warnings: benign C++ compiler warnings, and undocumented Rd `@param`s for `predictNewSites` (missing `useEnvCov`/`useSpatial`/`useBiotic`) and `runOccJSDM` (missing `traitsMatrix`) -- **not yet fixed, low priority**. Notes are cosmetic (file timestamps, LICENSE/DESCRIPTION mismatch, non-standard top-level files, CITATION.cff placement, unused declared imports, no-visible-global-variable) and not yet triaged individually.
 
-- **Rd documentation warnings fixed** (commit `8d36c26`, "Document
-  missing Rd params for predictNewSites and runOccJSDM"): added `@param`
-  docs for `predictNewSites`'s `useEnvCov`/`useSpatial`/`useBiotic` and
-  `runOccJSDM`'s `traitsMatrix` (noting it's currently unused directly
-  -- traits are actually read from `data$traits`, per the
-  trait-reading-fragility item elsewhere in this file). Regenerated
-  `.Rd` files via `devtools::document()`; confirmed via
-  `tools::checkDocFiles()` and a full `devtools::check()` rerun that
-  both "checking for missing documentation entries" and the general
-  documentation warning are gone. **`devtools::check()` improved from 0
-  errors/2 warnings/5 notes to 0 errors/1 warning/5 notes** (the
-  remaining warning is the pre-existing benign C++ compiler warnings,
-  unrelated to docs).
+- **Rd documentation warnings fixed** (commit `8d36c26`, "Document missing Rd params for predictNewSites and runOccJSDM"): added `@param` docs for `predictNewSites`'s `useEnvCov`/`useSpatial`/`useBiotic` and `runOccJSDM`'s `traitsMatrix` (noting it's currently unused directly -- traits are actually read from `data$traits`, per the trait-reading-fragility item elsewhere in this file). Regenerated `.Rd` files via `devtools::document()`; confirmed via `tools::checkDocFiles()` and a full `devtools::check()` rerun that both "checking for missing documentation entries" and the general documentation warning are gone. **`devtools::check()` improved from 0 errors/2 warnings/5 notes to 0 errors/1 warning/5 notes** (the remaining warning is the pre-existing benign C++ compiler warnings, unrelated to docs).
 
-- **"Unused declared imports" note partially triaged** (commit
-  `2b2089d`, "Update DESCRIPTION", committed directly by Doug in
-  parallel with an identical AI-drafted edit): removed `cli` and
-  `tidyselect` from `DESCRIPTION`'s `Imports` -- `cli` was used nowhere
-  in `R/`, and the only `tidyselect`-style calls (`contains()`,
-  `starts_with()` inside `dplyr::across()`) are actually re-exported by
-  `dplyr` (`import(dplyr)` already covers them), so `tidyselect` wasn't
-  a real direct dependency either. **`tidyr` was deliberately left in
-  `Imports`**, even though it still triggers the note
-  (`Namespace in Imports field not imported from: 'tidyr'`) -- its only
-  usage is inside `plotCovariateTrend()` (`R/jsdmfun.R:1495`), an
-  unexported function that is never called anywhere in the package and
-  is explicitly **in-progress** (per Doug) rather than dead code, so it
-  was left untouched at Doug's request rather than deleted or wired up
-  with a proper `@importFrom tidyr pivot_longer`. `plotCovariateTrend()`
-  computes a GAM/spline-style marginal effect of one occupancy covariate
-  on the *linear predictor* (not probability) scale via
-  `createSplinesMatrixSingleCov()`/`list_ns`, with no
-  posterior-uncertainty band and all species overlaid in one plot --
-  **not a duplicate of** the exported
-  `plotOccupancyGradient()`/`returnOccupancyGradient()` (which operate
-  on the probability scale with full posterior credible intervals,
-  faceted per species, and pull directly from a fitted model's posterior
-  draws). The spline helpers it depends on
-  (`createSplinesObjects()`/`createSplinesMatrix()`/`createSplinesMatrixSingleCov()`,
-  `R/jsdmfun.R` \~line 240-272) trace back to an internal `usingSplines`
-  argument of the lower-level `simulateData()`, but `runOccJSDM()`
-  itself has no corresponding spline/GAM argument today -- so this looks
-  like scaffolding for a not-yet-exposed spline/GAM occupancy-covariate
-  feature. **Still open**: decide the eventual fate of
-  `plotCovariateTrend()`/spline support (finish it, or delete later)
-  and, until then, the `tidyr`-unused-import note will persist as
-  expected.
+- **"Unused declared imports" note partially triaged** (commit `2b2089d`, "Update DESCRIPTION", committed directly by Doug in parallel with an identical AI-drafted edit): removed `cli` and `tidyselect` from `DESCRIPTION`'s `Imports` -- `cli` was used nowhere in `R/`, and the only `tidyselect`-style calls (`contains()`, `starts_with()` inside `dplyr::across()`) are actually re-exported by `dplyr` (`import(dplyr)` already covers them), so `tidyselect` wasn't a real direct dependency either. **`tidyr` was deliberately left in `Imports`**, even though it still triggers the note (`Namespace in Imports field not imported from: 'tidyr'`) -- its only usage is inside `plotCovariateTrend()` (`R/jsdmfun.R:1495`), an unexported function that is never called anywhere in the package and is explicitly **in-progress** (per Doug) rather than dead code, so it was left untouched at Doug's request rather than deleted or wired up with a proper `@importFrom tidyr pivot_longer`. `plotCovariateTrend()` computes a GAM/spline-style marginal effect of one occupancy covariate on the *linear predictor* (not probability) scale via `createSplinesMatrixSingleCov()`/`list_ns`, with no posterior-uncertainty band and all species overlaid in one plot -- **not a duplicate of** the exported `plotOccupancyGradient()`/`returnOccupancyGradient()` (which operate on the probability scale with full posterior credible intervals, faceted per species, and pull directly from a fitted model's posterior draws). The spline helpers it depends on (`createSplinesObjects()`/`createSplinesMatrix()`/`createSplinesMatrixSingleCov()`, `R/jsdmfun.R` \~line 240-272) trace back to an internal `usingSplines` argument of the lower-level `simulateData()`, but `runOccJSDM()` itself has no corresponding spline/GAM argument today -- so this looks like scaffolding for a not-yet-exposed spline/GAM occupancy-covariate feature. **Still open**: decide the eventual fate of `plotCovariateTrend()`/spline support (finish it, or delete later) and, until then, the `tidyr`-unused-import note will persist as expected.
 
-- **Outstanding from this session, not yet done**: (a) notify Alex about
-  the git-history rewrite and recovery steps (drafted but unsent); (b)
-  triage the remaining 5 `check()` notes (file timestamps,
-  `LICENSE`/DESCRIPTION mismatch, non-standard top-level files,
-  CITATION.cff placement, the now-narrowed `tidyr`-unused-import note,
-  no-visible-global-variable/function issues e.g. `plotCovariateTrend`'s
-  `pivot_longer`/`x`/`Value`/`Species` bindings); (c) write a
-  comprehensive test suite (the placeholder test only keeps `testthat`
-  scaffolding alive, it doesn't test anything real); (d) the two known
-  bugs below (`object 'M' not found` for JSDM-only models;
-  `simulateOccJSDMData(model = "occupancy")` row-mismatch) are unrelated
-  to this session's work and were not investigated further -- still open
-  per `TODO.md` items 1.7/1.8; (e) `plotCovariateTrend()`'s in-progress
-  spline/GAM feature (see above) has no corresponding `runOccJSDM()`
-  argument yet -- unclear if/when it'll be finished.
+- **Outstanding from this session, not yet done**: (a) notify Alex about the git-history rewrite and recovery steps (drafted but unsent); (b) triage the remaining 5 `check()` notes (file timestamps, `LICENSE`/DESCRIPTION mismatch, non-standard top-level files, CITATION.cff placement, the now-narrowed `tidyr`-unused-import note, no-visible-global-variable/function issues e.g. `plotCovariateTrend`'s `pivot_longer`/`x`/`Value`/`Species` bindings); (c) write a comprehensive test suite (the placeholder test only keeps `testthat` scaffolding alive, it doesn't test anything real); (d) the two known bugs below (`object 'M' not found` for JSDM-only models; `simulateOccJSDMData(model = "occupancy")` row-mismatch) are unrelated to this session's work and were not investigated further -- still open per `TODO.md` items 1.7/1.8; (e) `plotCovariateTrend()`'s in-progress spline/GAM feature (see above) has no corresponding `runOccJSDM()` argument yet -- unclear if/when it'll be finished.
 
-- Earlier: `44c0b03` "Deduplicate sites in predictNewSites example; move
-  section earlier in vignette" (this session -- committed a direct edit
-  Doug made outside this session's tool calls: deduplicates `data$info`
-  by `Site` for the `predictNewSites()` example, `1782 -> 100` unique
-  sites, via `site_rows <- !duplicated(data$info$Site)`, and moved the
-  whole "Prediction at new sites" section earlier in the vignette, right
-  after the model-diagnostics/traceplots material, with a note that the
-  function "is still under active development"); `e817bd1` "Update
-  occJSDM.Rmd" (Doug, moved the "Traceplots for a single covariate"
-  subsection from immediately after "Model diagnostics" to the end of
-  the vignette, after "Latent presence table..." and before "Prediction
-  at new sites" -- done directly by Doug outside this session's tool
-  calls); `882cffe` "Add Model diagnostics vignette section; de-export
-  computeRhat/summarisePosterior" (see "MCMC diagnostics" above for full
-  detail); `c4e24c0` "Refit and update sampleresults.rda; fix Xs doc
-  mismatch"; `2a943c7` "Regenerate sampledata.rda with fixed Xs
-  coordinates"; `bf0c3ee` "Mark TODO 1.1 (trait-reading fragility in
-  runOccJSDM()) as fixed"; `cb3cc94` "Fix Xs recycling bug and modernize
-  simulateOccJSDMData vignette"; `0bb5efd` "Regenerate sampledata to new
-  info/OTU/traits shape". Earlier history (`a9700ab` Alex's refactor and
-  everything before it) is unchanged from previous sessions' notes
-  below.
+- Earlier: `44c0b03` "Deduplicate sites in predictNewSites example; move section earlier in vignette" (this session -- committed a direct edit Doug made outside this session's tool calls: deduplicates `data$info` by `Site` for the `predictNewSites()` example, `1782 -> 100` unique sites, via `site_rows <- !duplicated(data$info$Site)`, and moved the whole "Prediction at new sites" section earlier in the vignette, right after the model-diagnostics/traceplots material, with a note that the function "is still under active development"); `e817bd1` "Update occJSDM.Rmd" (Doug, moved the "Traceplots for a single covariate" subsection from immediately after "Model diagnostics" to the end of the vignette, after "Latent presence table..." and before "Prediction at new sites" -- done directly by Doug outside this session's tool calls); `882cffe` "Add Model diagnostics vignette section; de-export computeRhat/summarisePosterior" (see "MCMC diagnostics" above for full detail); `c4e24c0` "Refit and update sampleresults.rda; fix Xs doc mismatch"; `2a943c7` "Regenerate sampledata.rda with fixed Xs coordinates"; `bf0c3ee` "Mark TODO 1.1 (trait-reading fragility in runOccJSDM()) as fixed"; `cb3cc94` "Fix Xs recycling bug and modernize simulateOccJSDMData vignette"; `0bb5efd` "Regenerate sampledata to new info/OTU/traits shape". Earlier history (`a9700ab` Alex's refactor and everything before it) is unchanged from previous sessions' notes below.
 
-- **This session's work** (analysis + bug-hunting; `44c0b03` committed,
-  `TODO.md` updated with two new items): (1) Investigated why
-  `predictNewSites()` applied to the original 100 sites doesn't exactly
-  reproduce `computePredictiveOccupancyProbs()`'s fitted values
-  (differences up to \~0.26 in probability) -- found no clear
-  species-level pattern tying the discrepancy to factor-loading or
-  spatial-coefficient strength (weak/inconsistent correlations, n=10
-  species). (2) To disentangle "estimation noise" from
-  "`predictNewSites()` structurally can't reconstruct latent effects,"
-  simulated a dataset with a *known* true occupancy probability
-  (`true_psi <- plogis(true_eta)`, from `simulateOccJSDMData()`'s
-  internal linear predictor) and compared both estimators against it:
-  MAE-vs-truth was nearly identical (fitted 0.202 vs. `predictNewSites`
-  median 0.206), with correlated errors (r=0.94) and similar
-  shrinkage-toward-0.5 bias for both -- concluding the
-  fitted/`predictNewSites` mismatch reflects shared estimation
-  uncertainty in a modest-sized dataset (n=50 sites), not a
-  `predictNewSites`-specific flaw. (3) While building that simulation,
-  discovered two new bugs (see "Known issues" above and `TODO.md` items
-  1.7/1.8): `runOccJSDM()` errors with `object 'M' not found` for
-  JSDM-only (`model="binary"/"continuous"`) data, and
-  `simulateOccJSDMData(model = "occupancy")` errors with a row-mismatch
-  due to a `NULL` `idx_z_k`. Worked around both by simulating via
-  `model = "two_stage"` with trivial `P=1`, `K=rep(1,N)` instead.
+- **This session's work** (analysis + bug-hunting; `44c0b03` committed, `TODO.md` updated with two new items): (1) Investigated why `predictNewSites()` applied to the original 100 sites doesn't exactly reproduce `computePredictiveOccupancyProbs()`'s fitted values (differences up to \~0.26 in probability) -- found no clear species-level pattern tying the discrepancy to factor-loading or spatial-coefficient strength (weak/inconsistent correlations, n=10 species). (2) To disentangle "estimation noise" from "`predictNewSites()` structurally can't reconstruct latent effects," simulated a dataset with a *known* true occupancy probability (`true_psi <- plogis(true_eta)`, from `simulateOccJSDMData()`'s internal linear predictor) and compared both estimators against it: MAE-vs-truth was nearly identical (fitted 0.202 vs. `predictNewSites` median 0.206), with correlated errors (r=0.94) and similar shrinkage-toward-0.5 bias for both -- concluding the fitted/`predictNewSites` mismatch reflects shared estimation uncertainty in a modest-sized dataset (n=50 sites), not a `predictNewSites`-specific flaw. (3) While building that simulation, discovered two new bugs (see "Known issues" above and `TODO.md` items 1.7/1.8): `runOccJSDM()` errors with `object 'M' not found` for JSDM-only (`model="binary"/"continuous"`) data, and `simulateOccJSDMData(model = "occupancy")` errors with a row-mismatch due to a `NULL` `idx_z_k`. Worked around both by simulating via `model = "two_stage"` with trivial `P=1`, `K=rep(1,N)` instead.
 
-- **Working tree**: clean as of the end of this session (`44c0b03`
-  committed). Re-check with `git status` at the start of any new
-  session, since the vignette is open in the editor and edited directly
-  by Doug between AI sessions.
+- **Working tree**: clean as of the end of this session (`44c0b03` committed). Re-check with `git status` at the start of any new session, since the vignette is open in the editor and edited directly by Doug between AI sessions.
 
-- Two doc-only staleness items found while working in this area this
-  session (see "Known issues" above for detail):
-  `returnLatentPresences()`'s `@note` roxygen comment describes an old
-  bug that the current function body doesn't actually have;
-  `predictNewSites()`'s docs no longer mention the previously-flagged
-  `X_ord` bug (unclear if actually fixed).
+- Two doc-only staleness items found while working in this area this session (see "Known issues" above for detail): `returnLatentPresences()`'s `@note` roxygen comment describes an old bug that the current function body doesn't actually have; `predictNewSites()`'s docs no longer mention the previously-flagged `X_ord` bug (unclear if actually fixed).
 
-- **`data/sampleresults.rda` refit** (from a previous session,
-  `c4e24c0`): re-ran the `vignettes/occJSDM.Rmd` workflow
-  (`data <- sampledata`, `set.seed(3947)`, drop 3 samples down to 297
-  samples/1,782 rows, fit with the documented `MCMCparams`), saved over
-  `sampleresults` via
-  `usethis::use_data(sampleresults, overwrite = TRUE)`. Also fixed a
-  doc-only bug in `R/data.R`'s `@format` roxygen for `sampleresults`
-  (documented `X_s`, actual element is `Xs`).
+- **`data/sampleresults.rda` refit** (from a previous session, `c4e24c0`): re-ran the `vignettes/occJSDM.Rmd` workflow (`data <- sampledata`, `set.seed(3947)`, drop 3 samples down to 297 samples/1,782 rows, fit with the documented `MCMCparams`), saved over `sampleresults` via `usethis::use_data(sampleresults, overwrite = TRUE)`. Also fixed a doc-only bug in `R/data.R`'s `@format` roxygen for `sampleresults` (documented `X_s`, actual element is `Xs`).
 
-- **TODO.md structure** (current as of `1c25529`/this session, heavily
-  condensed from the earlier structure described below -- see file for
-  full detail): organized as **v0.1.0-beta Public release** (1. Alex to
-  dos, now just 2 items: "Allow for different primers per sample" [new],
-  and the `simulateOccJSDMData(model = "occupancy")` `idx_z_k` bug
-  [renumbered 1.2, unchanged content, see "Known issues"]; 2. Doug to
-  dos, both items now marked **done**: purging `traitdata_caiwang.rdata`
-  from git history via `git filter-repo`, and the "model diagnostics
-  functions from GLGS-eDNA repo" item, whose done-note now also covers
-  the vignette section and `computeRhat()`/`summarisePosterior()`
-  de-export, and explicitly notes a testthat test for `R/diagnostics.R`
-  is still not done), **MEE paper** (1. Doug to dos: reproduce Ecology
-  Letters results as a package test; 2. Alex to dos, reordered/updated
-  by `1c25529`: Overleaf math vignette, **"Switch to integrated WAIC"
-  [new, promoted to position 2]**, GAMs for JSDM, count-data support,
-  source-sink inference scenario, remove space's effect on env
-  covariates, site-level "variation" partitioning -- **the former
-  "M-based `plotCumulativeSpeciesDetections()`" item was removed since
-  it's now done**, see "Current work status"), a new **Outreach**
-  section (a drafted listserv announcement for the beta release, dated
-  July 20 2026, not yet sent), and **Future versions** (spike-in
-  abundance-change estimation, model selection via
-  regularisation/shrinkage e.g. for geospatial foundation model
-  embeddings, and a new item: parallelisation for speedup -- plausibly
-  related to the new `sample_betatheta_cpp_parallel` Rcpp export from
-  `1c25529`). `TODO.md` still does **not** mention the `runOccJSDM()`
-  `model`-used-before-assignment bug -- treat as fixed per the "Known
-  issues" section above unless re-broken.
+- **TODO.md structure** (current as of `1c25529`/this session, heavily condensed from the earlier structure described below -- see file for full detail): organized as **v0.1.0-beta Public release** (1. Alex to dos, now just 2 items: "Allow for different primers per sample" [new], and the `simulateOccJSDMData(model = "occupancy")` `idx_z_k` bug [renumbered 1.2, unchanged content, see "Known issues"]; 2. Doug to dos, both items now marked **done**: purging `traitdata_caiwang.rdata` from git history via `git filter-repo`, and the "model diagnostics functions from GLGS-eDNA repo" item, whose done-note now also covers the vignette section and `computeRhat()`/`summarisePosterior()` de-export, and explicitly notes a testthat test for `R/diagnostics.R` is still not done), **MEE paper** (1. Doug to dos: reproduce Ecology Letters results as a package test; 2. Alex to dos, reordered/updated by `1c25529`: Overleaf math vignette, **"Switch to integrated WAIC" [new, promoted to position 2]**, GAMs for JSDM, count-data support, source-sink inference scenario, remove space's effect on env covariates, site-level "variation" partitioning -- **the former "M-based `plotCumulativeSpeciesDetections()`" item was removed since it's now done**, see "Current work status"), a new **Outreach** section (a drafted listserv announcement for the beta release, dated July 20 2026, not yet sent), and **Future versions** (spike-in abundance-change estimation, model selection via regularisation/shrinkage e.g. for geospatial foundation model embeddings, and a new item: parallelisation for speedup -- plausibly related to the new `sample_betatheta_cpp_parallel` Rcpp export from `1c25529`). `TODO.md` still does **not** mention the `runOccJSDM()` `model`-used-before-assignment bug -- treat as fixed per the "Known issues" section above unless re-broken.
 
-- **`interim_todo.Rmd`** (an untracked scratch file, never in git)
-  proposed where to add several not-yet-exposed functions to the
-  vignette (`returnOccupancyRates`, `returnTraitsCoeff`,
-  `plotFPTPStage2Rates`, `computeAverageCollectionProbs`,
-  `computeConditionalSamplePresenceProbs`, `thinOutput`); its
-  diagnostics-related row is now resolved (the "Model diagnostics"
-  placeholder it referenced has been filled in). **The file no longer
-  exists on disk** (removed by Doug during this session, after this
-  memory file's last read of it) -- if any of its other suggestions (the
-  functions listed above) are still wanted in the vignette, they'll need
-  to be re-derived or asked about again, since that content isn't
-  preserved anywhere else.
+- **`interim_todo.Rmd`** (an untracked scratch file, never in git) proposed where to add several not-yet-exposed functions to the vignette (`returnOccupancyRates`, `returnTraitsCoeff`, `plotFPTPStage2Rates`, `computeAverageCollectionProbs`, `computeConditionalSamplePresenceProbs`, `thinOutput`); its diagnostics-related row is now resolved (the "Model diagnostics" placeholder it referenced has been filled in). **The file no longer exists on disk** (removed by Doug during this session, after this memory file's last read of it) -- if any of its other suggestions (the functions listed above) are still wanted in the vignette, they'll need to be re-derived or asked about again, since that content isn't preserved anywhere else.
 
 ## Notes
 
-- When editing files that are also open in the RStudio editor, prefer
-  re-reading the file immediately before and after edits -- a prior
-  session saw a file get corrupted/duplicated after an `edit` call,
-  likely from an editor/disk desync; rewriting the whole file with
-  `write` fixed it.
-- This repo's git history shows a pattern of committing by concern (e.g.
-  testthat setup, generated docs, vignette content fixes kept separate
-  from unrelated whitespace-only diffs) rather than one large commit --
-  worth continuing when making multiple unrelated changes.
-- TODO.md tracks near-term and future development priorities; keep
-  synchronized with actual work being done.
-- `doc/` (vignette build output, already in `.Rbuildignore` via `^doc$`)
-  was deleted from the working tree this session -- it's regenerated
-  automatically by `devtools::build_vignettes()`/`R CMD build`, so
-  deleting it is safe and has no effect on `git` (it was never tracked).
-- `Meta/vignette.rds` and `dev/` are two other directories clarified in
-  a recent session: `Meta/` is a local, gitignored (`.gitignore:4`,
-  `/Meta/`) build artifact created whenever vignettes are built, holding
-  vignette metadata for `vignette()` lookups -- not something to commit
-  or worry about. `dev/` **is** gitignored -- the earlier claim here
-  that it was "a tracked (not gitignored) scratch directory" was wrong.
-  As of 27 July 2026 `.gitignore` carves out one exception: `/dev/*`
-  excludes the contents (not the directory), `!/dev/simstudy/`
-  re-includes the simulation-validation plan and runner, and
-  `/dev/simstudy/results/` keeps study output out. The two-step pattern
-  is necessary because **git cannot re-include a file whose parent
-  directory is excluded** -- a bare `!dev/simstudy/PLAN.md` under
-  `/dev/` silently does nothing. **`dev/example.R` and `dev/runmodel.R`
-  no longer live here**: both were stale and non-running (they call
-  `runOccJSDMPro()`, `plotDetectionCovariates()` and other functions
-  that no longer exist, and `runmodel.R` loads data absent from the
-  repo), so they were moved to `deprecated/` with explanatory headers.
-  `deprecated/` is now genuinely tracked rather than
-  tracked-by-grandfathering, which matters because TODO.md group C plans
-  to move more dead code there and it would otherwise have been silently
-  ignored. `dev/` is `^dev$` in `.Rbuildignore`, so none of it ships
-  either way; `dev/example.R` calls several plotting-function names
-  (`plotDetectionCovariates()`, `plotOrdinationCovariates()`,
-  `plotFPDetectionRates()`, etc.) that don't match current exports and
-  looks stale/pre-refactor, similar to `analysis/analysis.R` --
-  `dev/runmodel.R` (37KB) has not yet been read/triaged.
+- When editing files that are also open in the RStudio editor, prefer re-reading the file immediately before and after edits -- a prior session saw a file get corrupted/duplicated after an `edit` call, likely from an editor/disk desync; rewriting the whole file with `write` fixed it.
+- This repo's git history shows a pattern of committing by concern (e.g. testthat setup, generated docs, vignette content fixes kept separate from unrelated whitespace-only diffs) rather than one large commit -- worth continuing when making multiple unrelated changes.
+- TODO.md tracks near-term and future development priorities; keep synchronized with actual work being done.
+- `doc/` (vignette build output, already in `.Rbuildignore` via `^doc$`) was deleted from the working tree this session -- it's regenerated automatically by `devtools::build_vignettes()`/`R CMD build`, so deleting it is safe and has no effect on `git` (it was never tracked).
+- `Meta/vignette.rds` and `dev/` are two other directories clarified in a recent session: `Meta/` is a local, gitignored (`.gitignore:4`, `/Meta/`) build artifact created whenever vignettes are built, holding vignette metadata for `vignette()` lookups -- not something to commit or worry about. `dev/` **is** gitignored -- the earlier claim here that it was "a tracked (not gitignored) scratch directory" was wrong. As of 27 July 2026 `.gitignore` carves out one exception: `/dev/*` excludes the contents (not the directory), `!/dev/simstudy/` re-includes the simulation-validation plan and runner, and `/dev/simstudy/results/` keeps study output out. The two-step pattern is necessary because **git cannot re-include a file whose parent directory is excluded** -- a bare `!dev/simstudy/PLAN.md` under `/dev/` silently does nothing. **`dev/example.R` and `dev/runmodel.R` no longer live here**: both were stale and non-running (they call `runOccJSDMPro()`, `plotDetectionCovariates()` and other functions that no longer exist, and `runmodel.R` loads data absent from the repo), so they were moved to `deprecated/` with explanatory headers. `deprecated/` is now genuinely tracked rather than tracked-by-grandfathering, which matters because TODO.md group C plans to move more dead code there and it would otherwise have been silently ignored. `dev/` is `^dev$` in `.Rbuildignore`, so none of it ships either way; `dev/example.R` calls several plotting-function names (`plotDetectionCovariates()`, `plotOrdinationCovariates()`, `plotFPDetectionRates()`, etc.) that don't match current exports and looks stale/pre-refactor, similar to `analysis/analysis.R` -- `dev/runmodel.R` (37KB) has not yet been read/triaged.
 
 ## CRAN submission plan
 
-Goal: get occJSDM accepted on CRAN. Investigated `devtools::check()`
-output plus DESCRIPTION/data/docs directly (July 20 2026 session) and
-found the items below. Split into blocking issues (CRAN will very likely
-reject without these) and should-fix issues (not hard blockers but
-expected/likely to draw reviewer pushback).
+Goal: get occJSDM accepted on CRAN. Investigated `devtools::check()` output plus DESCRIPTION/data/docs directly (July 20 2026 session) and found the items below. Split into blocking issues (CRAN will very likely reject without these) and should-fix issues (not hard blockers but expected/likely to draw reviewer pushback).
 
 ### Blocking
 
-1.  ~~**`Description:` field is still template placeholder text**~~
-    **FIXED** (`d0f1650`, refined `083df56`): rewritten to describe the
-    actual method (occupancy/JSDM for eDNA metabarcoding read data,
-    two-stage detection process, traits, spatial autocorrelation via a
-    Gaussian process, MCMC fitting), citing Ji et al. (2025)
-    `<doi:10.1111/ele.70302>`. Doug hand-edited wording afterward (fixed
-    "reads data" -\> "read data", tightened phrasing) -- final text
-    lives in `DESCRIPTION` lines 17-24.
-2.  ~~**`Title:` not in title case**~~ **FIXED** (`083df56`): Doug chose
-    his own title over the AI-drafted one -- current `Title:` is
-    `Simultaneous Fitting of an eDNA-Aware Occupancy and Joint Species Distribution Model`
-    (title-cased at Doug's request; note it's long, \~90 chars, but CRAN
-    doesn't hard-reject on length). The `occJSDM-package.Rd` internal
-    title was separately set to
-    `occJSDM: Occupancy and Joint Species Distribution Models for eDNA Metabarcoding Data`
-    (`8b99219`) -- these two titles (DESCRIPTION's `Title:` vs. the
-    package-doc `\title`) are intentionally worded differently and don't
-    need to match.
-3.  ~~**`Remotes: kassambara/ggcorrplot`**~~ **FIXED** (`083df56`):
-    confirmed via web search that `ggcorrplot` is on CRAN (current
-    release 0.1.4.1) and that the only usage in the codebase
-    (`ggcorrplot::ggcorrplot()` in `R/jsdmfun.R`, called with
-    `method`/`type`/`lab`/`lab_size`/`colors`/`title`) is standard API
-    present in the CRAN release -- confirmed live by running
-    `plotResidualCorrelationMatrix(fitmodel)` successfully against the
-    installed `0.1.4.999` GitHub dev build. Removed the `Remotes:` field
-    entirely.
-4.  **Shipped data is 124 MB -- still OPEN, not yet fixed.** (Originally
-    recorded as "`data/sampleresults.rda` is 62 MB"; see the July 25
-    2026 UPDATE bullet below for why the real figure is double that.)
-    Profiled live this session: `object.size(sampleresults)` = 65.1 MB
-    total, of which `results_output` = 64.7 MB and within that
-    `jsdm_output` = 57 MB. The two largest single arrays are `Bs_output`
-    (22.9 MB, dims `[30, 10, 5000, 2]`) and `U_output` (15.3 MB, dims
-    `[100, 2, 5000, 2]`) -- i.e. full raw MCMC draws, 10,000 total
-    (`niter=5000 x nchain=2`, `nthin=1`), stored as double-precision 4-D
-    arrays with no thinning applied before saving. Discussed 5 options
-    with Doug: (a) post-hoc thin the existing arrays along the `niter`
-    axis (e.g. keep 1-in-25 draws, no refit needed, \~62MB -\> \~2.5MB)
-    -- **recommended**, fast, doesn't change the vignette's fitted
-    numbers structurally; (b) refit with much smaller `MCMCparams` (e.g.
-    `niter=200`) -- same size win but requires re-running MCMC (minutes)
-    and re-rendering vignette prose; (c) audit and drop `jsdm_output`
-    sub-components unused by vignette/output functions
-    (`Gs_output`/`Cs_output`/`U_output`/`As_output`/`tau_output`/`C_output`/`sigmab_output`/`sigmabs_output`/`sigmah_output`/`idx_ls_output`,
-    \~25-30MB combined) -- combine with (a); (d) don't ship a
-    precomputed fit at all, fit a tiny model live at vignette build time
-    instead -- cleanest long-term but touches vignette code and the
-    dataset's now-documented `\value`; (e) compression alone (already
-    `LazyDataCompression: xz`) won't meaningfully shrink near-random
-    MCMC draws. **Recommended combo**: (a) + (c). **Not yet
-    implemented** -- next step is to check which `jsdm_output`
-    components the vignette/output functions actually touch, then write
-    a thin+prune script and regenerate `sampleresults.rda`.
-    - **UPDATE (July 25 2026 audit): this is a 124 MB problem, not a 62
-      MB one.** There is a *second* 62 MB file on disk,
-      `data/sampleresults_highp_highthetabaseline.rda` (plus a 28 KB
-      `data/sampledata_highp_highthetabaseline.rda`). Both are
-      gitignored -- so they never appear in `git ls-files` and were
-      invisible to the earlier profiling -- but **`.Rbuildignore` does
-      not exclude them, and `R CMD build` reads the filesystem, not
-      git**, so a tarball built from Doug's working tree ships all four
-      `.rda` files. Verified by matching every `.Rbuildignore` regex
-      against `data/*.rda`: all four come out `SHIPPED`. Two knock-on
-      effects beyond raw size: with `LazyData: true` the two scratch
-      files become package datasets, and neither is documented in
-      `R/data.R` (which documents only `sampledata` and
-      `sampleresults`), so `R CMD check` would add an "undocumented data
-      sets" NOTE on top of the installed-size NOTE. **Cheapest first
-      move: add the scratch files (or a `_highp_highthetabaseline`
-      pattern) to `.Rbuildignore`** -- that halves the blocker with a
-      one-line change and before any thinning work.
-    - **UPDATE (July 25 2026, consistency pass; numbering refreshed July
-      27): the bug fixes force a refit, which changes the
-      recommendation.** `sampleresults.rda` is a fit produced by the
-      *pre-`b7b6aa2`, buggy* code, and several of the fixes now listed
-      in TODO.md's **Fixed bugs** change its contents: the
-      `sample_pq_cpp()` FP-count fix (Fixed bugs 2) matters because that
-      bug was "accidentally correct only when `P = 1`" and the shipped
-      `sampledata` has **`P = 3` primers** (verified:
-      `length(unique(sampledata$info$Primer)) == 3`, 1800 rows, 100
-      sites, 10 species), so every Stage 2 `q` value in the stored fit
-      is affected; the WAIC iteration-counter fix (Fixed bugs 9) changes
-      `WAIC`; the `sampleBuniv()` precedence fix (Fixed bugs 3) changes
-      the trait coefficients `G`/`C`/`A`. **So `sampleresults.rda` must
-      be regenerated, not merely thinned.** Consequences: (i) doing the
-      thin+prune work before the group A fixes is wasted effort; (ii)
-      once a refit is mandatory, **option (b) (refit with much smaller
-      `MCMCparams`) is strictly better than option (a)** -- it fixes the
-      size problem and regenerates against correct code in a single
-      step, and removes the dependency on `thinOutput()` entirely; (iii)
-      `vignettes/occJSDM.Rmd` hard-codes `extractWAIC()` values in its
-      model-selection prose (last refreshed in `763e738`), so the
-      vignette must be re-rendered in the same job.
-    - **Blocked on a bug** (only if option (a) is chosen after all): the
-      tool that plan depends on, `thinOutput()`, cannot run. It reads
-      `niter` from `results_output$beta_ord_output`, an array that no
-      longer exists (`R/output.R:21`), so `seq(1, NULL, by = 5)` errors
-      immediately; it also ignores its own `thin` argument and would
-      thin 2-D posterior-mean matrices *by row*, silently dropping
-      sites. See TODO.md group B item 2. Fix `thinOutput()` before
-      executing option (a).
-    - **Separately discussed**: an external-download alternative for
-      cases where a package genuinely needs a large file. CRAN disallows
-      downloading anything during install/build/`check` (must work
-      offline), but allows a package to ship a user-facing function
-      (e.g. `get_full_sampleresults()`) that downloads+caches a file at
-      runtime via `tools::R_user_dir()`, guarded in examples/vignettes
-      (e.g. `\donttest{}`, `curl::has_internet()` checks) so CRAN's
-      automated checks never depend on network access. Host candidates:
-      GitHub Releases (simple) or Zenodo/OSF (gets a DOI, fits this
-      project's existing paper-citation/reproducibility framing).
-      **Proposed two-track approach** (not yet actioned): ship the
-      thinned/pruned `sampleresults.rda` (above) for CRAN-checkable
-      examples/vignettes, and optionally host the full untouched 62MB
-      fit externally via an optional download helper for exact
-      paper-reproduction purposes -- these are independent and don't
-      block each other.
-5.  ~~**`rstan` is a dead, extremely heavy dependency**~~ **FIXED**
-    (`d0f1650`): removed `rstan (>= 2.26.0)` from `Imports:` and deleted
-    the `rstan::rstan_options(auto_write = TRUE)` call from `R/zzz.R`'s
-    `.onLoad()` (which now only sets `options(mc.cores = ...)`).
-    Confirmed via `grep -rn "rstan"` across `R/`, `DESCRIPTION`,
-    `NAMESPACE` that no references remain.
-6.  ~~**Missing `\value` tags on 3 Rd files**~~ **FIXED** (`6a7313f`):
-    added `@return` roxygen tags to `sampledata`/`sampleresults` (in
-    `R/data.R`, short restatements of their existing `@format`
-    descriptions) and to `occJSDM-package` (in `R/occJSDM-package.R`,
-    alongside replacing the placeholder "Package documentation." text
-    with a real description mirroring the DESCRIPTION rewrite, then
-    retitled per Doug's wording in `8b99219`). Regenerated via
-    `devtools::document()`; confirmed via `grep -L "\\value" man/*.Rd`
-    that no Rd files remain missing `\value`.
-7.  **OpenMP is enabled but uncapped, violating CRAN's two-core limit --
-    NEW (July 25 2026 audit), blocking.** (Numbered 16 to continue the
-    single 1-15 sequence used across both subsections; it belongs here,
-    not in "should fix".) `src/Makevars` sets
-    `PKG_CXXFLAGS = $(SHLIB_OPENMP_CXXFLAGS)`, and there are two
-    `#pragma omp parallel for` sites -- `samplePGvariables()`
-    (`src/jsdm.cpp:398`) and `sample_betatheta_cpp_parallel()`
-    (`src/functions.cpp:600`). **Nothing anywhere caps the thread
-    count**: the only `omp_set_num_threads` in the tree is commented out
-    (`src/jsdm.cpp:647`), so an OpenMP parallel region defaults to every
-    available core. CRAN policy forbids using more than two cores during
-    checks. `SystemRequirements:` also does not declare OpenMP. Fix:
-    honour a thread limit (respect
-    `OMP_NUM_THREADS`/`omp_set_num_threads()` bounded by 2 in checks, or
-    expose a `nthreads` argument), and add
-    `SystemRequirements: GNU make, OpenMP` if OpenMP is kept.
-    - **Compounded by TODO.md group A item 5** (renumbered twice on July
-      27; formerly the audit's A.6). *Partially resolved by `b7b6aa2`*:
-      the `sample_betatheta_cpp_parallel()` region is now thread-safe
-      (`sample_beta_nocov_cpp_TS()` calls `sample_beta_cpp_TS()`, which
-      uses `mvrnormArmaQuick_TS()` instead of `arma::randn`). **The
-      `samplePGvariables()` region is still affected**, via
-      `randinvg()`'s `R::rnorm`. R's RNG state is global and not
-      thread-safe, and this is exactly the class of defect CRAN's extra
-      checks surface as intermittent, platform-specific failures --
-      active on every platform *except* stock macOS clang, i.e.
-      everywhere CRAN checks and nowhere Doug tests. See the "OpenMP on
-      macOS" section below for why it has never fired locally.
-    - Either finish the job (route `randinvg()` through the existing
-      `thread_local` engine at `src/jsdm.cpp:9-22` + cap threads) or
-      drop OpenMP from `src/Makevars` entirely and parallelise over
-      chains at the R level instead (TODO.md group D item 1), which
-      sidesteps this item and A.2 together.
+1.  ~~**`Description:` field is still template placeholder text**~~ **FIXED** (`d0f1650`, refined `083df56`): rewritten to describe the actual method (occupancy/JSDM for eDNA metabarcoding read data, two-stage detection process, traits, spatial autocorrelation via a Gaussian process, MCMC fitting), citing Ji et al. (2025) `<doi:10.1111/ele.70302>`. Doug hand-edited wording afterward (fixed "reads data" -\> "read data", tightened phrasing) -- final text lives in `DESCRIPTION` lines 17-24.
+2.  ~~**`Title:` not in title case**~~ **FIXED** (`083df56`): Doug chose his own title over the AI-drafted one -- current `Title:` is `Simultaneous Fitting of an eDNA-Aware Occupancy and Joint Species Distribution Model` (title-cased at Doug's request; note it's long, \~90 chars, but CRAN doesn't hard-reject on length). The `occJSDM-package.Rd` internal title was separately set to `occJSDM: Occupancy and Joint Species Distribution Models for eDNA Metabarcoding Data` (`8b99219`) -- these two titles (DESCRIPTION's `Title:` vs. the package-doc `\title`) are intentionally worded differently and don't need to match.
+3.  ~~**`Remotes: kassambara/ggcorrplot`**~~ **FIXED** (`083df56`): confirmed via web search that `ggcorrplot` is on CRAN (current release 0.1.4.1) and that the only usage in the codebase (`ggcorrplot::ggcorrplot()` in `R/jsdmfun.R`, called with `method`/`type`/`lab`/`lab_size`/`colors`/`title`) is standard API present in the CRAN release -- confirmed live by running `plotResidualCorrelationMatrix(fitmodel)` successfully against the installed `0.1.4.999` GitHub dev build. Removed the `Remotes:` field entirely.
+4.  **Shipped data is 124 MB -- still OPEN, not yet fixed.** (Originally recorded as "`data/sampleresults.rda` is 62 MB"; see the July 25 2026 UPDATE bullet below for why the real figure is double that.) Profiled live this session: `object.size(sampleresults)` = 65.1 MB total, of which `results_output` = 64.7 MB and within that `jsdm_output` = 57 MB. The two largest single arrays are `Bs_output` (22.9 MB, dims `[30, 10, 5000, 2]`) and `U_output` (15.3 MB, dims `[100, 2, 5000, 2]`) -- i.e. full raw MCMC draws, 10,000 total (`niter=5000 x nchain=2`, `nthin=1`), stored as double-precision 4-D arrays with no thinning applied before saving. Discussed 5 options with Doug: (a) post-hoc thin the existing arrays along the `niter` axis (e.g. keep 1-in-25 draws, no refit needed, \~62MB -\> \~2.5MB) -- **recommended**, fast, doesn't change the vignette's fitted numbers structurally; (b) refit with much smaller `MCMCparams` (e.g. `niter=200`) -- same size win but requires re-running MCMC (minutes) and re-rendering vignette prose; (c) audit and drop `jsdm_output` sub-components unused by vignette/output functions (`Gs_output`/`Cs_output`/`U_output`/`As_output`/`tau_output`/`C_output`/`sigmab_output`/`sigmabs_output`/`sigmah_output`/`idx_ls_output`, \~25-30MB combined) -- combine with (a); (d) don't ship a precomputed fit at all, fit a tiny model live at vignette build time instead -- cleanest long-term but touches vignette code and the dataset's now-documented `\value`; (e) compression alone (already `LazyDataCompression: xz`) won't meaningfully shrink near-random MCMC draws. **Recommended combo**: (a) + (c). **Not yet implemented** -- next step is to check which `jsdm_output` components the vignette/output functions actually touch, then write a thin+prune script and regenerate `sampleresults.rda`.
+    - **UPDATE (July 25 2026 audit): this is a 124 MB problem, not a 62 MB one.** There is a *second* 62 MB file on disk, `data/sampleresults_highp_highthetabaseline.rda` (plus a 28 KB `data/sampledata_highp_highthetabaseline.rda`). Both are gitignored -- so they never appear in `git ls-files` and were invisible to the earlier profiling -- but **`.Rbuildignore` does not exclude them, and `R CMD build` reads the filesystem, not git**, so a tarball built from Doug's working tree ships all four `.rda` files. Verified by matching every `.Rbuildignore` regex against `data/*.rda`: all four come out `SHIPPED`. Two knock-on effects beyond raw size: with `LazyData: true` the two scratch files become package datasets, and neither is documented in `R/data.R` (which documents only `sampledata` and `sampleresults`), so `R CMD check` would add an "undocumented data sets" NOTE on top of the installed-size NOTE. **Cheapest first move: add the scratch files (or a `_highp_highthetabaseline` pattern) to `.Rbuildignore`** -- that halves the blocker with a one-line change and before any thinning work.
+    - **UPDATE (July 25 2026, consistency pass; numbering refreshed July 27): the bug fixes force a refit, which changes the recommendation.** `sampleresults.rda` is a fit produced by the *pre-`b7b6aa2`, buggy* code, and several of the fixes now listed in TODO.md's **Fixed bugs** change its contents: the `sample_pq_cpp()` FP-count fix (Fixed bugs 2) matters because that bug was "accidentally correct only when `P = 1`" and the shipped `sampledata` has **`P = 3` primers** (verified: `length(unique(sampledata$info$Primer)) == 3`, 1800 rows, 100 sites, 10 species), so every Stage 2 `q` value in the stored fit is affected; the WAIC iteration-counter fix (Fixed bugs 9) changes `WAIC`; the `sampleBuniv()` precedence fix (Fixed bugs 3) changes the trait coefficients `G`/`C`/`A`. **So `sampleresults.rda` must be regenerated, not merely thinned.** Consequences: (i) doing the thin+prune work before the group A fixes is wasted effort; (ii) once a refit is mandatory, **option (b) (refit with much smaller `MCMCparams`) is strictly better than option (a)** -- it fixes the size problem and regenerates against correct code in a single step, and removes the dependency on `thinOutput()` entirely; (iii) `vignettes/occJSDM.Rmd` hard-codes `extractWAIC()` values in its model-selection prose (last refreshed in `763e738`), so the vignette must be re-rendered in the same job.
+    - **Blocked on a bug** (only if option (a) is chosen after all): the tool that plan depends on, `thinOutput()`, cannot run. It reads `niter` from `results_output$beta_ord_output`, an array that no longer exists (`R/output.R:21`), so `seq(1, NULL, by = 5)` errors immediately; it also ignores its own `thin` argument and would thin 2-D posterior-mean matrices *by row*, silently dropping sites. See TODO.md group B item 2. Fix `thinOutput()` before executing option (a).
+    - **Separately discussed**: an external-download alternative for cases where a package genuinely needs a large file. CRAN disallows downloading anything during install/build/`check` (must work offline), but allows a package to ship a user-facing function (e.g. `get_full_sampleresults()`) that downloads+caches a file at runtime via `tools::R_user_dir()`, guarded in examples/vignettes (e.g. `\donttest{}`, `curl::has_internet()` checks) so CRAN's automated checks never depend on network access. Host candidates: GitHub Releases (simple) or Zenodo/OSF (gets a DOI, fits this project's existing paper-citation/reproducibility framing). **Proposed two-track approach** (not yet actioned): ship the thinned/pruned `sampleresults.rda` (above) for CRAN-checkable examples/vignettes, and optionally host the full untouched 62MB fit externally via an optional download helper for exact paper-reproduction purposes -- these are independent and don't block each other.
+5.  ~~**`rstan` is a dead, extremely heavy dependency**~~ **FIXED** (`d0f1650`): removed `rstan (>= 2.26.0)` from `Imports:` and deleted the `rstan::rstan_options(auto_write = TRUE)` call from `R/zzz.R`'s `.onLoad()` (which now only sets `options(mc.cores = ...)`). Confirmed via `grep -rn "rstan"` across `R/`, `DESCRIPTION`, `NAMESPACE` that no references remain.
+6.  ~~**Missing `\value` tags on 3 Rd files**~~ **FIXED** (`6a7313f`): added `@return` roxygen tags to `sampledata`/`sampleresults` (in `R/data.R`, short restatements of their existing `@format` descriptions) and to `occJSDM-package` (in `R/occJSDM-package.R`, alongside replacing the placeholder "Package documentation." text with a real description mirroring the DESCRIPTION rewrite, then retitled per Doug's wording in `8b99219`). Regenerated via `devtools::document()`; confirmed via `grep -L "\\value" man/*.Rd` that no Rd files remain missing `\value`.
+7.  **OpenMP is enabled but uncapped, violating CRAN's two-core limit -- NEW (July 25 2026 audit), blocking.** (Numbered 16 to continue the single 1-15 sequence used across both subsections; it belongs here, not in "should fix".) `src/Makevars` sets `PKG_CXXFLAGS = $(SHLIB_OPENMP_CXXFLAGS)`, and there are two `#pragma omp parallel for` sites -- `samplePGvariables()` (`src/jsdm.cpp:398`) and `sample_betatheta_cpp_parallel()` (`src/functions.cpp:600`). **Nothing anywhere caps the thread count**: the only `omp_set_num_threads` in the tree is commented out (`src/jsdm.cpp:647`), so an OpenMP parallel region defaults to every available core. CRAN policy forbids using more than two cores during checks. `SystemRequirements:` also does not declare OpenMP. Fix: honour a thread limit (respect `OMP_NUM_THREADS`/`omp_set_num_threads()` bounded by 2 in checks, or expose a `nthreads` argument), and add `SystemRequirements: GNU make, OpenMP` if OpenMP is kept.
+    - **Compounded by TODO.md group A item 5** (renumbered twice on July 27; formerly the audit's A.6). *Partially resolved by `b7b6aa2`*: the `sample_betatheta_cpp_parallel()` region is now thread-safe (`sample_beta_nocov_cpp_TS()` calls `sample_beta_cpp_TS()`, which uses `mvrnormArmaQuick_TS()` instead of `arma::randn`). **The `samplePGvariables()` region is still affected**, via `randinvg()`'s `R::rnorm`. R's RNG state is global and not thread-safe, and this is exactly the class of defect CRAN's extra checks surface as intermittent, platform-specific failures -- active on every platform *except* stock macOS clang, i.e. everywhere CRAN checks and nowhere Doug tests. See the "OpenMP on macOS" section below for why it has never fired locally.
+    - Either finish the job (route `randinvg()` through the existing `thread_local` engine at `src/jsdm.cpp:9-22` + cap threads) or drop OpenMP from `src/Makevars` entirely and parallelise over chains at the R level instead (TODO.md group D item 1), which sidesteps this item and A.2 together.
 
 ### Should fix before submitting
 
-7.  ~~**Duplicate `ggplot2` line in `Imports:`**~~ **FIXED**
-    (`083df56`): removed the unversioned duplicate, kept
-    `ggplot2 (>= 3.4.0)`.
+7.  ~~**Duplicate `ggplot2` line in `Imports:`**~~ **FIXED** (`083df56`): removed the unversioned duplicate, kept `ggplot2 (>= 3.4.0)`.
 
-8.  **18 Rd files with no `\examples`** -- not a hard CRAN rule but
-    routinely requested by reviewers on first submission; given MCMC
-    runtime, wrap slow examples in `\donttest{}` rather than
-    `\dontrun{}`. **Not yet started.** Recounted July 25 2026: **18 of
-    43** Rd files have no `\examples` (was 17). Of the 25 that do, **23
-    use `\dontrun{}` and none use `\donttest{}`** -- so the switch is a
-    blanket change across every guarded example, not a selective one.
+8.  **18 Rd files with no `\examples`** -- not a hard CRAN rule but routinely requested by reviewers on first submission; given MCMC runtime, wrap slow examples in `\donttest{}` rather than `\dontrun{}`. **Not yet started.** Recounted July 25 2026: **18 of 43** Rd files have no `\examples` (was 17). Of the 25 that do, **23 use `\dontrun{}` and none use `\donttest{}`** -- so the switch is a blanket change across every guarded example, not a selective one.
 
-    - **Ordering constraint (consistency pass): this must come *after*
-      the TODO.md group B fixes.** `\donttest{}` examples **are
-      executed** by `R CMD check --as-cran` (that is the point of the
-      switch); `\dontrun{}` ones are not. Several exported functions
-      currently error unconditionally -- `thinOutput()` (B.2),
-      `returnLatentPresences()` on non-two-stage fits (B.6),
-      `predictNewSites()` on its missing `X_s` promise (B.5) -- so
-      converting their examples to `\donttest{}` today would turn
-      silently-skipped code into hard check failures. Fix group B first,
-      then switch, then run `devtools::run_examples()`.
+    - **Ordering constraint (consistency pass): this must come *after* the TODO.md group B fixes.** `\donttest{}` examples **are executed** by `R CMD check --as-cran` (that is the point of the switch); `\dontrun{}` ones are not. Several exported functions currently error unconditionally -- `thinOutput()` (B.2), `returnLatentPresences()` on non-two-stage fits (B.6), `predictNewSites()` on its missing `X_s` promise (B.5) -- so converting their examples to `\donttest{}` today would turn silently-skipped code into hard check failures. Fix group B first, then switch, then run `devtools::run_examples()`.
 
-9.  **Remaining C++ compiler warning** (bitwise-vs-logical operators in
-    `src/functions.cpp`/`src/jsdm.cpp`) -- CRAN's periodic checks use
-    stricter compiler flags/sanitizers than a local `check()`; fix now
-    rather than risk a later "please fix or be archived" email.
-    Pinpointed live (July 21 2026 session) via `res$warnings` on a
-    stored `rcmdcheck` object from `devtools::check()`: exactly 7 "use
-    of bitwise '&' with boolean operands" warnings, at
-    `functions.cpp:569`, `functions.cpp:571`, `functions.cpp:573`,
-    `jsdm.cpp:215`, `jsdm.cpp:231`, `jsdm.cpp:247`, `jsdm.cpp:264` (an
-    8th warning in the same block, `-Wfixed-enum-extension` from an R
-    header, is unrelated/benign and not fixable from this package).
-    **Not yet fixed.** Re-verified July 25 2026 by reading the source:
-    all 7 sites still present, and all 7 operate on **scalar booleans**
-    (comparison results on `int`/`double` elements, not Armadillo
-    vectors), so a plain `&` -\> `&&` change is safe at every one. The
-    `functions.cpp` line numbers have moved since the July 21
-    pinpointing -- they are now `functions.cpp:658`, `:660`, `:662` (the
-    `jsdm.cpp` four are unchanged at `:215`, `:231`, `:247`, `:264`).
-    The 7 split usefully:
+9.  **Remaining C++ compiler warning** (bitwise-vs-logical operators in `src/functions.cpp`/`src/jsdm.cpp`) -- CRAN's periodic checks use stricter compiler flags/sanitizers than a local `check()`; fix now rather than risk a later "please fix or be archived" email. Pinpointed live (July 21 2026 session) via `res$warnings` on a stored `rcmdcheck` object from `devtools::check()`: exactly 7 "use of bitwise '&' with boolean operands" warnings, at `functions.cpp:569`, `functions.cpp:571`, `functions.cpp:573`, `jsdm.cpp:215`, `jsdm.cpp:231`, `jsdm.cpp:247`, `jsdm.cpp:264` (an 8th warning in the same block, `-Wfixed-enum-extension` from an R header, is unrelated/benign and not fixable from this package). **Not yet fixed.** Re-verified July 25 2026 by reading the source: all 7 sites still present, and all 7 operate on **scalar booleans** (comparison results on `int`/`double` elements, not Armadillo vectors), so a plain `&` -\> `&&` change is safe at every one. The `functions.cpp` line numbers have moved since the July 21 pinpointing -- they are now `functions.cpp:658`, `:660`, `:662` (the `jsdm.cpp` four are unchanged at `:215`, `:231`, `:247`, `:264`). The 7 split usefully:
 
-    - **3 of them** (`functions.cpp:658/660/662`) sat inside the
-      `sample_pq_cpp()` counting block (the catch-all `else` inflating
-      Stage 2 FP counts). That block **was rewritten to count the four
-      cases independently in `b7b6aa2`** (TODO.md Fixed bugs 2), so
-      those 3 warnings should already be gone -- **re-measure** rather
-      than assuming, since no fresh `devtools::check()` has been run
-      since (item 13).
-    - **The other 4** (`jsdm.cpp:215/231/247/264`) are in the
-      `isPointInBandRight/Left/Up/Down()` helpers, whose only caller is
-      `buildGrid()`, whose only call site is *commented out*
-      (`R/jsdmfun.R:114`). `buildGrid()` is additionally defined twice,
-      verbatim, in both `R/mcmcfun.R:3` and `R/jsdmfun.R:51`. So
-      **deleting the dead grid code removes 4 warnings, 4 Rcpp exports
-      and 2 duplicate R functions** -- likely the cheapest way to close
-      most of this item.
+    - **3 of them** (`functions.cpp:658/660/662`) sat inside the `sample_pq_cpp()` counting block (the catch-all `else` inflating Stage 2 FP counts). That block **was rewritten to count the four cases independently in `b7b6aa2`** (TODO.md Fixed bugs 2), so those 3 warnings should already be gone -- **re-measure** rather than assuming, since no fresh `devtools::check()` has been run since (item 13).
+    - **The other 4** (`jsdm.cpp:215/231/247/264`) are in the `isPointInBandRight/Left/Up/Down()` helpers, whose only caller is `buildGrid()`, whose only call site is *commented out* (`R/jsdmfun.R:114`). `buildGrid()` is additionally defined twice, verbatim, in both `R/mcmcfun.R:3` and `R/jsdmfun.R:51`. So **deleting the dead grid code removes 4 warnings, 4 Rcpp exports and 2 duplicate R functions** -- likely the cheapest way to close most of this item.
 
-10. **No `URL`/`BugReports` fields in DESCRIPTION** -- expected
-    practice; add pointing at the GitHub repo
-    (`https://github.com/AlexDiana/occJSDM`). **Not yet started.**
+10. **No `URL`/`BugReports` fields in DESCRIPTION** -- expected practice; add pointing at the GitHub repo (`https://github.com/AlexDiana/occJSDM`). **Not yet started.**
 
-11. ~~**LICENSE file mismatch**~~ **DECIDED/ACCEPTED (not "fixed")**
-    (July 21 2026 session): briefly deleted the top-level `LICENSE` file
-    (`19a1650`/`19a1756`) since `License: Apache License (>= 2)` is
-    self-contained and doesn't reference it, which cleared the `check()`
-    NOTE ("File LICENSE is not mentioned in the DESCRIPTION file").
-    **Reverted** (`f274f41`) after realizing GitHub's license-detector
-    badge needs the physical `LICENSE` file present at the repo root
-    regardless of the `DESCRIPTION` `License:` field -- restored the
-    original Apache 2.0 full-text file. Net decision: **keep `LICENSE`,
-    deliberately accept the resulting cosmetic `check()` NOTE** rather
-    than add `+ file LICENSE` (confirmed via earlier testing that this
-    triggers a worse "restrictions not permitted" NOTE for this license
-    type). This item is now closed by decision, not by elimination of
-    the NOTE.
+11. ~~**LICENSE file mismatch**~~ **DECIDED/ACCEPTED (not "fixed")** (July 21 2026 session): briefly deleted the top-level `LICENSE` file (`19a1650`/`19a1756`) since `License: Apache License (>= 2)` is self-contained and doesn't reference it, which cleared the `check()` NOTE ("File LICENSE is not mentioned in the DESCRIPTION file"). **Reverted** (`f274f41`) after realizing GitHub's license-detector badge needs the physical `LICENSE` file present at the repo root regardless of the `DESCRIPTION` `License:` field -- restored the original Apache 2.0 full-text file. Net decision: **keep `LICENSE`, deliberately accept the resulting cosmetic `check()` NOTE** rather than add `+ file LICENSE` (confirmed via earlier testing that this triggers a worse "restrictions not permitted" NOTE for this license type). This item is now closed by decision, not by elimination of the NOTE.
 
-12. **No `cran-comments.md`** -- customary for first submissions; should
-    explain the compiler warning (if any remains after item 9) and test
-    environments checked (win-builder / R-hub / mac-builder, given
-    compiled code via Rcpp/RcppArmadillo). **Not yet started.**
+12. **No `cran-comments.md`** -- customary for first submissions; should explain the compiler warning (if any remains after item 9) and test environments checked (win-builder / R-hub / mac-builder, given compiled code via Rcpp/RcppArmadillo). **Not yet started.**
 
-13. **Run `R CMD check --as-cran`**, not just `devtools::check()`, as
-    the final local gate -- `--as-cran` adds a few extra checks (e.g.
-    installed size) that plain `check()` skips. **Not yet run since the
-    fixes above landed** -- should rerun to confirm current state before
-    further work.
+13. **Run `R CMD check --as-cran`**, not just `devtools::check()`, as the final local gate -- `--as-cran` adds a few extra checks (e.g. installed size) that plain `check()` skips. **Not yet run since the fixes above landed** -- should rerun to confirm current state before further work.
 
-14. **Multi-platform pre-check** -- submit a test build to win-builder
-    or R-hub before the real CRAN submission, since compiled-code
-    packages (via `LinkingTo: Rcpp, RcppArmadillo`) fail there more
-    often than pure-R ones. **Not yet started.**
+14. **Multi-platform pre-check** -- submit a test build to win-builder or R-hub before the real CRAN submission, since compiled-code packages (via `LinkingTo: Rcpp, RcppArmadillo`) fail there more often than pure-R ones. **Not yet started.**
 
-15. ~~**README install instructions omitted `build_vignettes = TRUE`**~~
-    **FIXED** (`3a42058`): a user reported
-    `vignette("occJSDM", package = "occJSDM")`/`vignette("simulateOccJSDMData", package = "occJSDM")`
-    failing after a fresh install. Root cause:
-    `remotes::install_github()` defaults to `build_vignettes = FALSE`
-    (confirmed by inspecting `args(remotes::install_github)` and
-    `remotes:::normalize_build_opts()`, which adds
-    `--no-build-vignettes` unless `build_vignettes = TRUE` is passed
-    explicitly), so the README's plain
-    `remotes::install_github("AlexDiana/occJSDM")` never built vignettes
-    for GitHub installs. Verified the fix live: built the package with
-    `pkgbuild::build(vignettes = TRUE)`, installed the tarball into a
-    clean library via `R CMD INSTALL`, and confirmed
-    `vignette(package = "occJSDM")` then lists both `occJSDM` and
-    `simulateOccJSDMData`. Updated `README.md`'s install snippet to
-    `remotes::install_github("AlexDiana/occJSDM", build_vignettes = TRUE)`
-    with an explanatory note. **This is purely a GitHub-install gotcha,
-    not a CRAN-submission blocker**: `install.packages()` from CRAN (and
-    `R CMD check`/`R CMD build` during the submission process itself)
-    always builds vignettes as a matter of course, since CRAN's build
-    pipeline runs `R CMD build` (which builds vignettes by default, no
-    `remotes`-style opt-in flag involved) before publishing the source
-    tarball -- so once/if `occJSDM` is on CRAN, ordinary
-    `install.packages("occJSDM")` users won't hit this issue regardless
-    of the README wording. The README fix only matters for the current
-    pre-CRAN GitHub-install workflow, but is good practice to keep
-    regardless (e.g. for anyone installing from a fork or a non-CRAN
-    branch later).
+15. ~~**README install instructions omitted `build_vignettes = TRUE`**~~ **FIXED** (`3a42058`): a user reported `vignette("occJSDM", package = "occJSDM")`/`vignette("simulateOccJSDMData", package = "occJSDM")` failing after a fresh install. Root cause: `remotes::install_github()` defaults to `build_vignettes = FALSE` (confirmed by inspecting `args(remotes::install_github)` and `remotes:::normalize_build_opts()`, which adds `--no-build-vignettes` unless `build_vignettes = TRUE` is passed explicitly), so the README's plain `remotes::install_github("AlexDiana/occJSDM")` never built vignettes for GitHub installs. Verified the fix live: built the package with `pkgbuild::build(vignettes = TRUE)`, installed the tarball into a clean library via `R CMD INSTALL`, and confirmed `vignette(package = "occJSDM")` then lists both `occJSDM` and `simulateOccJSDMData`. Updated `README.md`'s install snippet to `remotes::install_github("AlexDiana/occJSDM", build_vignettes = TRUE)` with an explanatory note. **This is purely a GitHub-install gotcha, not a CRAN-submission blocker**: `install.packages()` from CRAN (and `R CMD check`/`R CMD build` during the submission process itself) always builds vignettes as a matter of course, since CRAN's build pipeline runs `R CMD build` (which builds vignettes by default, no `remotes`-style opt-in flag involved) before publishing the source tarball -- so once/if `occJSDM` is on CRAN, ordinary `install.packages("occJSDM")` users won't hit this issue regardless of the README wording. The README fix only matters for the current pre-CRAN GitHub-install workflow, but is good practice to keep regardless (e.g. for anyone installing from a fork or a non-CRAN branch later).
 
-16. **Package changes the user's global state -- NEW (July 25 2026
-    audit).** Two places, both against CRAN's "packages should not
-    change the global state of the user's R session" policy: (a)
-    `R/zzz.R`'s `.onLoad()` sets
-    `options(mc.cores = min(2L, parallel::detectCores()))`, which
-    affects every other package that reads `mc.cores` (and
-    `detectCores()` can return `NA`, which `min(2L, NA)` propagates) --
-    replace with a `cores` argument on `runOccJSDM()`, see TODO.md group
-    D items 1-2; (b) `computeSpeciesDetected()` called `set.seed(1)`
-    (`R/output.R:2222`), resetting the user's RNG stream as a side
-    effect of drawing a plot -- **this half is now fixed**: `b7b6aa2`
-    deleted the line (TODO.md Fixed bugs 19). Only (a) remains open.
+16. **Package changes the user's global state -- NEW (July 25 2026 audit).** Two places, both against CRAN's "packages should not change the global state of the user's R session" policy: (a) `R/zzz.R`'s `.onLoad()` sets `options(mc.cores = min(2L, parallel::detectCores()))`, which affects every other package that reads `mc.cores` (and `detectCores()` can return `NA`, which `min(2L, NA)` propagates) -- replace with a `cores` argument on `runOccJSDM()`, see TODO.md group D items 1-2; (b) `computeSpeciesDetected()` called `set.seed(1)` (`R/output.R:2222`), resetting the user's RNG stream as a side effect of drawing a plot -- **this half is now fixed**: `b7b6aa2` deleted the line (TODO.md Fixed bugs 19). Only (a) remains open.
 
-17. **Unconditional writes to stdout -- NEW (July 25 2026 audit).**
-    `computeNewOutputs()` prints
-    `Rcout << "Computing species " << j+1 << " out of " << S` once per
-    species (`src/jsdm.cpp:477`), on the `predictNewSites()` call path,
-    with no way to suppress it. CRAN expects diagnostic output to go
-    through `message()`/`Rcerr` (suppressible) rather than stdout. Two
-    `print("Dimension not recognised")` calls also survived Alex's
-    `print()`-\>`message()` sweep, both in `thinOutput()`
-    (`R/output.R:44`, `:64`).
+17. **Unconditional writes to stdout -- NEW (July 25 2026 audit).** `computeNewOutputs()` prints `Rcout << "Computing species " << j+1 << " out of " << S` once per species (`src/jsdm.cpp:477`), on the `predictNewSites()` call path, with no way to suppress it. CRAN expects diagnostic output to go through `message()`/`Rcerr` (suppressible) rather than stdout. Two `print("Dimension not recognised")` calls also survived Alex's `print()`-\>`message()` sweep, both in `thinOutput()` (`R/output.R:44`, `:64`).
 
-18. **`tidyr` NOTE was mis-diagnosed in earlier notes -- CORRECTED (July
-    25 2026 audit).** Previously recorded here as "the
-    `tidyr`-unused-import NOTE". That is the wrong diagnosis. `tidyr`
-    **is** listed in `DESCRIPTION` `Imports:`, nothing is imported from
-    it in `NAMESPACE`, and `plotCovariateTrend()` (`R/jsdmfun.R:1552`)
-    calls `pivot_longer()` **unqualified**. So the NOTE is *"Namespace
-    in Imports field not imported from: 'tidyr'"*, and the fix is to
-    qualify the call as `tidyr::pivot_longer()` or add
-    `@importFrom tidyr pivot_longer` -- **not** to drop `tidyr` from
-    `Imports`. Separately, `splines` is not in `Imports` at all, yet
-    `createSplinesObjects()` (`R/jsdmfun.R:245`) calls `ns()`, and
-    `rnbinom()`/`dnbinom()` (`R/jsdmfun.R:451`, `:594-595`) are not
-    imported from `stats` -- all three are "no visible global function
-    definition" NOTEs. See TODO.md group C item 4.
+18. **`tidyr` NOTE was mis-diagnosed in earlier notes -- CORRECTED (July 25 2026 audit).** Previously recorded here as "the `tidyr`-unused-import NOTE". That is the wrong diagnosis. `tidyr` **is** listed in `DESCRIPTION` `Imports:`, nothing is imported from it in `NAMESPACE`, and `plotCovariateTrend()` (`R/jsdmfun.R:1552`) calls `pivot_longer()` **unqualified**. So the NOTE is *"Namespace in Imports field not imported from: 'tidyr'"*, and the fix is to qualify the call as `tidyr::pivot_longer()` or add `@importFrom tidyr pivot_longer` -- **not** to drop `tidyr` from `Imports`. Separately, `splines` is not in `Imports` at all, yet `createSplinesObjects()` (`R/jsdmfun.R:245`) calls `ns()`, and `rnbinom()`/`dnbinom()` (`R/jsdmfun.R:451`, `:594-595`) are not imported from `stats` -- all three are "no visible global function definition" NOTEs. See TODO.md group C item 4.
 
-    - **CORRECTED again by the consistency pass: all three sit in dead
-      or unreachable code, so the right fix is deletion, not adding
-      imports.** Verified: `plotCovariateTrend()` (the `pivot_longer()`
-      caller) is defined once, called nowhere, and not exported;
-      `createSplinesObjects()`/`createSplinesMatrix()` (the `ns()`
-      callers) are reachable only through
-      `simulateData(..., usingSplines = )`, and the sole caller
-      hard-codes `usingSplines = F` (`R/simulateData.R:87`); `dnbinom()`
-      is in the never-called `sample_rnb()`, and `rnbinom()` is in
-      `simulateData()`'s `model == "count"` branch, which
-      `simulateOccJSDMData()` can never reach (it only ever passes
-      `"binary"`/`"continuous"`). **So deleting the TODO.md group C code
-      drops the need for `tidyr` and `splines` altogether** -- a smaller
-      dependency footprint than importing them. This creates an ordering
-      constraint: **run `attachment::att_amend_desc()`*after* the group
-      C cleanup**, or it will helpfully add `tidyr` and `splines` to
-      `Imports:` for code that is about to be deleted.
+    - **CORRECTED again by the consistency pass: all three sit in dead or unreachable code, so the right fix is deletion, not adding imports.** Verified: `plotCovariateTrend()` (the `pivot_longer()` caller) is defined once, called nowhere, and not exported; `createSplinesObjects()`/`createSplinesMatrix()` (the `ns()` callers) are reachable only through `simulateData(..., usingSplines = )`, and the sole caller hard-codes `usingSplines = F` (`R/simulateData.R:87`); `dnbinom()` is in the never-called `sample_rnb()`, and `rnbinom()` is in `simulateData()`'s `model == "count"` branch, which `simulateOccJSDMData()` can never reach (it only ever passes `"binary"`/`"continuous"`). **So deleting the TODO.md group C code drops the need for `tidyr` and `splines` altogether** -- a smaller dependency footprint than importing them. This creates an ordering constraint: **run `attachment::att_amend_desc()`*after* the group C cleanup**, or it will helpfully add `tidyr` and `splines` to `Imports:` for code that is about to be deleted.
 
-19. **Dead code will generate "no visible binding" NOTEs -- NEW (July 25
-    2026 audit).** A substantial set of unexported functions reference
-    variables that exist in no scope (`M`, `sumM`, `n`, `z`, `w`, `y`,
-    `U`, `gt`, `gts`, `S`, `fitModel`, `psi_output`, `X_ord`,
-    `beta_ord_output`, `data_info`, `OTU`, `Xs_centers`, `prior_shape`,
-    `prior_rate`, `rnb`). None is reachable from an exported function,
-    but each is a check NOTE and a trap for readers. Full inventory in
-    TODO.md group C items 1-3 and 5; the recommendation there is to move
-    the genuinely dead ones to `deprecated/` (already `.Rbuildignore`d).
+19. **Dead code will generate "no visible binding" NOTEs -- NEW (July 25 2026 audit).** A substantial set of unexported functions reference variables that exist in no scope (`M`, `sumM`, `n`, `z`, `w`, `y`, `U`, `gt`, `gts`, `S`, `fitModel`, `psi_output`, `X_ord`, `beta_ord_output`, `data_info`, `OTU`, `Xs_centers`, `prior_shape`, `prior_rate`, `rnb`). None is reachable from an exported function, but each is a check NOTE and a trap for readers. Full inventory in TODO.md group C items 1-3 and 5; the recommendation there is to move the genuinely dead ones to `deprecated/` (already `.Rbuildignore`d).
 
-    - On the *separate* NSE-column portion of this NOTE (the one
-      deliberately left unfixed): the standard accepted fix is
-      `utils::globalVariables(c("Site", "Sample", ...))`, as used in
-      Luveen's occPlus branch (`R/data.R`). If that route is taken,
-      **list only genuine NSE column names**. Luveen's list also
-      contains real undefined variables from broken code (`M`, `S`,
-      `sumM`, `w`, `y`, `z`, `p`, `speciesNames`, ...), which silences
-      the NOTE by hiding the defects catalogued above rather than fixing
-      them. Do not copy that list wholesale.
+    - On the *separate* NSE-column portion of this NOTE (the one deliberately left unfixed): the standard accepted fix is `utils::globalVariables(c("Site", "Sample", ...))`, as used in Luveen's occPlus branch (`R/data.R`). If that route is taken, **list only genuine NSE column names**. Luveen's list also contains real undefined variables from broken code (`M`, `S`, `sumM`, `w`, `y`, `z`, `p`, `speciesNames`, ...), which silences the NOTE by hiding the defects catalogued above rather than fixing them. Do not copy that list wholesale.
 
-20. **`parallel` is used but not declared in `DESCRIPTION` -- NEW (July
-    25 2026, from the occPlus review).** `R/zzz.R:3` calls
-    `parallel::detectCores()`, but `parallel` appears in no
-    `Imports:`/`Depends:`/`Suggests:` field. `R CMD check` reports this
-    as `'::' or ':::' import not declared from: 'parallel'` -- more
-    severe than a NOTE. Verified by parsing every `pkg::` call in `R/`
-    against `DESCRIPTION`; `parallel` is the only undeclared one. **Note
-    the interaction with item 17**: removing the
-    `options(mc.cores = ...)` call from `.onLoad()` deletes the only
-    `parallel::` use in the package, resolving both items at once --
-    prefer that over adding `parallel` to `Imports:`.
+20. **`parallel` is used but not declared in `DESCRIPTION` -- NEW (July 25 2026, from the occPlus review).** `R/zzz.R:3` calls `parallel::detectCores()`, but `parallel` appears in no `Imports:`/`Depends:`/`Suggests:` field. `R CMD check` reports this as `'::' or ':::' import not declared from: 'parallel'` -- more severe than a NOTE. Verified by parsing every `pkg::` call in `R/` against `DESCRIPTION`; `parallel` is the only undeclared one. **Note the interaction with item 17**: removing the `options(mc.cores = ...)` call from `.onLoad()` deletes the only `parallel::` use in the package, resolving both items at once -- prefer that over adding `parallel` to `Imports:`.
 
-21. **Duplicate definitions of the same functions across `R/` -- NEW
-    (July 25 2026, from the occPlus review).** `logistic()` is defined
-    four times (`R/mcmcfun.R`, `R/jsdmfun.R`, `R/output.R`,
-    `R/simulateData.R`), `logit()` twice (`R/output.R`,
-    `R/simulateData.R`), and `buildGrid()` twice (`R/jsdmfun.R`,
-    `R/mcmcfun.R`). R collates `R/` alphabetically, so whichever file
-    sorts last silently wins; the definitions currently agree, so
-    nothing is broken today, but this is exactly the kind of thing that
-    diverges unnoticed. Luveen's fix is worth copying: a single
-    canonical `R/utils.R` holding `logit()`/`logistic()` with a header
-    comment saying not to redefine them elsewhere. (`buildGrid()` should
-    just be deleted -- see item 9.)
+21. **Duplicate definitions of the same functions across `R/` -- NEW (July 25 2026, from the occPlus review).** `logistic()` is defined four times (`R/mcmcfun.R`, `R/jsdmfun.R`, `R/output.R`, `R/simulateData.R`), `logit()` twice (`R/output.R`, `R/simulateData.R`), and `buildGrid()` twice (`R/jsdmfun.R`, `R/mcmcfun.R`). R collates `R/` alphabetically, so whichever file sorts last silently wins; the definitions currently agree, so nothing is broken today, but this is exactly the kind of thing that diverges unnoticed. Luveen's fix is worth copying: a single canonical `R/utils.R` holding `logit()`/`logistic()` with a header comment saying not to redefine them elsewhere. (`buildGrid()` should just be deleted -- see item 9.)
 
-22. **No `NEWS.md` -- NEW (July 25 2026, from the occPlus review).**
-    Customary for CRAN and rendered on the package's CRAN landing page.
-    Luveen's occPlus branch adds one for the 0.1.0 release. Cheap to
-    write, and worth doing at the same time as `cran-comments.md` (item
+22. **No `NEWS.md` -- NEW (July 25 2026, from the occPlus review).** Customary for CRAN and rendered on the package's CRAN landing page. Luveen's occPlus branch adds one for the 0.1.0 release. Cheap to write, and worth doing at the same time as `cran-comments.md` (item
+
     12) and the version bump.
 
 ### Automated CRAN-readiness tooling (from Luveen's occPlus work, reviewed July 25 2026)
 
-Luveen Wadhwani (`luveen.w@columbia.edu`) prepared two artefacts on a
-fork of the *older* `occPlus` package:
+Luveen Wadhwani (`luveen.w@columbia.edu`) prepared two artefacts on a fork of the *older* `occPlus` package:
 
-- **`dev/dev_history.r`** (branch `luveenw_test_plan_6`) -- a 103-line,
-  run-line-by-line script codifying the [ThinkR
-  `prepare-for-cran`](https://github.com/ThinkR-open/prepare-for-cran)
-  checklist. It is a **generic template**, not occJSDM-specific: no
-  occJSDM/occPlus function names appear in it.
-- **Commit `52cabe3`** -- the changes needed to make that script pass on
-  occPlus: 6 test files (104 `test_that()` blocks) plus
-  `helper-fixtures.R`, a filled-in `DESCRIPTION`, `NEWS.md`,
-  `cran-comments.md`, regenerated `RcppExports`,
-  `.Rbuildignore`/`.gitignore` hardening, a canonical `R/utils.R`,
-  documented datasets, and `utils::globalVariables()`.
+- **`dev/dev_history.r`** (branch `luveenw_test_plan_6`) -- a 103-line, run-line-by-line script codifying the [ThinkR `prepare-for-cran`](https://github.com/ThinkR-open/prepare-for-cran) checklist. It is a **generic template**, not occJSDM-specific: no occJSDM/occPlus function names appear in it.
+- **Commit `52cabe3`** -- the changes needed to make that script pass on occPlus: 6 test files (104 `test_that()` blocks) plus `helper-fixtures.R`, a filled-in `DESCRIPTION`, `NEWS.md`, `cran-comments.md`, regenerated `RcppExports`, `.Rbuildignore`/`.gitignore` hardening, a canonical `R/utils.R`, documented datasets, and `utils::globalVariables()`.
 
-**Important caveat when reading these**: `occPlus` is a *different,
-earlier* package -- Griffin et al. (2020) framework, an `rstan` backend,
-`runOccPlus()`/`runMCMCOccPlus()`, different function names and data
-structures. The code-level diffs therefore do **not** port directly to
-occJSDM. What ports is the process and the tooling. Every occPlus
-finding below was re-checked against this tree rather than assumed.
+**Important caveat when reading these**: `occPlus` is a *different, earlier* package -- Griffin et al. (2020) framework, an `rstan` backend, `runOccPlus()`/`runMCMCOccPlus()`, different function names and data structures. The code-level diffs therefore do **not** port directly to occJSDM. What ports is the process and the tooling. Every occPlus finding below was re-checked against this tree rather than assumed.
 
-**Checks the current plan was missing** (none of these are in items
-1-23; add them to the pre-submission routine):
+**Checks the current plan was missing** (none of these are in items 1-23; add them to the pre-submission routine):
 
 | Tool | What it catches |
 |----|----|
@@ -1907,210 +366,63 @@ finding below was re-checked against this tree rather than assumed.
 | `rhub::rhub_setup()` / `rhub_check()` (v2), `devtools::check_win_devel()`, `check_win_release()`, `check_mac_release()` | The multi-platform pre-check of item 14, with concrete commands. |
 | `usethis::use_cran_comments()`, `use_version()`, `devtools::release()` | Items 12 and 23, plus the release mechanics. |
 
-`revdepcheck` (also in the script) is **not applicable** -- occJSDM has
-no reverse dependencies as an unpublished package. Skip that block.
+`revdepcheck` (also in the script) is **not applicable** -- occJSDM has no reverse dependencies as an unpublished package. Skip that block.
 
-**Checked and clean -- do not redo:** the "missing Rcpp exports" problem
-Luveen hit does **not** apply here. Verified by copying `R/`, `src/`,
-`DESCRIPTION` and `NAMESPACE` to a scratch directory, running
-`Rcpp::compileAttributes()`, and diffing: both `R/RcppExports.R` and
-`src/RcppExports.cpp` come back byte-identical to the committed
-versions. That was occPlus-specific staleness. It can regress, though,
-so add `Rcpp::compileAttributes()` +
-`git diff --exit-code src/RcppExports.cpp R/RcppExports.R` to the
-routine -- any new `[[Rcpp::export]]` Alex adds without regenerating
-will reintroduce it.
+**Checked and clean -- do not redo:** the "missing Rcpp exports" problem Luveen hit does **not** apply here. Verified by copying `R/`, `src/`, `DESCRIPTION` and `NAMESPACE` to a scratch directory, running `Rcpp::compileAttributes()`, and diffing: both `R/RcppExports.R` and `src/RcppExports.cpp` come back byte-identical to the committed versions. That was occPlus-specific staleness. It can regress, though, so add `Rcpp::compileAttributes()` + `git diff --exit-code src/RcppExports.cpp R/RcppExports.R` to the routine -- any new `[[Rcpp::export]]` Alex adds without regenerating will reintroduce it.
 
-**On the occPlus test suite as a template**: the six-file split
-(`test-data-validation`, `test-data-preparation`,
-`test-compute-functions`, `test-mcmc-backend`, `test-return-functions`,
-`test-plot-functions`) maps cleanly onto the structure already sketched
-under "Testing Strategy Implementation" below, and `helper-fixtures.R`
-(auto-sourced by testthat, loads the shipped datasets once) is a lighter
-approach than the `make-fixtures.R`/`fixtures/*.rds` plan recorded
-there. One caution: their fixtures load the **shipped** `sampleresults`
-object, which couples the test suite to the data-size blocker in item 4
--- if `sampleresults.rda` is thinned, tests asserting exact posterior
-dimensions (`matrix_of_draws has 1000 rows`,
-`beta_psi_output has 4 dimensions ...`) will need updating in step.
+**On the occPlus test suite as a template**: the six-file split (`test-data-validation`, `test-data-preparation`, `test-compute-functions`, `test-mcmc-backend`, `test-return-functions`, `test-plot-functions`) maps cleanly onto the structure already sketched under "Testing Strategy Implementation" below, and `helper-fixtures.R` (auto-sourced by testthat, loads the shipped datasets once) is a lighter approach than the `make-fixtures.R`/`fixtures/*.rds` plan recorded there. One caution: their fixtures load the **shipped** `sampleresults` object, which couples the test suite to the data-size blocker in item 4 -- if `sampleresults.rda` is thinned, tests asserting exact posterior dimensions (`matrix_of_draws has 1000 rows`, `beta_psi_output has 4 dimensions ...`) will need updating in step.
 
 ### Status summary
 
-**Revised July 26 2026** after Alex's fix of group A inference bugs
-(commit `b7b6aa2`), **and re-checked July 27 2026** against the code
-(see "Current work status" above -- `b7b6aa2` fixed 10 audit items, not
-8, and two group A items remain open). Nothing below was re-derived from
-a fresh `devtools::check()` run -- item 13 is still outstanding.
+**Revised July 26 2026** after Alex's fix of group A inference bugs (commit `b7b6aa2`), **and re-checked July 27 2026** against the code (see "Current work status" above -- `b7b6aa2` fixed 10 audit items, not 8, and two group A items remain open). Nothing below was re-derived from a fresh `devtools::check()` run -- item 13 is still outstanding.
 
-There are now **7 blocking items, of which 5 are fixed** (1, 2, 3, 5, 6;
-committed in `d0f1650`, `083df56`, `6a7313f`, `8b99219` and pushed).
-**Two blockers remain**:
+There are now **7 blocking items, of which 5 are fixed** (1, 2, 3, 5, 6; committed in `d0f1650`, `083df56`, `6a7313f`, `8b99219` and pushed). **Two blockers remain**:
 
-- **Item 4 (shipped data size)** -- MUST BE REGENERATED, AND THE GATE
-  MOVED (28 July): the refit now waits on **group A items 3, 4 and 6**,
-  all confirmed by the coverage study and all of which change fitted
-  values -- the collection-covariate prior, the residual-correlation
-  reparameterisation, and the Stage 2 detection prior. Refitting before
-  those land would bake three known-wrong quantities into the shipped
-  example data. Previously this was gated only on the `b7b6aa2` fixes.
-  `sampleresults.rda` was fit against buggy code, so its WAIC values,
-  Stage 2 rates (`q`), trait coefficients (`C`/`G`/`A`), spatial
-  parameters, and `tau` block are all stale/wrong. The now-recovered
-  WAIC iteration-counter fix (Fixed bugs 9) is a further reason the
-  stored WAIC is wrong. Refit with small `MCMCparams` (option b) to
-  address both the size blocker and the correctness problem in one step,
-  then re-render vignette. Note that post-hoc thinning via
-  `thinOutput()` is **not** currently a safe fallback: it still thins
-  2-D posterior-mean matrices by row, silently dropping sites (TODO.md
-  group B item 2). Fix that first if thinning is wanted.
-- **Item 16 (OpenMP uncapped)** -- violates CRAN's two-core policy and
-  was entangled with the RNG thread-safety residual, **since closed**
-  (Fixed bugs 26, and the reproducibility follow-up Fixed bugs 28).
-  Either cap threads + close the `randinvg()` hole, or drop OpenMP and
-  parallelise over chains in R instead (latter is lower-risk per TODO.md
-  D.1).
+- **Item 4 (shipped data size)** -- MUST BE REGENERATED, AND THE GATE MOVED (28 July): the refit now waits on **group A items 3, 4 and 6**, all confirmed by the coverage study and all of which change fitted values -- the collection-covariate prior, the residual-correlation reparameterisation, and the Stage 2 detection prior. Refitting before those land would bake three known-wrong quantities into the shipped example data. Previously this was gated only on the `b7b6aa2` fixes. `sampleresults.rda` was fit against buggy code, so its WAIC values, Stage 2 rates (`q`), trait coefficients (`C`/`G`/`A`), spatial parameters, and `tau` block are all stale/wrong. The now-recovered WAIC iteration-counter fix (Fixed bugs 9) is a further reason the stored WAIC is wrong. Refit with small `MCMCparams` (option b) to address both the size blocker and the correctness problem in one step, then re-render vignette. Note that post-hoc thinning via `thinOutput()` is **not** currently a safe fallback: it still thins 2-D posterior-mean matrices by row, silently dropping sites (TODO.md group B item 2). Fix that first if thinning is wanted.
+- **Item 16 (OpenMP uncapped)** -- violates CRAN's two-core policy and was entangled with the RNG thread-safety residual, **since closed** (Fixed bugs 26, and the reproducibility follow-up Fixed bugs 28). Either cap threads + close the `randinvg()` hole, or drop OpenMP and parallelise over chains in R instead (latter is lower-risk per TODO.md D.1).
 
-Of the should-fix items: 7 and 15 are fixed; 11 is closed by deliberate
-decision (keep `LICENSE`, accept the cosmetic NOTE); 9 is now **closed
-as fixed** (group C cleanup in TODO.md removes 4 of the 7 compiler
-warnings; the `sample_pq_cpp()` catch-all fix, Fixed bugs 2, removes 3
-of 7); 8, 10, 12, 13, 14 are open; 17-20 were added by the July 25
-audit; and 21-23 were added from the occPlus review. Item 21 (`parallel`
-undeclared) is the most severe of the new batch -- it is a check
-WARNING. Item 19 **corrects** the earlier characterisation of the
-`tidyr` NOTE (it is a *missing-import*, not an *unused-import*). The
-`stats`-import portion of the "no visible binding" NOTE is fixed
-(`ef77c4c`); the NSE-column portion is deliberately left unfixed by the
-user's decision; item 20 catalogues a further source of that NOTE (dead
-functions referencing undefined globals).
+Of the should-fix items: 7 and 15 are fixed; 11 is closed by deliberate decision (keep `LICENSE`, accept the cosmetic NOTE); 9 is now **closed as fixed** (group C cleanup in TODO.md removes 4 of the 7 compiler warnings; the `sample_pq_cpp()` catch-all fix, Fixed bugs 2, removes 3 of 7); 8, 10, 12, 13, 14 are open; 17-20 were added by the July 25 audit; and 21-23 were added from the occPlus review. Item 21 (`parallel` undeclared) is the most severe of the new batch -- it is a check WARNING. Item 19 **corrects** the earlier characterisation of the `tidyr` NOTE (it is a *missing-import*, not an *unused-import*). The `stats`-import portion of the "no visible binding" NOTE is fixed (`ef77c4c`); the NSE-column portion is deliberately left unfixed by the user's decision; item 20 catalogues a further source of that NOTE (dead functions referencing undefined globals).
 
 ### Recommended order (bug fixes done, refit priority now)
 
-**UPDATED: July 26 2026 -- most group A bug fixes are now committed
-(Alex, `b7b6aa2`); re-checked July 27.** The order below is revised
-accordingly. The critical blocking item is now **item 4 (regenerate
-`sampleresults.rda`)**, which is stale from having been fit against
-buggy code. Caveat added July 27: **two group A items remain open**
-(`sigma_h`, and the OpenMP RNG residual), so Phase 1's refit will not be
-reproducible run-to-run on Linux/Windows until the latter is closed --
-see the note on step 2.
+**UPDATED: July 26 2026 -- most group A bug fixes are now committed (Alex, `b7b6aa2`); re-checked July 27.** The order below is revised accordingly. The critical blocking item is now **item 4 (regenerate `sampleresults.rda`)**, which is stale from having been fit against buggy code. Caveat added July 27: **two group A items remain open** (`sigma_h`, and the OpenMP RNG residual), so Phase 1's refit will not be reproducible run-to-run on Linux/Windows until the latter is closed -- see the note on step 2.
 
 **Phase 0 -- independent of everything, do now.**
 
-1.  **Add the scratch `.rda` files to `.Rbuildignore`.** ~~One line,
-    halves the item 4 blocker, and is unaffected by any bug fix.~~
-    **DONE** (commit `a298a13`): added pattern
-    `^data/.*_highp_highthetabaseline\.rda$` to exclude both
-    `sampledata_highp_highthetabaseline.rda` (26 KB) and
-    `sampleresults_highp_highthetabaseline.rda` (62 MB). This reduces
-    the shipped package size from \~124 MB to \~62 MB, and eliminates
-    the undocumented-datasets NOTE.
+1.  **Add the scratch `.rda` files to `.Rbuildignore`.** ~~One line, halves the item 4 blocker, and is unaffected by any bug fix.~~ **DONE** (commit `a298a13`): added pattern `^data/.*_highp_highthetabaseline\.rda$` to exclude both `sampledata_highp_highthetabaseline.rda` (26 KB) and `sampleresults_highp_highthetabaseline.rda` (62 MB). This reduces the shipped package size from \~124 MB to \~62 MB, and eliminates the undocumented-datasets NOTE.
 
 **Phase 1 -- Regenerate artefacts, AFTER the inference bugs are fixed.**
 
-*(Reordered 28 July: the coverage study turned up three further
-inference-affecting defects, so regeneration can no longer come first.)*
+*(Reordered 28 July: the coverage study turned up three further inference-affecting defects, so regeneration can no longer come first.)*
 
-2.  **Refit `sampleresults.rda` with small `MCMCparams`** (item 4,
-    option b). **Moved behind group A items 3, 4 and 6 as of 28 July**
-    -- the coverage study confirmed all three change fitted values, so a
-    refit before them would ship known-wrong numbers and have to be
-    redone. This was previously first in the phase. When it does run:
-    the group A fixes in `b7b6aa2` change fitted values (Stage 2 rates
-    `q`, trait coefficients `C`/`G`, spatial parameters, `tau`, and data
-    sort order). The existing `sampleresults` is stale/wrong. Fit with
-    `nchain=2, nburn=500, niter=1000, nthin=1` (or smaller) to address
-    the 62 MB size blocker *and* the correctness problem in one step.
-    **Do the refit on macOS, or on a build with OpenMP disabled**, until
-    group A item 5 is closed -- on Linux/Windows the
-    `samplePGvariables()` RNG race makes the fit non-reproducible even
-    at a fixed seed, which is not a property you want baked into a
-    shipped dataset.
-3.  **Re-render `vignettes/occJSDM.Rmd`** -- its model-selection prose
-    hard-codes `extractWAIC()` values that changed with the WAIC
-    iteration-counter fix (Fixed bugs 9), and all posterior-based
-    numbers will shift.
-4.  **Regenerate docs and attributes**: `devtools::document()`, then
-    `Rcpp::compileAttributes()` + `git diff --exit-code` on the two
-    `RcppExports` files.
+2.  **Refit `sampleresults.rda` with small `MCMCparams`** (item 4, option b). **Moved behind group A items 3, 4 and 6 as of 28 July** -- the coverage study confirmed all three change fitted values, so a refit before them would ship known-wrong numbers and have to be redone. This was previously first in the phase. When it does run: the group A fixes in `b7b6aa2` change fitted values (Stage 2 rates `q`, trait coefficients `C`/`G`, spatial parameters, `tau`, and data sort order). The existing `sampleresults` is stale/wrong. Fit with `nchain=2, nburn=500, niter=1000, nthin=1` (or smaller) to address the 62 MB size blocker *and* the correctness problem in one step. **Do the refit on macOS, or on a build with OpenMP disabled**, until group A item 5 is closed -- on Linux/Windows the `samplePGvariables()` RNG race makes the fit non-reproducible even at a fixed seed, which is not a property you want baked into a shipped dataset.
+3.  **Re-render `vignettes/occJSDM.Rmd`** -- its model-selection prose hard-codes `extractWAIC()` values that changed with the WAIC iteration-counter fix (Fixed bugs 9), and all posterior-based numbers will shift.
+4.  **Regenerate docs and attributes**: `devtools::document()`, then `Rcpp::compileAttributes()` + `git diff --exit-code` on the two `RcppExports` files.
 
 **Phase 2 -- Remaining bug fixes (groups B and C from TODO.md).**
 
-5.  **TODO.md group B (crashes and API bugs).** Item 8 (`\dontrun{}` -\>
-    `\donttest{}`) depends on this (see the ordering constraint on that
-    item).
-6.  **TODO.md group C (dead code).** This single cleanup absorbs **item
-    20** (no-visible-binding NOTEs), **item 9's** compiler warnings from
-    dead `isPointInBand*` helpers, **item 22's** duplicate
-    `buildGrid()`, and **item 19** in full (the
-    `tidyr`/`splines`/`dnbinom` callers are dead -- deleting beats
-    importing). After this, item 9 needs no dedicated work at all.
-7.  **Decide the OpenMP question (item 16)**: cap threads and close the
-    remaining RNG hole (**TODO.md A.5** -- route `randinvg()` through
-    the existing `thread_local` engine, which is a small edit now that
-    `b7b6aa2` did the other half), *or* drop OpenMP from `src/Makevars`
-    and parallelise over chains in R instead (TODO.md D.1). The second
-    closes item 16 and A.5 together and is the lower-risk path. Note
-    this is a **prerequisite for a reproducible refit** (step 2), so
-    consider pulling it earlier if the refit is to be done on Linux.
-8.  **Drop `options(mc.cores = ...)` from `.onLoad()`.** One edit
-    closing three items: **17(a)**, **21** (it is the only `parallel::`
-    call), and TODO.md **D.2**.
+5.  **TODO.md group B (crashes and API bugs).** Item 8 (`\dontrun{}` -\> `\donttest{}`) depends on this (see the ordering constraint on that item).
+6.  **TODO.md group C (dead code).** This single cleanup absorbs **item 20** (no-visible-binding NOTEs), **item 9's** compiler warnings from dead `isPointInBand*` helpers, **item 22's** duplicate `buildGrid()`, and **item 19** in full (the `tidyr`/`splines`/`dnbinom` callers are dead -- deleting beats importing). After this, item 9 needs no dedicated work at all.
+7.  **Decide the OpenMP question (item 16)**: cap threads and close the remaining RNG hole (**TODO.md A.5** -- route `randinvg()` through the existing `thread_local` engine, which is a small edit now that `b7b6aa2` did the other half), *or* drop OpenMP from `src/Makevars` and parallelise over chains in R instead (TODO.md D.1). The second closes item 16 and A.5 together and is the lower-risk path. Note this is a **prerequisite for a reproducible refit** (step 2), so consider pulling it earlier if the refit is to be done on Linux.
+8.  **Drop `options(mc.cores = ...)` from `.onLoad()`.** One edit closing three items: **17(a)**, **21** (it is the only `parallel::` call), and TODO.md **D.2**.
 
-**Phase 3 -- CRAN mechanics, once the code is correct and the artefacts
-are current.**
+**Phase 3 -- CRAN mechanics, once the code is correct and the artefacts are current.**
 
-9.  **`attachment::att_amend_desc()`** -- must come *after* group C
-    cleanup, or it will add `tidyr`/`splines` for code that is about to
-    be deleted. Then add `URL`/`BugReports` (item 10).
-10. **Switch `\dontrun{}` -\> `\donttest{}`** (item 8) and run
-    `devtools::run_examples()`. Safe only after group B.
-11. ~~**Write the testthat suite.**~~ **DONE, 27 July 2026** (`6d9526d`,
-    `f63eeeb`). Three tiers per `dev/simstudy/PLAN.md`: tier 1 (89
-    structural assertions, \~7 s) **ships and runs on CRAN**; tier 2 is
-    `skip_on_cran()`; tier 3 is env-gated. Tier 1 asserts structure,
-    never numeric equality of fitted values, because a fixed seed did
-    not reproduce the sampler. **That rationale expired on 29 July**
-    (Fixed bugs 28): `set.seed()` now controls the fit, and
-    `test-regression-bugs.R` asserts equality in the one place that
-    tests the fix itself. The ban still stands everywhere else -- fitted
-    values are not a stable contract -- but it is now a design choice,
-    not a workaround. `test-placeholder.R` is deleted. Still
-    outstanding: the full R = 100 coverage run
-    (`Rscript dev/simstudy/run_study.R --cores=8`, \~2.4 h on 8 cores).
-12. **`devtools::check()` and `R CMD check --as-cran`** for a fresh
-    baseline (item 13), plus the rest of the tooling table: spelling,
-    `urlchecker`, `checkhelper`.
-13. **Release artefacts and multi-platform pre-check**: `NEWS.md` (23),
-    `cran-comments.md` (12), then win-builder / R-hub / mac-builder
-    (14).
+9.  **`attachment::att_amend_desc()`** -- must come *after* group C cleanup, or it will add `tidyr`/`splines` for code that is about to be deleted. Then add `URL`/`BugReports` (item 10).
+10. **Switch `\dontrun{}` -\> `\donttest{}`** (item 8) and run `devtools::run_examples()`. Safe only after group B.
+11. ~~**Write the testthat suite.**~~ **DONE, 27 July 2026** (`6d9526d`, `f63eeeb`). Three tiers per `dev/simstudy/PLAN.md`: tier 1 (89 structural assertions, \~7 s) **ships and runs on CRAN**; tier 2 is `skip_on_cran()`; tier 3 is env-gated. Tier 1 asserts structure, never numeric equality of fitted values, because a fixed seed did not reproduce the sampler. **That rationale expired on 29 July** (Fixed bugs 28): `set.seed()` now controls the fit, and `test-regression-bugs.R` asserts equality in the one place that tests the fix itself. The ban still stands everywhere else -- fitted values are not a stable contract -- but it is now a design choice, not a workaround. `test-placeholder.R` is deleted. Still outstanding: the full R = 100 coverage run (`Rscript dev/simstudy/run_study.R --cores=8`, \~2.4 h on 8 cores).
+12. **`devtools::check()` and `R CMD check --as-cran`** for a fresh baseline (item 13), plus the rest of the tooling table: spelling, `urlchecker`, `checkhelper`.
+13. **Release artefacts and multi-platform pre-check**: `NEWS.md` (23), `cran-comments.md` (12), then win-builder / R-hub / mac-builder (14).
 
 ## Testing Strategy Implementation (July 22, 2026)
 
-> **Superseded in part, 27 July 2026.** `dev/simstudy/PLAN.md` is now
-> the authoritative test-suite design, agreed with Doug: a three-tier
-> `testthat` suite (tier 1 structural + regression, shipping to CRAN;
-> tier 2 `skip_on_cran()` canary; tier 3 an env-gated R = 100 coverage
-> study over 10 scenarios), replacing the earlier idea of a
-> reproducibility vignette or script. It also discharges Phase 3 step 11
-> of the CRAN plan below. The section that follows predates that
-> decision -- treat its file layout and case list as raw material, and
-> `PLAN.md` as the spec. In particular, note `PLAN.md` §5.1: tier 1 must
-> **not** assert numeric equality of fitted values while group A item 5
-> (the OpenMP RNG race) is open, because a fixed seed does not reproduce
-> on Linux/Windows, so any such test would pass locally and flake on
-> CRAN.
+> **Superseded in part, 27 July 2026.** `dev/simstudy/PLAN.md` is now the authoritative test-suite design, agreed with Doug: a three-tier `testthat` suite (tier 1 structural + regression, shipping to CRAN; tier 2 `skip_on_cran()` canary; tier 3 an env-gated R = 100 coverage study over 10 scenarios), replacing the earlier idea of a reproducibility vignette or script. It also discharges Phase 3 step 11 of the CRAN plan below. The section that follows predates that decision -- treat its file layout and case list as raw material, and `PLAN.md` as the spec. In particular, note `PLAN.md` §5.1: tier 1 must **not** assert numeric equality of fitted values while group A item 5 (the OpenMP RNG race) is open, because a fixed seed does not reproduce on Linux/Windows, so any such test would pass locally and flake on CRAN.
 
-**Rationale** *(as written 22 July; the placeholder is gone as of
-`6d9526d` -- see the superseded-in-part note above)*: The package then
-had only a placeholder test file. A comprehensive test suite is needed
-to (1) validate core functionality, (2) prevent regression of fixed
-bugs, (3) ensure CRAN compliance, and (4) support ongoing development.
+**Rationale** *(as written 22 July; the placeholder is gone as of `6d9526d` -- see the superseded-in-part note above)*: The package then had only a placeholder test file. A comprehensive test suite is needed to (1) validate core functionality, (2) prevent regression of fixed bugs, (3) ensure CRAN compliance, and (4) support ongoing development.
 
 ### Test Architecture
 
-**Organizational structure** (hierarchical, matching package
-components):
+**Organizational structure** (hierarchical, matching package components):
 
 ```         
 tests/testthat/
@@ -2124,25 +436,11 @@ tests/testthat/
                          # committed; regenerate with tests/testthat/make-fixtures.R
 ```
 
-**Key design decisions**: - Use minimal datasets (`n=20` sites, `S=5`
-species, `nchain=1`) to keep total test runtime under 3 minutes - Cache
-pre-fitted models as `.rds` files in `fixtures/` to avoid repeated MCMC
-runs; load with
-`readRDS(testthat::test_path("fixtures/fit_twostage.rds"))`; regenerate
-with a dedicated `make-fixtures.R` script (not run by `testthat`, only
-run manually when the model interface changes) - Test all
-`simulateOccJSDMData()` model types (`"binary"`, `"occupancy"`,
-`"continuous"`, `"two_stage"`) - Regression tests for known fixed bugs:
-`M` variable (JSDM-only, fixed `c1f9cec`) - The `model = "occupancy"`
-`idx_z_k` bug (TODO item 1.8) is **still open** -- its test must use
-`skip()` until fixed, not `expect_equal()` (a passing assertion for a
-broken function is worse than no test)
+**Key design decisions**: - Use minimal datasets (`n=20` sites, `S=5` species, `nchain=1`) to keep total test runtime under 3 minutes - Cache pre-fitted models as `.rds` files in `fixtures/` to avoid repeated MCMC runs; load with `readRDS(testthat::test_path("fixtures/fit_twostage.rds"))`; regenerate with a dedicated `make-fixtures.R` script (not run by `testthat`, only run manually when the model interface changes) - Test all `simulateOccJSDMData()` model types (`"binary"`, `"occupancy"`, `"continuous"`, `"two_stage"`) - Regression tests for known fixed bugs: `M` variable (JSDM-only, fixed `c1f9cec`) - The `model = "occupancy"` `idx_z_k` bug (TODO item 1.8) is **still open** -- its test must use `skip()` until fixed, not `expect_equal()` (a passing assertion for a broken function is worse than no test)
 
 ### Minimal Working Simulate Call
 
-All four arguments to `simulateOccJSDMData()` are **required** with no
-defaults. All `list_datasettings` keys are **lowercase**. A minimal
-valid call for tests (use this as `helper-sim.R`):
+All four arguments to `simulateOccJSDMData()` are **required** with no defaults. All `list_datasettings` keys are **lowercase**. A minimal valid call for tests (use this as `helper-sim.R`):
 
 ``` r
 minimal_sim_args <- function(model = "two_stage") {
@@ -2244,10 +542,7 @@ test_that("runOccJSDM errors informatively on malformed input", {
 
 **Output Functions** (`test-outputs.R`):
 
-Tests in this file load a pre-fitted fixture to avoid re-running MCMC.
-The fixture covers all output function code paths (two-stage model,
-traits, no spatial field). The \~34 exported functions in `output.R` are
-grouped below by what they need from the fixture:
+Tests in this file load a pre-fitted fixture to avoid re-running MCMC. The fixture covers all output function code paths (two-stage model, traits, no spatial field). The \~34 exported functions in `output.R` are grouped below by what they need from the fixture:
 
 | Group | Functions | Key assertions |
 |----|----|----|
@@ -2307,13 +602,9 @@ test_that("simulate -> fit -> output pipeline completes without error", {
 
 ### CRAN Compliance
 
-- 17 Rd files currently have no `\examples` -- add `\donttest{}`
-  wrappers using the `minimal_sim_args()` helper to keep example runtime
-  acceptable.
-- `devtools::check()` must pass with 0 errors and 0 new warnings before
-  any PR merge.
-- Individual test: \< 30 seconds; full suite (excluding fixture
-  generation): \< 3 minutes.
+- 17 Rd files currently have no `\examples` -- add `\donttest{}` wrappers using the `minimal_sim_args()` helper to keep example runtime acceptable.
+- `devtools::check()` must pass with 0 errors and 0 new warnings before any PR merge.
+- Individual test: \< 30 seconds; full suite (excluding fixture generation): \< 3 minutes.
 
 ### CI/CD Integration
 
@@ -2345,32 +636,12 @@ jobs:
         run: Rscript -e 'covr::codecov()'
 ```
 
-Note: Rcpp/RcppArmadillo compilation is handled automatically by
-`r-lib/actions/setup-r-dependencies@v2` on all three platforms; no
-manual `apt-get` step is needed with the current action versions.
+Note: Rcpp/RcppArmadillo compilation is handled automatically by `r-lib/actions/setup-r-dependencies@v2` on all three platforms; no manual `apt-get` step is needed with the current action versions.
 
 ### Current Status
 
-**Not yet started**: - All test files listed above - `helper-sim.R`
-(minimal arg constructor) - `make-fixtures.R` (fixture generation
-script) - `fixtures/` directory and `.rds` files - CI/CD pipeline
-configuration
+**Not yet started**: - All test files listed above - `helper-sim.R` (minimal arg constructor) - `make-fixtures.R` (fixture generation script) - `fixtures/` directory and `.rds` files - CI/CD pipeline configuration
 
-**Predecessor** *(stale: `test-placeholder.R` was deleted in `6d9526d`,
-replaced by four real test files)*: it should remain until at least
-`test-simulation.R` and `test-model-fit.R` are in place, to keep
-`testthat::test_check()` from erroring with "No test files found".
+**Predecessor** *(stale: `test-placeholder.R` was deleted in `6d9526d`, replaced by four real test files)*: it should remain until at least `test-simulation.R` and `test-model-fit.R` are in place, to keep `testthat::test_check()` from erroring with "No test files found".
 
-**Next steps** *(SUPERSEDED -- do not follow. This list was never built,
-and the suite that exists uses a different layout: `helper-fixtures.R`,
-`helper-simstudy.R`, `test-smoke-configs.R`, `test-regression-bugs.R`,
-`test-api-contracts.R`, `test-recovery.R`, `test-coverage-study.R`.
-Following the sequence below would create a second, conflicting suite.
-Kept only as a record of what was considered on 22 July.)*: 1. Write
-`helper-sim.R` and verify `minimal_sim_args()` actually runs end-to-end
-in the console 2. Write and run `make-fixtures.R` to generate
-`fixtures/fit_twostage.rds` 3. Implement `test-simulation.R` 4.
-Implement `test-model-fit.R` (including threshold rejection check) 5.
-Implement `test-outputs.R` using the fixture 6. Implement
-`test-diagnostics.R` and `test-integration.R` 7. Configure GitHub
-Actions CI/CD 8. Remove `test-placeholder.R`
+**Next steps** *(SUPERSEDED -- do not follow. This list was never built, and the suite that exists uses a different layout: `helper-fixtures.R`, `helper-simstudy.R`, `test-smoke-configs.R`, `test-regression-bugs.R`, `test-api-contracts.R`, `test-recovery.R`, `test-coverage-study.R`. Following the sequence below would create a second, conflicting suite. Kept only as a record of what was considered on 22 July.)*: 1. Write `helper-sim.R` and verify `minimal_sim_args()` actually runs end-to-end in the console 2. Write and run `make-fixtures.R` to generate `fixtures/fit_twostage.rds` 3. Implement `test-simulation.R` 4. Implement `test-model-fit.R` (including threshold rejection check) 5. Implement `test-outputs.R` using the fixture 6. Implement `test-diagnostics.R` and `test-integration.R` 7. Configure GitHub Actions CI/CD 8. Remove `test-placeholder.R`
