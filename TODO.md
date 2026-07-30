@@ -320,8 +320,6 @@ output: html_document
 
     **Fix:** change `&` to `&&` at those five sites. Mechanical, no behaviour change, and it clears the warning.
 
-6.  **`R CMD check` NOTE: `LICENSE` is not mentioned in `DESCRIPTION`.** Found 30 July 2026. The repo has a `LICENSE` file but `DESCRIPTION` has no `License:` field pointing at it, so `R CMD check` flags the file as unexpected at top level. Add the appropriate `License:` field. Trivial, but it is one of the notes standing between here and a clean check.
-
 ## **D. Dead and broken internal code (Alex)**
 
 None of this is reachable from an exported function, but it will draw `R CMD check` "no visible binding" notes and is a trap for anyone reading the source. Suggest moving the genuinely dead functions to `deprecated/` and wiring up the two missing imports.

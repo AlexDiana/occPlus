@@ -110,6 +110,22 @@ MarkdownWrap: None
 
 **The tradeoff, stated honestly.** Unwrapped paragraphs make git diffs paragraph-granular rather than line-granular. `git diff --word-diff` recovers most of the readability. This was accepted deliberately as the lesser cost against recurring phantom diffs.
 
+## Expected `R CMD check` output: what is settled, what is not
+
+Baseline as of 30 July 2026, first run to complete since the vignette was fixed: **0 errors, 2 warnings, 3 notes.** Check this list before filing anything from a check run. Two of these are closed by decision and re-filing them wastes a round trip; that has already happened once.
+
+**Settled, do not re-file:**
+
+- **NOTE: "File LICENSE is not mentioned in the DESCRIPTION file."** Deliberately accepted. `DESCRIPTION` already carries `License: Apache License (>= 2)`, which is self-contained. Deleting `LICENSE` clears the NOTE but breaks GitHub's license-detector badge, and adding `+ file LICENSE` was tested and produces a **worse** NOTE ("restrictions not permitted") for this license type. Full history in the CRAN submission plan, item 11. **Closed by decision, not by elimination.**
+
+**Open, and tracked in `TODO.md`:**
+
+- **WARNING: bitwise `&` on boolean operands** (`src/functions.cpp:670-676`, `src/jsdm.cpp:252`). Blocks CRAN. Group C. Not a correctness bug in C++, since `==` binds tighter than `&` and the operands have no side effects; it just does not short-circuit.
+- **WARNING: `plotSpeciesResponseCurve.Rd` documents arguments the function does not have.** Group C. Symptom of that function being exported with an internal helper's signature.
+- **NOTE: "Namespace in Imports field not imported from: tidyr"** and **NOTE: undefined globals** (~90 symbols). Both group D item 4, which separates the real missing imports from data-masked column names and from genuinely undefined objects in dead code.
+
+**One correction to an older note.** An earlier session recorded the `tidyr` fix as "qualify `tidyr::pivot_longer()` inside `plotCovariateTrend()`". That is the wrong function: `plotCovariateTrend()` is dead, with zero call sites and no export. The live users of `pivot_longer` are `returnCovariateEffect_base()` and `plotCovariateEffect_base()`. See `TODO.md` group D item 4, which was rewritten from a real check run on 30 July.
+
 ## Cross-referencing TODO items
 
 **Reference `Fixed bugs N`, never `group X item N`.** Fixed bugs entries are
