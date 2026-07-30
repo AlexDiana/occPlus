@@ -367,8 +367,8 @@ change in occupancy probability depending on where a species' baseline
 occupancy sits.
 
 ```{r}
-plotCovariateEffect(fitmodel, covName = "X_psi.EnvCov.1", idx_species = 1:10)
-plotCovariateEffect(fitmodel, covName = "X_psi.EnvCov.2", idx_species = 1:10)
+plotCovariateEffect(fitmodel, covNames = "X_psi.EnvCov.1", idx_species = 1:10)
+plotCovariateEffect(fitmodel, covNames = "X_psi.EnvCov.2", idx_species = 1:10)
 ```
 
 ### Conditional and Predictive Occupancy Probabilities
