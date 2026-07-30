@@ -360,17 +360,15 @@ probabilities across the observed range of a single covariate, holding
 all other covariates at their median value. This complements
 `plotOccupancyCovariates()` above: that plot shows whether a covariate's
 coefficient is credibly different from zero (on the logit scale), while
-`plotOccupancyGradient()` shows the size and shape of that effect on the
+`plotCovariateEffect()` shows the size and shape of that effect on the
 natural probability scale -- useful since, because of the nonlinear
 logit link, the same coefficient can correspond to a large or small
 change in occupancy probability depending on where a species' baseline
 occupancy sits.
 
 ```{r}
-plotCovariateEffect(fitmodel, idx_species = 1:10)
-
-# plotOccupancyGradient(fitmodel, covName = "X_psi.EnvCov.1") # deprecate
-# plotOccupancyGradient(fitmodel, covName = "X_psi.EnvCov.2")
+plotCovariateEffect(fitmodel, covName = "X_psi.EnvCov.1", idx_species = 1:10)
+plotCovariateEffect(fitmodel, covName = "X_psi.EnvCov.2", idx_species = 1:10)
 ```
 
 ### Conditional and Predictive Occupancy Probabilities

@@ -335,7 +335,7 @@ None of this is reachable from an exported function, but it will draw `R CMD che
     **What is actually live and missing an import:**
 
     | symbol | needs | live caller |
-    |---|---|---|
+    |----|----|----|
     | `pivot_longer` | `tidyr` | `returnCovariateEffect_base`, `plotCovariateEffect_base` (Alex's GAM functions, both exported, both used in the vignette) |
     | `setNames` | `stats` | `create_covariates_matrix`, `transform_new_covariates` (the latter is on `predictNewSites()`'s path) |
     | `rnbinom` | `stats` | `simulateData`, reached from `simulateOccJSDMData()` |
@@ -360,7 +360,7 @@ None of this is reachable from an exported function, but it will draw `R CMD che
 
     CLAUDE TO FIX, AFTER ITEMS 1-3 AND THE VIGNETTE
 
-6.  **The vignette still does not build: `plotCovariateEffect()` has no default for `covNames`.** Found 30 July 2026 by `R CMD check`, which fails at `creating vignettes` before it reaches any code inspection.
+5.  **The vignette still does not build: `plotCovariateEffect()` has no default for `covNames`.** Found 30 July 2026 by `R CMD check`, which fails at `creating vignettes` before it reaches any code inspection.
 
     `vignettes/occJSDM.Rmd:369-374` calls `plotCovariateEffect(fitmodel, idx_species = 1:10)` in an evaluated chunk. The signature is `(fitModel, covNames, idx_species, confidence)` and `covNames` has no default, so the chunk errors with `argument "covNames" is missing, with no default`.
 
@@ -374,7 +374,7 @@ None of this is reachable from an exported function, but it will draw `R CMD che
 
     CLAUDE TO FIX, THEN RE-RUN check() TO SEE WHAT IS NEXT
 
-5.  **`sample_rnb()` cannot run as written** (new in `0abb104`, `R/jsdmfun.R:581-614`). Groundwork for the count-data item under *MEE paper*, not yet called from anywhere, but it has a scoping bug that will bite the moment it is wired up: `r_current <- rnb[s]` (`:590`) reads `rnb` inside the `sapply()` at `:588` whose result is *being assigned to* `rnb`, so at that point `rnb` does not exist in the function frame and lookup falls through to the namespace and fails with `object 'rnb' not found`. The current size vector needs to come in as an argument, e.g. `sample_rnb(z, eta, rnb, tune_sd = ...)`. Two more things to settle while there: `tune_sd = 5` is a random-walk SD on the *log* scale, so proposals land a factor of `exp(+/-10)` away and acceptance will be near zero (something in the 0.1-1 range is the usual starting point); and the prior terms are stubbed to `0` with the intended `dgamma()` commented out, referencing `prior_shape`/`prior_rate`, which are not defined anywhere. The Metropolis step itself looks right -- the `log(r_star) - log(r_current)` Jacobian is the correct correction for a log-scale random walk under a flat prior on `r`.
+6.  **`sample_rnb()` cannot run as written** (new in `0abb104`, `R/jsdmfun.R:581-614`). Groundwork for the count-data item under *MEE paper*, not yet called from anywhere, but it has a scoping bug that will bite the moment it is wired up: `r_current <- rnb[s]` (`:590`) reads `rnb` inside the `sapply()` at `:588` whose result is *being assigned to* `rnb`, so at that point `rnb` does not exist in the function frame and lookup falls through to the namespace and fails with `object 'rnb' not found`. The current size vector needs to come in as an argument, e.g. `sample_rnb(z, eta, rnb, tune_sd = ...)`. Two more things to settle while there: `tune_sd = 5` is a random-walk SD on the *log* scale, so proposals land a factor of `exp(+/-10)` away and acceptance will be near zero (something in the 0.1-1 range is the usual starting point); and the prior terms are stubbed to `0` with the intended `dgamma()` commented out, referencing `prior_shape`/`prior_rate`, which are not defined anywhere. The Metropolis step itself looks right -- the `log(r_star) - log(r_current)` Jacobian is the correct correction for a log-scale random walk under a flat prior on `r`.
 
     ALEX's WORK IN PROGRESS FOR THE COUNTS
 
