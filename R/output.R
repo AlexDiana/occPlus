@@ -1598,20 +1598,21 @@ createSpatialPredMatrix <- function(Xs, l_s_grid, X_tilde, list_Xs_mat){
 #' Compute the credible interval of the occupancy probability at new sites
 #'
 #' @param fitModel Output from the function runOccJSDM
-#' @param X_psi Occupancy covariates matrix for the new locations
-#' @param X_s Spatial/ordination covariates matrix for the new locations
-#' @param useEnvCov Logical, default \code{TRUE}. Whether to include the
-#' effect of the occupancy covariates (\code{X_psi}) in the prediction.
-#' Ignored (no covariate effect applied) if no occupancy covariates were
-#' estimated in \code{fitModel}.
-#' @param useSpatial Logical, default \code{TRUE}. Whether to include the
+#' @param X_psi Occupancy covariates matrix for the new locations. Required
+#' only when the occupancy-covariate term is used; defaults to \code{NULL}.
+#' @param X_s Spatial/ordination covariates matrix for the new locations.
+#' Required only when the spatial term is used; defaults to \code{NULL}.
+#' @param useEnvCov Logical, or \code{NULL} (default). Whether to include the
+#' effect of the occupancy covariates (\code{X_psi}) in the prediction. If
+#' \code{NULL}, the term is used when occupancy covariates were estimated in
+#' \code{fitModel} and skipped otherwise. Setting \code{TRUE} explicitly on a
+#' fit that estimated none is an error rather than a silent no-op.
+#' @param useSpatial Logical, or \code{NULL} (default). Whether to include the
 #' spatially autocorrelated random field (based on \code{X_s}) in the
-#' prediction. Ignored (no spatial effect applied) if no spatial field was
-#' estimated in \code{fitModel}.
+#' prediction. Resolved the same way as \code{useEnvCov}.
 #' @param useBiotic Logical, or \code{NULL} (default). Whether to include
 #' the latent-factor (residual species covariance) term in the prediction.
-#' If \code{NULL}, defaults to \code{TRUE} when latent factors were
-#' estimated in \code{fitModel} and \code{FALSE} otherwise.
+#' Resolved the same way as \code{useEnvCov}.
 #' @param summarised Should the output be return in the form of quantiles? Set to TRUE if the number of sites is very large
 #' @param confidence If quantiles are returned, the confidence level of the quantiles.
 #'
@@ -1625,10 +1626,10 @@ createSpatialPredMatrix <- function(Xs, l_s_grid, X_tilde, list_Xs_mat){
 #' @import ggplot2
 #'
 predictNewSites <- function(fitModel,
-                            X_psi,
-                            X_s,
-                            useEnvCov = T,
-                            useSpatial = T,
+                            X_psi = NULL,
+                            X_s = NULL,
+                            useEnvCov = NULL,
+                            useSpatial = NULL,
                             useBiotic = NULL,
                             summarised = T,
                             confidence = .95
@@ -1641,14 +1642,44 @@ predictNewSites <- function(fitModel,
   isSpatFieldEstimated <- fitModel$infos$ps > 0
   areFactorsEstimated <- fitModel$infos$n_factors > 0
 
-  if(useEnvCov & areEnvCovEstimated & is.null(X_psi)) {
-    stop("No covariates matrix included")
+  # Resolve the three component switches. NULL means "use it if the fit
+  # estimated it", TRUE means "use it, and complain if it was not estimated",
+  # FALSE means "skip it". useBiotic already worked this way; useEnvCov and
+  # useSpatial now match, which is what their own documentation always
+  # claimed. Previously both defaulted to TRUE and useSpatial hard-stopped on
+  # a fit with no spatial field, so the documented "ignored if not estimated"
+  # behaviour was unreachable.
+  resolveTerm <- function(flag, estimated, what){
+    if(is.null(flag)) return(estimated)
+    if(isTRUE(flag) && !estimated){
+      stop("Cannot use ", what, ": it was not estimated in this fit.",
+           call. = FALSE)
+    }
+    isTRUE(flag)
+  }
+
+  useEnvCov  <- resolveTerm(useEnvCov,  areEnvCovEstimated,   "occupancy covariates")
+  useSpatial <- resolveTerm(useSpatial, isSpatFieldEstimated, "the spatial field")
+  useBiotic  <- resolveTerm(useBiotic,  areFactorsEstimated,  "latent factors")
+
+  # `&&` rather than `&` throughout: `&` evaluates both sides, which forced
+  # the X_psi/X_s promises even when the caller had asked for neither term.
+  # With no defaults on those arguments that made every such call fail with
+  # R's generic "argument is missing" rather than the message below.
+  if(useEnvCov && is.null(X_psi)) {
+    stop("X_psi is required to predict with occupancy covariates. Supply a ",
+         "matrix of covariates for the new sites, or set useEnvCov = FALSE.",
+         call. = FALSE)
+  }
+
+  if(useSpatial && is.null(X_s)) {
+    stop("X_s is required to predict with the spatial field. Supply the ",
+         "coordinates of the new sites, or set useSpatial = FALSE.",
+         call. = FALSE)
   }
 
   # create env cov matrix
   if(useEnvCov) {
-
-    # X_psi <- transformCovariatesMatrix(X_psi, fitModel$infos$list_X_psi_mat, remove_intercept = T)
 
     X_psi <- transform_new_covariates(
       X_psi,
@@ -1662,12 +1693,6 @@ predictNewSites <- function(fitModel,
 
   }
 
-  if(useSpatial & !isSpatFieldEstimated) stop("Cannot use spatial if it was not estimated initially")
-
-  if(useSpatial & isSpatFieldEstimated & is.null(X_s)) {
-    stop("No spatial locations present")
-  }
-
   # create spatial matrix
   if(useSpatial){
     Ks <-
@@ -1677,16 +1702,6 @@ predictNewSites <- function(fitModel,
                               fitModel$infos$list_Xs_mat)
   } else {
     Ks <- array(NA, dim = c(0,0,0))
-  }
-
-  if(is.null(useBiotic)){
-    if(areFactorsEstimated) {
-      useBiotic <- T
-    } else {
-      useBiotic <- F
-    }
-  } else if(useBiotic & !areFactorsEstimated) {
-    stop("No factors were estimated in the model")
   }
 
   B0_output <- fitModel$results_output$jsdm_output$B0_output
@@ -1706,8 +1721,20 @@ predictNewSites <- function(fitModel,
 
     B0_output_vec <- aperm(apply(B0_output, 1, c), c(2,1))
     B_output_vec <- aperm(apply(B_output, c(1,2), c), c(2,3,1))
-    Bs_output_vec <- aperm(apply(Bs_output, c(1,2), c), c(2,3,1))
     L_output_vec <- aperm(apply(L_output, c(1,2), c), c(2,3,1))
+
+    # A fit with no spatial field still returns Bs_output, but with a
+    # zero-length first dimension (0 x S x niter x nchain). apply() over
+    # margins (1,2) then has no cells to work on and drops the dimensions,
+    # so the aperm() below fails with "'perm' is of wrong length". Only
+    # reshape it when the spatial term is actually in play; otherwise hand
+    # the C++ an empty cube, exactly as Ks already is.
+    if(useSpatial){
+      Bs_output_vec <- aperm(apply(Bs_output, c(1,2), c), c(2,3,1))
+    } else {
+      Bs_output_vec <- array(NA_real_, dim = c(0,0,0))
+    }
+
     sigmah_output_vec <- as.vector(sigmah_output)
     idx_ls_output_vec <- as.vector(idx_ls_output)
 

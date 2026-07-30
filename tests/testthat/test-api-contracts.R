@@ -99,3 +99,71 @@ test_that("the GAM effect functions reject a covariate that is not in the fit", 
     returnCovariateEffect(fit, covName = "NotACovariate", idx_species = 1:2)
   )
 })
+
+# --- predictNewSites() argument handling ---------------------------------
+#
+# X_psi and X_s had no defaults, so the is.null() guards the author wrote
+# could never fire: R raised "argument is missing, with no default" first.
+# Worse, the guards used `&` rather than `&&`, which evaluates both sides, so
+# the missing promises were forced even when the caller had asked for neither
+# term. There was no way to call the function without supplying both matrices.
+# Fixing that exposed three further defects downstream, each covered below.
+
+test_that("predictNewSites() names the argument it needs", {
+  fit <- fixture_twostage()
+  expect_error(predictNewSites(fit), "X_psi is required")
+})
+
+test_that("predictNewSites() runs with only the term it is asked for", {
+  # Previously impossible: useSpatial = FALSE reached C++ that sliced Ks_all
+  # and Bs_output unconditionally, aborting with "Cube::slice(): index out of
+  # bounds". And useEnvCov = FALSE gave n = 0 rows, because the site count was
+  # read from X unconditionally.
+  sim <- simulate_fixture(model = "two_stage", useSpatField = TRUE)
+  fit <- fit_fixture(sim, MCMCparams = FIXTURE_MCMC)
+  X_psi <- sim$data_list$info[1:5, fixture_occ_covariates(), drop = FALSE]
+  X_s <- sim$data_list$info[1:5, fixture_spat_covariates(), drop = FALSE]
+
+  full <- suppressMessages(predictNewSites(fit, X_psi = X_psi, X_s = X_s))
+  no_spatial <- suppressMessages(
+    predictNewSites(fit, X_psi = X_psi, useSpatial = FALSE))
+  no_envcov <- suppressMessages(
+    predictNewSites(fit, X_s = X_s, useEnvCov = FALSE))
+
+  # (quantiles, new sites, species) in all three cases
+  for (p in list(full, no_spatial, no_envcov)) {
+    expect_equal(dim(p)[1], 3L)
+    expect_equal(dim(p)[2], 5L)
+    expect_equal(dim(p)[3], fit$infos$S)
+    expect_true(all(p >= 0 & p <= 1, na.rm = TRUE))
+    expect_true(all(p[1, , ] <= p[2, , ] & p[2, , ] <= p[3, , ], na.rm = TRUE))
+  }
+
+  # Each term must actually contribute, or the switches are cosmetic and the
+  # dimension checks above would pass on a function that silently ignored them.
+  expect_false(isTRUE(all.equal(full, no_spatial)))
+  expect_false(isTRUE(all.equal(full, no_envcov)))
+})
+
+test_that("predictNewSites() rejects a request with no site count", {
+  # With both terms off nothing says how many new sites to predict for. This
+  # used to return a zero-row array rather than complain.
+  fit <- fixture_twostage()
+  expect_error(
+    suppressMessages(predictNewSites(fit, useEnvCov = FALSE, useSpatial = FALSE)),
+    "Nothing determines the new sites")
+})
+
+test_that("predictNewSites() handles a fit with no spatial field", {
+  # Defaults used to hard-stop here ("Cannot use spatial if it was not
+  # estimated initially") despite the docs promising the term was ignored when
+  # absent. Asking for it explicitly should still be an error.
+  sim <- simulate_fixture(model = "two_stage", useSpatField = FALSE)
+  fit <- fit_fixture(sim, spatial = FALSE, MCMCparams = FIXTURE_MCMC)
+  X_psi <- sim$data_list$info[1:5, fixture_occ_covariates(), drop = FALSE]
+
+  expect_no_error(suppressMessages(predictNewSites(fit, X_psi = X_psi)))
+  expect_error(
+    suppressMessages(predictNewSites(fit, X_psi = X_psi, useSpatial = TRUE)),
+    "not estimated in this fit")
+})

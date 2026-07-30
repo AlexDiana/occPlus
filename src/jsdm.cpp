@@ -452,7 +452,18 @@ arma::cube computeNewOutputs(
     std::string model)
 {
 
-  int n = X.n_rows;
+  // The number of new sites comes from whichever term is actually in use.
+  // Reading it from X unconditionally gave n = 0 whenever useEnvCov was
+  // FALSE, because R passes a 0 x 0 matrix in that case, so the result was
+  // silently empty. Neither term active means nothing determines how many
+  // sites to predict for, which is a caller error rather than a zero-row
+  // answer.
+  int n = useEnvCov ? X.n_rows : (useSpatial ? Ks_all.n_rows : 0);
+  if (n == 0) {
+    Rcpp::stop("Nothing determines the new sites: useEnvCov and useSpatial "
+               "are both off, so neither X_psi nor X_s gives a site count.");
+  }
+
   int S = B_output.n_cols;
   int d = L_output.n_rows;
   int niter = B_output.n_slices;
@@ -468,10 +479,6 @@ arma::cube computeNewOutputs(
 
       arma::vec B = B_output.slice(iter).col(j);
 
-      int idx_ls = idx_ls_output[iter];
-      arma::mat Ks = Ks_all.slice(idx_ls - 1);
-      arma::vec Bs = Bs_output.slice(iter).col(j);
-
       arma::mat U = arma::randn(n, d) * sigmah_output[iter];
       arma::vec L = L_output.slice(iter).col(j);
 
@@ -482,7 +489,13 @@ arma::cube computeNewOutputs(
         linpred = linpred + X * B;
       }
 
+      // Ks_all and Bs_output are only indexable when the fit estimated a
+      // spatial field; with useSpatial off R passes empty stand-ins, so
+      // slicing them here rather than above avoids an out-of-bounds abort.
       if(useSpatial){
+        int idx_ls = idx_ls_output[iter];
+        arma::mat Ks = Ks_all.slice(idx_ls - 1);
+        arma::vec Bs = Bs_output.slice(iter).col(j);
         linpred = linpred + Ks * Bs;
       }
 

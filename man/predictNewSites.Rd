@@ -6,10 +6,10 @@
 \usage{
 predictNewSites(
   fitModel,
-  X_psi,
-  X_s,
-  useEnvCov = T,
-  useSpatial = T,
+  X_psi = NULL,
+  X_s = NULL,
+  useEnvCov = NULL,
+  useSpatial = NULL,
   useBiotic = NULL,
   summarised = T,
   confidence = 0.95
@@ -18,24 +18,25 @@ predictNewSites(
 \arguments{
 \item{fitModel}{Output from the function runOccJSDM}
 
-\item{X_psi}{Occupancy covariates matrix for the new locations}
+\item{X_psi}{Occupancy covariates matrix for the new locations. Required
+only when the occupancy-covariate term is used; defaults to \code{NULL}.}
 
-\item{X_s}{Spatial/ordination covariates matrix for the new locations}
+\item{X_s}{Spatial/ordination covariates matrix for the new locations.
+Required only when the spatial term is used; defaults to \code{NULL}.}
 
-\item{useEnvCov}{Logical, default \code{TRUE}. Whether to include the
-effect of the occupancy covariates (\code{X_psi}) in the prediction.
-Ignored (no covariate effect applied) if no occupancy covariates were
-estimated in \code{fitModel}.}
+\item{useEnvCov}{Logical, or \code{NULL} (default). Whether to include the
+effect of the occupancy covariates (\code{X_psi}) in the prediction. If
+\code{NULL}, the term is used when occupancy covariates were estimated in
+\code{fitModel} and skipped otherwise. Setting \code{TRUE} explicitly on a
+fit that estimated none is an error rather than a silent no-op.}
 
-\item{useSpatial}{Logical, default \code{TRUE}. Whether to include the
+\item{useSpatial}{Logical, or \code{NULL} (default). Whether to include the
 spatially autocorrelated random field (based on \code{X_s}) in the
-prediction. Ignored (no spatial effect applied) if no spatial field was
-estimated in \code{fitModel}.}
+prediction. Resolved the same way as \code{useEnvCov}.}
 
 \item{useBiotic}{Logical, or \code{NULL} (default). Whether to include
 the latent-factor (residual species covariance) term in the prediction.
-If \code{NULL}, defaults to \code{TRUE} when latent factors were
-estimated in \code{fitModel} and \code{FALSE} otherwise.}
+Resolved the same way as \code{useEnvCov}.}
 
 \item{summarised}{Should the output be return in the form of quantiles? Set to TRUE if the number of sites is very large}
 
