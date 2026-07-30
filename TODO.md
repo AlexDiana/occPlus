@@ -236,9 +236,7 @@ output: html_document
 
         ALEX TO DISABLE IT FOR NOW, BUT LET'S KEEP IT THERE
 
-2.  ~~**`predictNewSites()` still has no defaults for `X_psi` / `X_s`**~~ **FIXED 30 July 2026 by Claude, see Fixed bugs 34.** Both now default to `NULL`, `useEnvCov`/`useSpatial` adopt `useBiotic`'s tri-state, and three downstream defects the fix exposed are also closed. Needs Alex's review, filed as section A item 4: it touches `src/jsdm.cpp` and changes two documented defaults.
-
-3.  **Assorted smaller items.**
+2.  **Assorted smaller items.**
 
     (a) `createDataIdx()` is called with `maxP` (`R/runOccJSDM.R:638`) for `model = "occupancy"` too, where `maxP` was never assigned -- it survives only because R's lazy evaluation never forces the promise; pass `NULL` explicitly.
 
@@ -254,11 +252,11 @@ output: html_document
 
         ALEX WILL REVIEW THE ABOVE
 
-4.  **`plotSpeciesResponseCurve()` is exported but has an internal helper's signature.** It takes `species_name, target_cov, beta_mcmc_j, list_matrix, raw_df, n_points` -- raw MCMC pieces and a raw data frame, with no `fitModel` argument -- while every other plotting function in `R/output.R` takes the fitted object. A user holding a `runOccJSDM()` result has no documented way to assemble these arguments. Either give it a `fitModel` signature like its neighbours, or drop it from `NAMESPACE` and let `plotCovariateEffect()` call it internally. Until this is settled it is untestable, which is why the new smoke tests cover the other two GAM exports and not this one.
+3.  **`plotSpeciesResponseCurve()` is exported but has an internal helper's signature.** It takes `species_name, target_cov, beta_mcmc_j, list_matrix, raw_df, n_points` -- raw MCMC pieces and a raw data frame, with no `fitModel` argument -- while every other plotting function in `R/output.R` takes the fitted object. A user holding a `runOccJSDM()` result has no documented way to assemble these arguments. Either give it a `fitModel` signature like its neighbours, or drop it from `NAMESPACE` and let `plotCovariateEffect()` call it internally. Until this is settled it is untestable, which is why the new smoke tests cover the other two GAM exports and not this one.
 
     WAIT FOR ALEX
 
-5.  **`computeNewOutputs()` prints to stdout on every call, and it cannot be silenced.** Found 30 July 2026 while testing the `predictNewSites()` fix (Fixed bugs 34).
+4.  **`computeNewOutputs()` prints to stdout on every call, and it cannot be silenced.** Found 30 July 2026 while testing the `predictNewSites()` fix (Fixed bugs 34).
 
     `src/jsdm.cpp:476` runs `Rcout << "Computing species " << j + 1 << " out of " << S << std::endl;` inside the species loop, unconditionally. Every `predictNewSites()` call therefore prints one line per species, with no way to turn it off: `suppressMessages()` does not catch it, because `Rcout` is stdout rather than R's condition system, and `suppressWarnings()` does not either. `capture.output()` works but forces the caller to discard everything.
 
@@ -292,7 +290,7 @@ None of this is reachable from an exported function, but it will draw `R CMD che
 
 5.  **`sample_rnb()` cannot run as written** (new in `0abb104`, `R/jsdmfun.R:581-614`). Groundwork for the count-data item under *MEE paper*, not yet called from anywhere, but it has a scoping bug that will bite the moment it is wired up: `r_current <- rnb[s]` (`:590`) reads `rnb` inside the `sapply()` at `:588` whose result is *being assigned to* `rnb`, so at that point `rnb` does not exist in the function frame and lookup falls through to the namespace and fails with `object 'rnb' not found`. The current size vector needs to come in as an argument, e.g. `sample_rnb(z, eta, rnb, tune_sd = ...)`. Two more things to settle while there: `tune_sd = 5` is a random-walk SD on the *log* scale, so proposals land a factor of `exp(+/-10)` away and acceptance will be near zero (something in the 0.1-1 range is the usual starting point); and the prior terms are stubbed to `0` with the intended `dgamma()` commented out, referencing `prior_shape`/`prior_rate`, which are not defined anywhere. The Metropolis step itself looks right -- the `log(r_star) - log(r_current)` Jacobian is the correct correction for a log-scale random walk under a flat prior on `r`.
 
-    WORK IN PROGRESS FOR THE COUNTS
+    ALEX's WORK IN PROGRESS FOR THE COUNTS
 
 ## **E. Draft of beta version listserv announcement (Doug)**
 
@@ -536,17 +534,17 @@ Items 16 and 18 are marked **partially fixed**: the crash in each is gone, but p
 
     **Fixed** by giving the helper an explicit contract -- one row per species with `Min`/`Max`, plus `idx_species` and the *unsubset* `speciesNames` -- and doing the subsetting inside it, so the ordering is computed on exactly the rows plotted. Also added a clear error for models with no collection stage, which previously fell through to a subscript failure.
 
-    **Note, since resolved:** this fixed the species-ordering defect for this function only. `plotOccupancyRates()`, `plotFPTPStage2Rates()` and `plotStage1FPRates()` still ordered on the full species set while indexing a filtered one (this was filed as group C item 1, not group B as originally written here). The test added here asserted label-to-value pairing rather than mere absence of error, and served as the template for fixing those three -- see Fixed bugs 32.
+    **Note, since resolved:** this fixed the species-ordering defect for this function only. `plotOccupancyRates()`, `plotFPTPStage2Rates()` and `plotStage1FPRates()` still ordered on the full species set while indexing a filtered one (this was filed as group C at the time, not group B as originally written here). The test added here asserted label-to-value pairing rather than mere absence of error, and served as the template for fixing those three -- see Fixed bugs 32.
 
-32. **`plotOccupancyRates()`, `plotFPTPStage2Rates()` and `plotStage1FPRates()` shared the species-ordering defect `plotCollectionRates()` had (Fixed bugs 31).** Filed as group C item 1; fixed by Claude 29 July 2026. Each computed `order()` on the *filtered* `idx_species` subset and then used the result to index the *unfiltered* `speciesNames`, so for any `idx_species` other than a prefix `1:k` the factor levels named the wrong species and bars silently vanished.
+32. **`plotOccupancyRates()`, `plotFPTPStage2Rates()` and `plotStage1FPRates()` shared the species-ordering defect `plotCollectionRates()` had (Fixed bugs 31).** Filed as group C at the time; fixed by Claude 29 July 2026. Each computed `order()` on the *filtered* `idx_species` subset and then used the result to index the *unfiltered* `speciesNames`, so for any `idx_species` other than a prefix `1:k` the factor levels named the wrong species and bars silently vanished.
 
     `plotOccupancyRates()` and `plotStage1FPRates()` now delegate to the `plotSpeciesRates()` helper fixed in Fixed bugs 31, which subsets first and derives labels from the subset. `plotFPTPStage2Rates()` has a two-interval (`p`/`q`) layout that doesn't fit that helper, so it was fixed inline: order and labels are both now derived from the filtered `data_plot`. `plotStage2FPRates()` was already correct and untouched.
 
     Verified against a live fit with `idx_species = c(3, 1, 10)`: all four functions now plot exactly that subset with matching labels. Full test suite passes (119/119). `R/output.R`.
 
-33. **`returnCovariateEffect()`/`plotCovariateEffect()` had no `idx_species` default, and fixing that exposed two further bugs in the code they call.** Filed as group C item 5; fixed by Claude 29 July 2026.
+33. **`returnCovariateEffect()`/`plotCovariateEffect()` had no `idx_species` default, and fixing that exposed two further bugs in the code they call.** Filed as group C at the time; fixed by Claude 29 July 2026.
 
-    Both functions declared `idx_species` with no default, so `returnCovariateEffect(fit, covName)` errored instead of defaulting to all species -- the same gap as `predictNewSites()` (group C item 2). Gave both a `NULL` default resolving to all species, matching every other return/plot function in `R/output.R`.
+    Both functions declared `idx_species` with no default, so `returnCovariateEffect(fit, covName)` errored instead of defaulting to all species -- the same gap as `predictNewSites()` (Fixed bugs 34). Gave both a `NULL` default resolving to all species, matching every other return/plot function in `R/output.R`.
 
     That default immediately reached two pre-existing bugs that a narrow, prefix `idx_species` had been masking:
 
@@ -556,7 +554,7 @@ Items 16 and 18 are marked **partially fixed**: the crash in each is gone, but p
 
     Verified against a live fit: the default now facets all 10 species correctly; `idx_species = c(3, 1)` plots and labels `OTU_3`/`OTU_1` correctly (previously mislabelled `OTU_1`/`OTU_2`, then errored once the default was exercised). Full test suite passes (119/119). `R/jsdmfun.R`, `R/output.R`.
 
-34. ~~**`predictNewSites()` could not be called without supplying both `X_psi` and `X_s`.**~~ **FIXED 30 July 2026** (Claude; `R/output.R`, `src/jsdm.cpp`). Residual of the original audit's B.4, previously tracked as group C item 2.
+34. ~~**`predictNewSites()` could not be called without supplying both `X_psi` and `X_s`.**~~ **FIXED 30 July 2026** (Claude; `R/output.R`, `src/jsdm.cpp`). Residual of the original audit's B.4, previously tracked in group C.
 
     **The filed defect.** `X_psi` and `X_s` had no defaults, so the `is.null()` guards the author had written could never fire: R raised `argument "X_psi" is missing, with no default` first.
 
@@ -572,7 +570,7 @@ Items 16 and 18 are marked **partially fixed**: the crash in each is gone, but p
 
     **Tested beyond absence of error** (`test-api-contracts.R`): each term measurably changes the prediction when toggled, probabilities stay in `[0,1]`, and quantiles stay ordered. Without the first of those the switches could have been cosmetic and the shape assertions would still have passed.
 
-    **Noticed, not fixed:** `computeNewOutputs()` prints `Computing species i out of S` to stdout via `Rcout` on every call, unconditionally, and it cannot be silenced. Filed separately as group C item 5.
+    **Noticed, not fixed:** `computeNewOutputs()` prints `Computing species i out of S` to stdout via `Rcout` on every call, unconditionally, and it cannot be silenced. Filed separately in group C.
 
 # **Completed work**
 

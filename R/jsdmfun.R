@@ -396,7 +396,7 @@ returnCovariateEffect_base <- function(cov_name,
     sp_idx  <- idx_species[i]
     # Index by sp_idx, not the loop counter i -- speciesNames[i] mislabels
     # every species whenever idx_species isn't the prefix 1:k (same defect
-    # as TODO.md group C item 1, found here as part of item 5).
+    # as TODO.md Fixed bugs 31/32, found here as part of Fixed bugs 33).
     sp_name <- speciesNames[sp_idx]
 
     beta_mcmc_j <- B_output_vec[, , sp_idx]
@@ -457,7 +457,7 @@ plotCovariateEffect_base <- function(idx_species,
   # A previous version re-applied apply(..., c(1,2), c) here, which collapsed
   # the species margin a second time and left B_output_vec's third dimension
   # sized by ncov_psi instead of S -- "subscript out of bounds" for any
-  # sp_idx > ncov_psi. Fixed as part of TODO.md group C item 5.
+  # sp_idx > ncov_psi. Fixed as part of TODO.md Fixed bugs 33.
 
   plot_list <- list()
 

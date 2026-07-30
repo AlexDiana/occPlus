@@ -1002,7 +1002,7 @@ plotFPTPStage2Rates <- function(fitModel,
   # Order and label using the filtered subset that is actually plotted --
   # computing order() on the filtered rows and then indexing the unfiltered
   # speciesNames (as before) mismatches labels to bars for any idx_species
-  # other than a prefix 1:k (TODO.md group C item 1).
+  # other than a prefix 1:k (TODO.md Fixed bugs 31/32).
   speciesNameOrdered <- data_plot$Species[order(data_plot$p1)]
 
   detectionRates <- data_plot %>%

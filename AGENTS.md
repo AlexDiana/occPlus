@@ -110,6 +110,26 @@ MarkdownWrap: None
 
 **The tradeoff, stated honestly.** Unwrapped paragraphs make git diffs paragraph-granular rather than line-granular. `git diff --word-diff` recovers most of the readability. This was accepted deliberately as the lesser cost against recurring phantom diffs.
 
+## Cross-referencing TODO items
+
+**Reference `Fixed bugs N`, never `group X item N`.** Fixed bugs entries are
+append-only and never renumber, so they are a stable anchor. Group A/B/C/D
+positions shift every time an item is fixed and removed, which silently
+repoints every reference to it.
+
+This has now gone wrong three times. Group B once had a gap at items 5 and 6,
+where two fixes had been deleted with no Fixed-bugs entry, and the gap was the
+only evidence they had happened. Three code comments in `R/output.R` and
+`R/jsdmfun.R` pointed at "group C item 1" and "group C item 5", both of which
+had since moved to Fixed bugs, so the numbers resolved to unrelated items; they
+now cite `Fixed bugs 31/32` and `Fixed bugs 33`. And on 30 July, removing a
+fixed stub from group C renumbered three items underneath it at once.
+
+When an item is fixed: write the Fixed bugs entry first, then delete the item
+from its group entirely. Do not leave a struck-through stub behind. The Fixed
+bugs list is the record, the group lists are the work queue, and an item should
+be in exactly one of them.
+
 ## Git and build artifacts
 
 - **`src/*.o`/`src/*.so` tracking is fixed**: confirmed this session (`git ls-files 'src/*.o' 'src/*.so'` returns nothing) -- no longer tracked, despite the earlier note in this file claiming they were. Superseded.
