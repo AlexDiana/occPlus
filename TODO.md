@@ -418,6 +418,8 @@ editor_options:
     "Review Claude fixes" item 3**: this needs sampler-level
     investigation, not another prior experiment.
 
+    ALEX TO REVIEW A3 ABOVE (THIS IS REDUNDANT WITH A3).
+
 5.  **`theta0` now overcovers at 0.978-0.985, having been near
     nominal.** Measured by the same re-run (`PLAN.md` 12.3).
 
@@ -444,6 +446,8 @@ editor_options:
     cannot confirm recovery: an observed 0.944 is not distinguishable
     from a true 0.90 at this R (`PLAN.md` 13.2/13.4). Re-run the M10 or
     M20 arm at R = 200 before closing this as "not a bug".
+
+    DOUG TO "Re-run the M10 or M20 arm at R = 200"
 
 6.  **`B0` bias roughly doubled, and coverage does not show it.**
     Measured by the same re-run (`PLAN.md` 12.2). **Possible regression,
