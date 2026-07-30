@@ -95,11 +95,11 @@ output: html_document
 
     **What the knob does.** All three arms below are M = 2, R = 50, paired on identical truths, varying only `b_betatheta_slope_var`:
 
-    | variance | `B0` bias | `beta_theta` coverage | `theta0` coverage |
-    |---|---|---|---|
-    | 2 (your current default) | -0.160 | 0.747 | 0.986 |
-    | 0.5 | -0.106 | 0.707 | 0.982 |
-    | 0.1 | **-0.044** | **0.653** | 0.980 |
+    | variance                 | `B0` bias  | `beta_theta` coverage | `theta0` coverage |
+    |--------------------------|------------|-----------------------|-------------------|
+    | 2 (your current default) | -0.160     | 0.747                 | 0.986             |
+    | 0.5                      | -0.106     | 0.707                 | 0.982             |
+    | 0.1                      | **-0.044** | **0.653**             | 0.980             |
 
     Paired, `B0`'s bias improvement is 2.1 SE at 0.5 and 4.0 SE at 0.1. `B0` coverage is 0.946-0.950 throughout, unchanged.
 
@@ -107,7 +107,7 @@ output: html_document
 
     **Why it is not simply "turn it back down".** The same change degrades `beta_theta`'s coverage, from 0.747 to 0.653 at variance 0.1. Group B items 4 and 6 pull in opposite directions on one parameter. Tightening buys a better point estimate for species intercepts at the cost of more overconfident collection-covariate intervals.
 
-    **What is not known.** Whether some intermediate value is better than both endpoints, since only three points were measured; whether the trade looks the same at M > 2, since this was run only at the production setting; and whether the correct move is to keep `diag(2)` and fix `beta_theta`'s overconfidence at its source instead, which is item 3 above. If the sampler-level cause of item 3 turns out to be the real problem, this trade may dissolve.
+    **What is not known.** Whether some intermediate value is better than both endpoints, since only three points were measured; whether the trade looks the same at M \> 2, since this was run only at the production setting; and whether the correct move is to keep `diag(2)` and fix `beta_theta`'s overconfidence at its source instead, which is item 3 above. If the sampler-level cause of item 3 turns out to be the real problem, this trade may dissolve.
 
     **The hook exists**: `listPriors$b_betatheta_slope_var`, added for this test, defaults to 2 so current behaviour is unchanged. Reverting it is a one-line change if you would rather it stayed hard-coded.
 
