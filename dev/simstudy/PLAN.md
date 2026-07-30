@@ -519,9 +519,9 @@ The likely route is coupling. `b_betatheta`'s variance was widened to `diag(2)` 
 **The tighter-prior run already supports this, weakly.** Both arms moved `theta0` toward nominal:
 
 | arm | var = 2 | var = 0.5 | change |
-|---|---|---|---|
-| M10 | 0.944 | 0.940 | -0.004 |
-| M20 | 0.952 | 0.942 | -0.010 |
+|-----|---------|-----------|--------|
+| M10 | 0.944   | 0.940     | -0.004 |
+| M20 | 0.952   | 0.942     | -0.010 |
 
 Small, as expected: those are the arms where data dominates the prior. **M2 is the one arm where the prior should dominate, and it is the one arm not yet run at the tighter setting.**
 
@@ -531,11 +531,11 @@ The `K30` result (0.996, worse than M2's 0.986) also fits: more PCR replicates s
 
 Two new arms at M = 2, varying only `b_betatheta_slope_var`, using the `listPriors` hook added for 13.8:
 
-| Arm | M | `b_betatheta_slope_var` | Purpose |
-|---|---|---|---|
-| `M2` | 2 | 2 (default) | already collected, 13.7 |
-| `M2_tight` | 2 | 0.5 | matches the 13.8 setting |
-| `M2_vtight` | 2 | 0.1 | far enough to force a visible move |
+| Arm         | M   | `b_betatheta_slope_var` | Purpose                            |
+|-------------|-----|-------------------------|------------------------------------|
+| `M2`        | 2   | 2 (default)             | already collected, 13.7            |
+| `M2_tight`  | 2   | 0.5                     | matches the 13.8 setting           |
+| `M2_vtight` | 2   | 0.1                     | far enough to force a visible move |
 
 Same `seed_label = "mladder"`, so these pair against the existing `M2` arm. R = 50.
 
@@ -544,7 +544,7 @@ Same `seed_label = "mladder"`, so these pair against the existing `M2` arm. R = 
 ### 14.4 What each outcome means
 
 | Outcome | Reading | Action |
-|---|---|---|
+|----|----|----|
 | `theta0` walks 0.986 toward 0.95 as the variance tightens | Coupling confirmed. `theta0` overcoverage is a downstream symptom of the `b_betatheta` widening, not an independent defect. | Close B5 as part of B4. One cause, two symptoms; whatever fixes B4's overconfidence should be checked against `theta0` at the same time. |
 | `theta0` does not move | Coupling is not the route. The cause is elsewhere in the `jsdmfun.R` rewrite, or in `sample_theta0()` itself. | Next test is `theta0`'s own prior, which already has `listPriors$a_theta0`/`b_theta0` hooks, at M = 2. |
 | `theta0` moves the wrong way | The widening was compensating for something, and reverting it alone would make `theta0` worse. | Stop and hand to Alex with both results; this would mean B4 and B5 pull in opposite directions. |
@@ -567,12 +567,12 @@ Dropped, not deferred. Its purpose was to confirm `theta0` has genuinely reached
 
 **Run:** 100 fits, R = 50, 20.4 min, 0 failures. All three arms share `seed_label = "mladder"`, and truth is bit-identical across them (verified), so every comparison below is paired.
 
-| | var = 2 (default) | var = 0.5 | var = 0.1 |
-|---|---|---|---|
-| `theta0` coverage | 0.986 | 0.982 | 0.980 |
-| `beta_theta` coverage | 0.747 | 0.707 | 0.653 |
-| `B0` bias | -0.160 | -0.106 | **-0.044** |
-| `B0` coverage | 0.946 | 0.950 | 0.946 |
+|                       | var = 2 (default) | var = 0.5 | var = 0.1  |
+|-----------------------|-------------------|-----------|------------|
+| `theta0` coverage     | 0.986             | 0.982     | 0.980      |
+| `beta_theta` coverage | 0.747             | 0.707     | 0.653      |
+| `B0` bias             | -0.160            | -0.106    | **-0.044** |
+| `B0` coverage         | 0.946             | 0.950     | 0.946      |
 
 ### `theta0`: the hypothesis is disproved
 

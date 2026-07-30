@@ -50,31 +50,23 @@ output: html_document
 
 ## A. Review Claude's changes (Alex)
 
-Every code change Claude made, newest first. None has had human review beyond Doug asking for it. All are recoverable from git; revert or rework freely. Each says what to check. Full detail for each is in *Fixed bugs*, which is the record; this section is the queue.
+Every code change Claude made, newest first. None has had human review beyond Doug asking for it. 
+All are recoverable from git; revert or rework freely. Each says what to check. 
+Full detail for each is in *Fixed bugs*, which is the record; this section is the queue.
 
-1.  **Deprecated dead code: 10 functions moved out of the package.** 30 July. `sample_z`, `sample_w`, `sample_cimk`, `loglik_sigma1` from `R/mcmcfun.R`; `sample_BCsL`, `sample_U`, `sample_Br`, `sample_BL_fixed` from `R/jsdmfun.R`; `plotReadIntensity`, `plotOccupancyStates` from `R/output.R`. All now in `deprecated/R/`, which `.Rbuildignore` excludes from the build.
 
-    **To check:** that you agree none is wanted. Each was verified unreachable (no callers in `R/`, `tests/` or `vignettes/`, absent from `NAMESPACE`, and not referenced as a string anywhere, so nothing could reach them via `do.call()`/`get()`/`match.fun()`), and each referenced undefined globals so could not have run as written. Nothing exported changed.
 
-2.  **C++: `&` to `&&` on booleans, and two unused constants removed.** 30 July, `src/functions.cpp`, `src/jsdm.cpp`. Eight `&` sites cleared a `-Wbitwise-instead-of-logical` warning. Safe because in C++ the relational operators bind tighter than `&`, so the parse was already the intended one and no operand has side effects.
-
-    **To check, and this one went wider than asked:** `TRUNC` and `TRUNC_RECIP` were also deleted from both files. They were declared, used nowhere, and were the last package-attributable cause of the install WARNING. A comment records their values and origin. Say if you want them back behind `[[maybe_unused]]` instead.
-
-3.  **Imports for three symbols live code needs.** 30 July, `R/occJSDM-package.R`. Added `stats::setNames`, `stats::rnbinom`, `tidyr::pivot_longer`.
+1.  **Imports for three symbols live code needs.** 30 July, `R/occJSDM-package.R`. Added `stats::setNames`, `stats::rnbinom`, `tidyr::pivot_longer`.
 
     **To check:** nothing, unless you disagree with the placement. Worth knowing it was not cosmetic: `pivot_longer` did not resolve from an installed namespace at all, and it is reached in the categorical-covariate branch of both exported GAM functions, so they would have failed with "could not find function" for any user with a categorical covariate.
-
-4.  **Guard on the two GAM effect functions against old fitted objects.** 30 July, `R/output.R`. `returnCovariateEffect()` and `plotCovariateEffect()` now stop with a clear message if `fitModel$infos$X0_psi` is missing, instead of failing inside `seq()` with `'from' must be a finite number`.
-
-    **To check:** the message wording. `X0_psi` arrived with your GAM commit, so any fit saved before it hits this.
-
-5.  **`predictNewSites()` could not be called without both `X_psi` and `X_s`.** 30 July, `R/output.R` and **`src/jsdm.cpp`**. Both now default to `NULL`, and `useEnvCov`/`useSpatial` adopt the tri-state `useBiotic` already used: `NULL` means use the term if the fit estimated it, `TRUE` means use it and error if not, `FALSE` means skip.
+    
+2.  **`predictNewSites()` could not be called without both `X_psi` and `X_s`.** 30 July, `R/output.R` and **`src/jsdm.cpp`**. Both now default to `NULL`, and `useEnvCov`/`useSpatial` adopt the tri-state `useBiotic` already used: `NULL` means use the term if the fit estimated it, `TRUE` means use it and error if not, `FALSE` means skip.
 
     **To check, two API decisions that are yours:** (a) is the tri-state the shape you want, given it changes two documented defaults from `TRUE` to `NULL`? It is strictly more permissive, so no call that worked before changes. (b) should "no covariates and no spatial" error, as it now does, or should the function gain an `n_new` argument? Nothing in the arguments says how many sites to predict for.
 
     Fixing the guards also exposed three defects in `computeNewOutputs()` and the reshaping around it, all of which were unreachable until the guards worked, and all fixed here. Two are in your C++. Detail in *Fixed bugs* 34.
 
-6.  **`listPriors$b_betatheta_slope_var`, a new hook.** 29 July, `R/runOccJSDM.R`. `B_betatheta`'s slope variance was hard-coded at `diag(2)` with no override, unlike `p`/`q`/`theta0`. Default unchanged, so behaviour is identical unless set.
+3.  **`listPriors$b_betatheta_slope_var`, a new hook.** 29 July, `R/runOccJSDM.R`. `B_betatheta`'s slope variance was hard-coded at `diag(2)` with no override, unlike `p`/`q`/`theta0`. Default unchanged, so behaviour is identical unless set.
 
     **To check:** whether you want the hook at all. It was added to test a hypothesis (see B item 4), and it is a one-line revert.
 
@@ -87,8 +79,6 @@ Every code change Claude made, newest first. None has had human review beyond Do
     **To check:** the design in `src/rng.h`, which documents three traps worth knowing before touching it. Also two questions: (a) is thread-count invariance worth having? Reproducibility currently holds for a given thread count. (b) what does `R CMD config SHLIB_OPENMP_CXXFLAGS` return on your machine? It is empty on Doug's, so every `#pragma omp` compiles to a no-op there and the package runs single-threaded.
 
 9.  **`plotFPTPStage2Rates()` ignored its own `primerName` argument.** 27 July, `R/output.R`. It pooled quantiles across all primers regardless of what was passed, so changing `primerName` produced an identical plot. Now subsets to the requested primer and errors on an unknown one.
-
-**Also from Claude, not code:** `TODO.Rmd` was renamed `TODO.md` and the RStudio wrap setting changed, because a 72-column wrap was silently corrupting inline code spans. Detail in *Fixed bugs*.
 
 ## **B. Inference-affecting bugs (wrong numbers, silently) (Alex)**
 
@@ -116,13 +106,7 @@ Every code change Claude made, newest first. None has had human review beyond Do
 
     ALEX TO MAKE A DECISION
 
-3.  **Choose the informative priors for `p`, `q` and `theta0`.** Your note: "NEED TO CHOOSE THE INFORMATIVE PRIORS". **This is a modelling decision, not a bug.** `p` and `q` enter `sample_pq_cpp()` symmetrically and no `p > q` constraint exists, so the likelihood is invariant under swapping them: the informative prior is what selects the correct mode. Flattening it leaves the model unidentified.
-
-    The cost is visible: where true `p` is 0.1-0.3, coverage of `p` falls to 0.11 against 0.90 elsewhere. That is the price of the identifiability constraint in the regime eDNA work occupies, not a defect. The open question is how strong the default should be, and what to tell users with low detection rates.
-
-    ALEX RESPONSE: WE'LL ACCEPT THIS PRIOR AND THE BIAS
-
-4.  **`beta_theta` intervals are overconfident, and it gets worse with more data.** Coverage 0.77 at the production `M = 2`, falling monotonically to 0.58 at `M = 20`, while bias stays small and flat. Shrinking intervals around a bias that is not shrinking is the signature of a real defect being exposed by more information, not fixed by it.
+3.  **`beta_theta` intervals are overconfident, and it gets worse with more data.** Coverage 0.77 at the production `M = 2`, falling monotonically to 0.58 at `M = 20`, while bias stays small and flat. Shrinking intervals around a bias that is not shrinking is the signature of a real defect being exposed by more information, not fixed by it.
 
     **Three candidate causes ruled out**, each by measurement: Stage 1 under-identification (more data makes it worse, not better); the slope prior's width (tightening it 20-fold at `M = 2` moves coverage the wrong way); and pseudo-replication in `X_theta` (it is drawn per sample, not per site).
 
@@ -171,12 +155,6 @@ Every code change Claude made, newest first. None has had human review beyond Do
     (f) `computeSpeciesDetected()`'s roxygen documents the removed Beta-approximation signature instead of its actual arguments.
 
     ALEX WILL REVIEW THE ABOVE
-
-3.  **`plotSpeciesResponseCurve()` is exported but has an internal helper's signature.** It takes `species_name, target_cov, beta_mcmc_j, list_matrix, raw_df, n_points`, with no `fitModel` argument, while every other plotting function takes the fitted object. A user holding a fit has no documented way to assemble those arguments. Either give it a `fitModel` signature, or drop it from `NAMESPACE` and let `plotCovariateEffect()` call it internally. Until settled it is untestable, which is why the smoke tests cover the other two GAM exports and not this one.
-
-    This is also one of the two remaining `R CMD check` WARNINGs: `man/plotSpeciesResponseCurve.Rd` documents arguments the function does not have.
-
-    WAIT FOR ALEX
 
 4.  **`computeNewOutputs()` prints to stdout on every call and cannot be silenced.** `src/jsdm.cpp` runs `Rcout << "Computing species ..."` inside the species loop unconditionally, so every `predictNewSites()` call prints one line per species. `suppressMessages()` does not catch it, because `Rcout` is stdout rather than R's condition system.
 
