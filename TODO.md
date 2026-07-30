@@ -188,7 +188,7 @@ output: html_document
 
     **Not yet closeable.** R = 50 confirms the deviation is real but cannot confirm recovery: an observed 0.944 is not distinguishable from a true 0.90 at this R (`PLAN.md` 13.2/13.4). Re-run the M10 or M20 arm at R = 200 before closing this as "not a bug".
 
-    DOUG TO "Re-run the M10 or M20 arm at R = 200"
+    CLAUDE TO "Re-run the M10 or M20 arm at R = 200"
 
 6.  **`B0` bias roughly doubled, and coverage does not show it.** Measured by the same re-run (`PLAN.md` 12.2). **Possible regression, cause not yet identified.**
 
@@ -202,11 +202,15 @@ output: html_document
 
     Still needs the `jsdmfun.R` rewrite investigated as a candidate cause (see below), since the ladder does not rule it out -- it only shows that *some* of the effect is an M/data-volume story.
 
+    ALEX TO DIAGNOSE THE CAUSE, CHECK THE jsdmfun.R REWRITE, AND DECIDE WHAT TO DO ABOUT THIS
+
 7.  **`q` (Stage 2 false positives) degrades hard as `K` rises.** Found 29 July 2026, as a side effect of the M-ladder run (`PLAN.md` 13.7) -- not something that run was built to look for.
 
     Coverage: 0.945 at `M2` (K = 3) down to **0.614 at `K30`** (K = 30, same total rows as `M20`). `M20` itself, which keeps K = 3 and raises M instead, sits at 0.742 -- worse than `M2` but far better than `K30`. So more PCR replicates make `q` less well calibrated, not more, and the effect is bigger than the M-driven change in any of items 4-6.
 
     Not investigated beyond this measurement. Worth checking against the same label-switching mechanism noted in item 3 above -- more PCR replicates sharpen the posterior, and if the informative prior is pulling `p`/`q` away from the true values by a fixed amount, sharper intervals would show it as *worse* coverage, exactly as seen here for `beta_theta` in item 4. If so this is not a new bug but the same cost-of-identifiability story, extended to K.
+
+    ALEX TO DIAGNOSE THE CAUSE AND DECIDE WHAT TO DO ABOUT THIS
 
 ## **C. Crashes, unreachable code paths, and API bugs (Alex)**
 
@@ -216,9 +220,7 @@ output: html_document
 
         ALEX TO DISABLE IT FOR NOW, BUT LET'S KEEP IT THERE
 
-2.  **`predictNewSites()` still has no defaults for `X_psi` / `X_s`** (residual of the original audit's B.4; see Fixed bugs 18, which wrongly recorded this half as done). Verified via `formals(predictNewSites)`: `fitModel`, `X_psi` and `X_s` all have no default, while `useEnvCov`/`useSpatial` default to `T`. So `predictNewSites(fit, X_psi = X)` errors on the missing `X_s` promise even when `useSpatial = FALSE`, which is exactly the combination the docs describe as supported. Fix: give both `NULL` defaults, matching `useBiotic`, which already has one.
-
-    No test guards this yet -- `tests/testthat/test-api-contracts.R` deliberately omits it rather than encoding the broken behaviour. Add the test with the fix.
+2.  ~~**`predictNewSites()` still has no defaults for `X_psi` / `X_s`**~~ **FIXED 30 July 2026 by Claude, see Fixed bugs 34.** Both now default to `NULL`, `useEnvCov`/`useSpatial` adopt `useBiotic`'s tri-state, and three downstream defects the fix exposed are also closed. Needs Alex's review: it touches `src/jsdm.cpp`.
 
 3.  **Assorted smaller items.**
 
@@ -291,6 +293,24 @@ None of this is reachable from an exported function, but it will draw `R CMD che
     > Feedback, feature requests, and bug reports are very welcome.
 
 # **MEE paper**
+
+34. ~~**`predictNewSites()` could not be called without supplying both `X_psi` and `X_s`.**~~ **FIXED 30 July 2026** (Claude; `R/output.R`, `src/jsdm.cpp`). Residual of the original audit's B.4, previously tracked as group C item 2.
+
+    **The filed defect.** `X_psi` and `X_s` had no defaults, so the `is.null()` guards the author had written could never fire: R raised `argument "X_psi" is missing, with no default` first.
+
+    **Worse than filed.** Those guards used `&`, not `&&`. Since `&` evaluates both sides, the missing promises were forced even when the caller had asked for neither term, so `predictNewSites(fit, useEnvCov = FALSE, useSpatial = FALSE)` failed too. There was no way to call the function at all without both matrices.
+
+    **The fix.** Both default to `NULL`. `useEnvCov` and `useSpatial` adopt the tri-state `useBiotic` already used: `NULL` uses the term if the fit estimated it, `TRUE` uses it and errors if it did not, `FALSE` skips it. That is what their roxygen always claimed, and was unreachable because `useSpatial` hard-stopped on a fit with no spatial field instead of ignoring it. Strictly more permissive: every call that worked before still works identically.
+
+    **Three further defects, exposed by making those paths reachable, all pre-existing and all fixed here:**
+
+    (a) `computeNewOutputs()` sliced `Ks_all` and `Bs_output` unconditionally, so `useSpatial = FALSE` aborted with `Cube::slice(): index out of bounds`. Moved inside the `useSpatial` guard.
+    (b) It read the new-site count as `X.n_rows` unconditionally, so `useEnvCov = FALSE` silently returned a zero-row result. Now taken from whichever term is active; both being off is an explicit error, since nothing then determines how many sites to predict for.
+    (c) A fit with no spatial field returns `Bs_output` with a zero-length first dimension, which collapses under `apply()` and broke the `aperm()` with `'perm' is of wrong length`. Only reshaped when the spatial term is in play.
+
+    **Tested beyond absence of error** (`test-api-contracts.R`): each term measurably changes the prediction when toggled, probabilities stay in `[0,1]`, and quantiles stay ordered. Without the first of those the switches could have been cosmetic and the shape assertions would still have passed.
+
+    **Noticed, not fixed:** `computeNewOutputs()` prints `Computing species i out of S` to stdout via `Rcout` on every call, unconditionally. It cannot be silenced with `suppressMessages()` and it pollutes test output. Worth a `verbose` argument.
 
 ## A. Alex to dos
 
