@@ -242,6 +242,18 @@ output: html_document
 
     WAIT FOR ALEX
 
+5.  **`computeNewOutputs()` prints to stdout on every call, and it cannot be silenced.** Found 30 July 2026 while testing the `predictNewSites()` fix (Fixed bugs 34).
+
+    `src/jsdm.cpp:476` runs `Rcout << "Computing species " << j + 1 << " out of " << S << std::endl;` inside the species loop, unconditionally. Every `predictNewSites()` call therefore prints one line per species, with no way to turn it off: `suppressMessages()` does not catch it, because `Rcout` is stdout rather than R's condition system, and `suppressWarnings()` does not either. `capture.output()` works but forces the caller to discard everything.
+
+    **Why it matters beyond tidiness.** It pollutes test output, which is how it was noticed: the new `predictNewSites()` tests interleave `Computing species 1 out of 4` with testthat's progress dots. It would do the same inside any user script, vignette chunk, or Shiny app that predicts in a loop. Unconditional console output from a compute function is also the kind of thing CRAN reviewers pick up.
+
+    **Fix.** Add a `verbose` argument, defaulting to `FALSE`, threaded from `predictNewSites()` through to `computeNewOutputs()`, and guard the `Rcout`. Progress reporting is genuinely useful for a slow prediction over many species, so removing it outright would be a loss; making it opt-in keeps it.
+
+    **Related, same anti-pattern, already tracked:** `thinOutput()` uses `print("Dimension not recognised")` at `R/output.R:43` and `:63` where it should warn or error. That is part of item 1 above, not a separate fix, but worth doing in the same pass since it is the same class of problem.
+
+    ALEX TO DECIDE AND FIX (touches `src/jsdm.cpp`)
+
 ## **D. Dead and broken internal code (Alex)**
 
 None of this is reachable from an exported function, but it will draw `R CMD check` "no visible binding" notes and is a trap for anyone reading the source. Suggest moving the genuinely dead functions to `deprecated/` and wiring up the two missing imports.
@@ -310,7 +322,7 @@ None of this is reachable from an exported function, but it will draw `R CMD che
 
     **Tested beyond absence of error** (`test-api-contracts.R`): each term measurably changes the prediction when toggled, probabilities stay in `[0,1]`, and quantiles stay ordered. Without the first of those the switches could have been cosmetic and the shape assertions would still have passed.
 
-    **Noticed, not fixed:** `computeNewOutputs()` prints `Computing species i out of S` to stdout via `Rcout` on every call, unconditionally. It cannot be silenced with `suppressMessages()` and it pollutes test output. Worth a `verbose` argument.
+    **Noticed, not fixed:** `computeNewOutputs()` prints `Computing species i out of S` to stdout via `Rcout` on every call, unconditionally, and it cannot be silenced. Filed separately as group C item 5.
 
 ## A. Alex to dos
 
