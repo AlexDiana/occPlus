@@ -4,7 +4,9 @@ Plan for the "extensive testing on simulated datasets" item under *MEE paper / D
 
 [Guide to the test suite](https://claude.ai/code/artifact/ad3d46eb-1fd4-49b5-b795-6b71474ef1d5 "Guide to the test suite")
 
-**Status as of 29 July 2026: complete, and the study has now been run twice.** The pre-fix run (27–28 July) found four defects; three were traced to specific lines of code and one turned out not to be a defect at all. The post-fix re-run (29 July) is the current table in §12, and it added two further findings. Sections marked *OPEN* still need a decision or a measurement.
+**Status as of 30 July 2026: the suite is built and the study has been run four times.** The pre-fix grid (27-28 July) found four defects. The post-fix re-run (29 July) is the current table in §12 and added two more findings. Two targeted experiments followed: the M ladder (§13) and the prior-variance arms (§14). Between them they disproved two hypotheses and identified the cause of a third finding. Sections marked *OPEN* still need a decision or a measurement.
+
+**Reading order if you are new to this:** §12 for the current results, then §13.7 and §14.7 for what the follow-up experiments established. §1-§9 are the design and are mostly settled.
 
 | Stage | State |
 |----|----|
@@ -152,7 +154,7 @@ The latent-factor model is invariant to rotation and sign. `reparamFactorModel()
 - **NOT comparable, contrary to the original draft of this section:** `Bs`, `Gs`, `sigma_bs`. The simulator builds the spatial field directly from `sigma_s`/`l_s` and sets `Bst <- matrix(0, S, ps)` (`R/jsdmfun.R:557`), so on the truth side `Bs` is empty *regardless of `ds`* (re-checked at `ds = 2`) and `sigma_bs` generates nothing; the fit meanwhile represents the field as sparse-GP basis coefficients over `n_supportpoints` knots. Different parameterisations. Measured for `sigma_bs`: true 0.5 against a posterior mean of \~1.6, 0/8 coverage -- a meaningless comparison rather than a bug.
 - **Only as identified functions:** residual correlation matrix, `eta`/`psi`, variance partitioning
 - **Must NOT be checked element-wise:** `U`, `L`, `A`, `C` -- element-wise coverage would fail for reasons that are not bugs
-- **Excluded:** `sigma_h` -- never sampled (group A item 1), so it would fail by construction. **Also `l_s`** -- group A item 2: `sigma_s` is hard-coded to 1 at the `sample_ls()` call site, so the length-scale absorbs the amplitude misspecification and rails at the top of `l_s_grid` for every true value tried. Any coverage figure for `l_s` is meaningless until that is fixed. Exclude explicitly and with a comment, so a future reader does not "fix" the test.
+- **Excluded:** `sigma_h` -- it was not sampled when this was written (since fixed, *Fixed bugs* 24), but it remains excluded because `U` at training sites is drawn under a hard-coded unit-variance prior regardless, so the study cannot see it. **Also `l_s`** -- group B item 2: `sigma_s` is hard-coded to 1 at the `sample_ls()` call site, so the length-scale absorbs the amplitude misspecification and rails at the top of `l_s_grid` for every true value tried. Any coverage figure for `l_s` is meaningless until that is fixed. Exclude explicitly and with a comment, so a future reader does not "fix" the test.
 
 ### 5.4 The GP knot count must be pinned, not left to the default
 
@@ -247,7 +249,7 @@ Adding SBC later requires:
 2.  Documenting what the sampler *actually* assumes. Not free: the audit found the *documented* `prior_beta_psi`/`prior_beta_psi_sd` were a complete no-op, with the live path hard-coding something different (Fixed bugs 14).
 3.  Thinning to near-independent draws, which raises per-replicate cost.
 
-Note `sigma_h` would show a flagrantly non-uniform rank histogram under SBC. That is the method working (group A item 1), not a new bug.
+Note `sigma_h` would show a flagrantly non-uniform rank histogram under SBC. That is the method working, not a new bug.
 
 ------------------------------------------------------------------------
 
@@ -293,110 +295,19 @@ Also: pooling coverage across species within a block buys precision, but those i
 
 ## 10. Open items
 
-0.  *OPEN, and it degrades cells 1 and 2.* **The GP length-scale is never recovered** (`TODO.md` group A item 2, re-diagnosed 27 July).
+0.  *OPEN, and it degrades the two spatial cells.* **The GP length-scale is never recovered** (`TODO.md` group B item 1). Needs a derivation, not a code tweak. Until then no cell says anything about spatial range.
 
-    `sample_ls()` treats the fitted field `SE` as a GP draw and scores its density under `N(0, sigma_s^2 K(l_s))` while holding `SE` fixed. But under the SoR approximation `SE = Ks(l_s) %*% Bs` is a *deterministic function of `l_s`*, already smoothed at the current value, so it scores better and better under smoother covariances. The likelihood is monotone increasing in `l_s` and `idx_ls` pins at the grid maximum -- measured at range 10-10 for every true `l_s` tried (0.074, 0.171, 0.300) with real spatial signal present.
+1.  ~~Minimum `n` for spatial cells.~~ **RESOLVED 27 July.** The floor is **31 unique locations** with default settings.
 
-    **This supersedes the earlier entry here, which blamed `sigma_s` being hard-coded to 1 and expected a one-line fix.** Profiling the grid at the field's actual amplitude leaves the likelihood monotone, so that fix is disproven. `sigma_bs` is already sampled and already is the SoR amplitude; a separate `sigma_s` would be redundant. The real fix is a modelling change needing Alex -- see the TODO entry.
+2.  ~~Tier 2 failing vs advisory.~~ **RESOLVED: it fails**, on thresholds measured across three seed sets (§6.3).
 
-    Consequences here: `l_s` stays out of the checked parameters (§5.3), and the spatial cells still test `Bs` and the overall spatial contribution but say nothing about range recovery. **Not blocking** -- those cells remain worth running -- but no table produced before this is fixed may be read as evidence about the GP. Re-run cells 1 and 2 afterwards.
+3.  ~~`beta_theta` and `resid_cor` sit below nominal.~~ **RESOLVED and both traced.** `resid_cor` is `reparamFactorModel()` (`TODO.md` group B item 2), confirmed by a paired re-run in which only 104 of 49,978 coverage decisions flipped. `beta_theta` was partly the prior mean (*Fixed bugs* 25); the residue is group B item 4 and is now known **not** to be under-identification, prior width, or pseudo-replication (§13, §14).
 
-1.  ~~*OPEN, blocking tier 3.***Minimum `n` for spatial cells.**~~ **RESOLVED 27 July 2026, and no longer blocking.** Measured: the floor is **31 unique locations** with default settings. `n <= 29` fails with `cannot take a sample larger than the population`, `n = 30` with `number of cluster centres must lie between 1 and nrow(x)`, `n >= 31` runs.
+4.  *OPEN.* **Presentation of tier-3 results for the paper.** Still deferred. The summary object feeds either a short pkgdown article or the manuscript directly.
 
-    Cause: `getDefaultSupportPoints(n) <- max(30, floor(n * 0.2))` (`R/jsdmfun.R:480`) feeds `kmeans(X_s, centers = ps)`, and the hard-coded 30 wins for every dataset under 150 sites, so the knot count never scales down. Filed as a bug and **since fixed** (`42198d9`, `TODO.md` Fixed bugs 29) -- the default was also statistically wrong well before it crashed (30 knots for 31 sites is \~1 knot per site, defeating the point of a sparse GP). Now `min(floor(n * 0.2), n - 1)`.
+5.  *OPEN, and the case keeps strengthening.* **SBC** (§7). Three separate instances now of a fixed truth conflicting with an informative prior: `sigma_b` reading 1.000 because it is prior-dominated, `p` collapsing where the true value sits far into a `Beta(5, 1)` tail, and `theta0` overcovering. All are artefacts of choosing truth independently of the prior, and SBC cannot produce them by construction.
 
-    **Consequence for this plan:** cell 5 must set `listParams$n_supportpoints` explicitly rather than relying on the default. Verified working at `n = 20` with 6 knots. Pinning the knot count is the right call for a study cell anyway -- it stops the spatial approximation silently changing with `n` across scenarios, which would otherwise confound the low-information comparison. Apply the same reasoning to **every** spatial cell (1, 2, 4–10), not just cell 5: set `n_supportpoints` per scenario so it is a controlled factor rather than a function of `n`.
-
-2.  ~~*OPEN.* Tier 2 failing vs advisory (§6.3).~~ **RESOLVED: it fails**, on measured thresholds -- see §6.3.
-
-3.  ~~*OPEN.***`beta_theta` and `resid_cor` sit below nominal.**~~ **RESOLVED 28 July by the full run, and both traced to code.** `beta_theta` undercovers in *every* cell (0.676-0.730) -- the flatness across model types, primer counts and factor misspecification is the signature of a structural cause, and it is `TODO.md` group A item 3 (prior mean 1 instead of 0 on the collection slopes). `resid_cor` sits at 0.74-0.77 in nine cells and is group A item 4 (`reparamFactorModel()` breaking `t(L) %*% L`). See §12.
-
-4.  *Deferred.* Presentation of tier-3 results for the paper. Build the suite first; the summary object then feeds either a short pkgdown article or the manuscript directly. Nothing here forecloses that.
-
-5.  *Deferred, but the case is now stronger.* **SBC** (§7). The full run found two separate instances of a fixed truth conflicting with an informative prior -- `sigma_b` reading 1.000 everywhere because it is prior-dominated, and `p` collapsing to 0.103 where the true value sits far into the tail of a `Beta(5, 1)`. Both are artefacts of choosing truth independently of the prior. SBC draws truth *from* the prior and so cannot produce them, which would separate "the sampler is wrong" from "this truth disagrees with this prior" automatically rather than by the hand-analysis those two took.
-
-------------------------------------------------------------------------
-
-## 12. Results of the full run (29 July 2026, post-fix)
-
-1000 replicates, 10 scenarios, 0 failures, **285 min** on 5 cores. 155,578 individual interval checks. Commit `8af22cd`. Coverage SE at R = 100 is 2.2 points, so treat anything in 0.93–0.97 as indistinguishable from nominal.
-
-**This is a paired comparison with the 28 July pre-fix run.** `draw_truth()` seeds on (scenario, replicate), so the simulated data and true values are *bit-identical* between the two runs -- verified, `max|truth difference| = 0`. Every difference below is attributable to the code, not to sampling variation between runs. That is a much stronger design than two independent runs would give, and it is worth preserving: **do not change `simstudy_seed()`**, or future runs lose comparability with these.
-
-| Block | base | spat | trait | prim3 | lowinfo | d-under | d-over | S=20 | occ | bin |
-|----|----|----|----|----|----|----|----|----|----|----|
-| `B0` | 0.948 | 0.943 | 0.942 | 0.954 | **0.862** | 0.958 | 0.950 | 0.951 | 0.953 | 0.962 |
-| `B` | 0.947 | **0.883** | 0.916 | 0.942 | **0.826** | 0.936 | 0.939 | 0.933 | 0.947 | 0.952 |
-| `G` | 0.948 | -- | 0.945 | *0.975* | **0.840** | 0.953 | 0.955 | 0.925 | *0.970* | 0.938 |
-| `beta_theta` | **0.763** | **0.762** | **0.771** | **0.718** | *0.983* | **0.750** | **0.752** | **0.727** | **0.709** | -- |
-| `theta0` | *0.983* | *0.983* | *0.978* | *0.985* | **0.602** | *0.980* | *0.981* | *0.982* | *0.985* | -- |
-| `p` | 0.902 | 0.911 | 0.900 | 0.925 | **0.109** | 0.913 | 0.919 | 0.908 | -- | -- |
-| `q` | 0.945 | 0.947 | 0.949 | 0.937 | 0.911 | 0.946 | 0.943 | 0.950 | -- | -- |
-| `resid_cor` | **0.763** | **0.758** | **0.758** | **0.768** | **0.764** | *0.980* | **0.755** | **0.752** | **0.761** | **0.752** |
-| `sigma_b` | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* |
-
-**Bold = undercovers. Italic = overcovers. `--` = not estimated in that cell.**
-
-### 12.1 What the fixes changed
-
-Averaged over all cells, pre-fix → post-fix:
-
-| Block         | Coverage          | Bias                | Verdict                |
-|---------------|-------------------|---------------------|------------------------|
-| `beta_theta`  | 0.719 → **0.766** | +0.112 → **+0.038** | improved, not fixed    |
-| `theta0`      | 0.901 → 0.944     | −0.020 → −0.004     | moved, see 12.3        |
-| `resid_cor`   | 0.775 → 0.777     | +0.006 → +0.002     | **unchanged**          |
-| `p`           | 0.821 → 0.827     | +0.087 → +0.086     | unchanged, as expected |
-| `B0`          | 0.947 → 0.943     | −0.135 → **−0.228** | **bias doubled**       |
-| `B`, `G`, `q` | \~0.92–0.94       | \~0                 | stable                 |
-
-1.  **`beta_theta` improved but is not fixed.** Every cell gained 0.03–0.05, and two-thirds of the bias is gone. Alex's correction of the collection-covariate prior mean from 1 to 0 was a real cause -- but not the only one, because 0.766 against nominal 0.95 is still far out. **This is now the clearest open target in group A.** Whatever remains is structural: it is flat across model type, primer count, species count and factor misspecification, exactly as the pre-fix version was.
-
-2.  **`resid_cor` is untouched, and the paired design makes that conclusive.** Only **104 of 49,978** coverage decisions flipped. Identical data, identical truth, coverage unmoved at 0.777. This is `reparamFactorModel()` (group A item 2), which is unfixed and currently disputed. The `d_underfit` exception persists exactly as before: *over*covering at 0.980, because under-fitting the ordination widens intervals enough to mask the bias.
-
-3.  **`p` is unchanged, and that is the correct outcome.** `low_information` sits at 0.109. The informative `Beta(5, 1)` is load-bearing for identifiability -- `p` and `q` enter `sample_pq_cpp()` symmetrically, so the prior is what selects the mode (TODO.md group A item 3). This cell measures the *cost of that constraint* when true `p` is 0.1–0.3. It is not a defect to be fixed by flattening the prior.
-
-### 12.2 New finding: `B0` bias roughly doubled
-
-Nine of ten cells moved more negative: base −0.113 → −0.208, `occupancy` −0.024 → −0.151, `primers_3` −0.031 → −0.151, `low_information` −0.931 → −1.056. Only `binary` moved the other way (−0.002 → +0.012).
-
-**Coverage does not reveal this** -- it holds at 0.943 because the intervals are wide enough to absorb the shift. It is visible only in the bias column, which is the argument for tracking both.
-
-Nothing in the four fixes should move species intercepts this way. The likeliest candidate is the 421-line `jsdmfun.R` rewrite that shipped in the same pull (`42198d9`). Species intercepts are a headline quantity for a JSDM, so this needs a cause before the paper uses `B0`. An R = 8 probe on 29 July hinted at it; R = 100 confirms it.
-
-### 12.3 New finding: `theta0` now overcovers
-
-The all-cell average of 0.944 is misleading. Per cell it is **0.978–0.985 in nine cells** (was 0.938–0.959) and **0.602 in `low_information`** (was 0.477). So it moved from mildly under to distinctly over, except where information is thin.
-
-Overcoverage is the safe direction, but the pattern suggests the widened `diag(2)` prior variance on the collection coefficients overshot. Worth a look alongside item 1 above, since both trace to the same edit.
-
-### 12.4 What holds
-
-`q`, `B0`, `B` and `G` are at or near nominal in every cell except `low_information`. The quantities most likely to be reported in an ecology paper remain trustworthy -- with the `B0` bias caveat in 12.2, which affects the point estimate rather than the interval.
-
-`low_information` is still compromised across the board (`theta0` 0.602, `p` 0.109, `B` 0.826, `G` 0.840, `B0` bias −1.06). Users with small or low-detection datasets remain the most exposed.
-
-### 12.5 Caveats that travel with this table
-
-`l_s` and `sigma_h` are absent because neither is recoverable (group A item 1), so **no cell says anything about spatial range**. `sigma_b` reads 1.000 everywhere because it is prior-dominated by construction (§5.3), not because it is well estimated. Differences below 2.2 points are noise.
-
-### 12.6 The superseded pre-fix table (28 July 2026)
-
-Kept because the *delta* is the evidence that the fixes worked, not the level. Run in two parts -- `base` on 27 July (100 fits, 22.9 min), the other 9 cells on 28 July (900 fits, 474 min wall, inflated by the laptop sleeping mid-run).
-
-| block | base | spat.isol | trait.isol | primers3 | low.info | d.under | d.over | sp20 | occ | binary |
-|----|----|----|----|----|----|----|----|----|----|----|
-| `B` | 0.943 | 0.876 | 0.913 | 0.931 | **0.854** | 0.937 | 0.947 | 0.935 | 0.943 | 0.948 |
-| `B0` | 0.945 | 0.953 | 0.948 | 0.955 | 0.892 | 0.954 | 0.955 | 0.956 | 0.956 | 0.942 |
-| `beta_theta` | **0.717** | **0.730** | **0.721** | **0.679** | **0.860** | **0.714** | **0.709** | **0.693** | **0.676** | -- |
-| `G` | 0.945 | -- | 0.953 | 0.963 | 0.880 | 0.943 | 0.958 | 0.925 | 0.963 | 0.958 |
-| `p` | **0.898** | **0.900** | **0.904** | 0.917 | **0.103** | 0.906 | 0.909 | 0.903 | -- | -- |
-| `q` | 0.948 | 0.942 | 0.944 | 0.935 | 0.904 | 0.946 | 0.945 | 0.947 | -- | -- |
-| `resid_cor` | **0.763** | **0.758** | **0.757** | **0.768** | **0.764** | *0.980* | **0.739** | **0.752** | **0.761** | **0.746** |
-| `sigma_b` | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* |
-| `theta0` | 0.941 | 0.947 | 0.941 | 0.954 | **0.477** | 0.959 | 0.938 | 0.949 | 0.959 | -- |
-
-------------------------------------------------------------------------
+6.  *OPEN.* **A publication-grade high-R run**, if the paper claims calibration. R = 100 detects a large deviation but cannot assert the absence of a small one (§9). This should be one planned run across the whole grid, not per-arm confirmations.
 
 ## 11. Build order
 
@@ -424,7 +335,7 @@ Kept because the *delta* is the evidence that the fixes worked, not the level. R
 
 ## 13. The M ladder: are B4-B6 defects, or Stage 1 under-identification?
 
-**Status: planned, not yet run.** Commissioned by Doug, 29 July 2026, as the next step on `TODO.md` group B items 4, 5 and 6, each of which is annotated CLAUDE TO RUN SIMULATION STUDY WITH M \> 10 AND SEE IF IT FIXES IT.
+**Status: planned, not yet run.** Commissioned by Doug, 29 July 2026, as the next step on the `beta_theta`, `theta0` and `B0` findings (now `TODO.md` group B items 4, 6 and 5 respectively), each of which is annotated CLAUDE TO RUN SIMULATION STUDY WITH M \> 10 AND SEE IF IT FIXES IT.
 
 ### 13.1 The hypothesis, and why one lever could explain three findings
 
@@ -591,7 +502,7 @@ R = 50, for the same reason as 13.2: adequate to detect a move, not to confirm a
 
 ## 14. `theta0` overcoverage: a better experiment than the one planned
 
-**Status: planned, not yet run.** Supersedes the previous plan for group B item 5, which was "re-run the M10 or M20 arm at R = 200". That plan answers the wrong question, for the reason below.
+**Status: planned, not yet run.** Supersedes the previous plan for the `theta0` finding, which was "re-run the M10 or M20 arm at R = 200". That plan answers the wrong question, for the reason below.
 
 ### 14.1 The question was framed wrong
 

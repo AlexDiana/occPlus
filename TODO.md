@@ -20,406 +20,201 @@ output: html_document
      remove the line-breaking step entirely: with no wrapping there is no
      algorithm left to mismatch.
 
-     Two related rules:
+     Three related rules:
      - NO EM-DASHES. Use a plain double hyphen. Em-dashes were the single
        largest driver of reflow churn under the old setting, because
        pandoc writes them 2 characters wider and every later wrap point
        shifted.
+     - NO PIPE TABLES in this file. Use bullet lists instead. RStudio
+       recomputes a table's separator row (|----|----|) from the cell
+       contents and the available width, and it switches between
+       padding to content width and redistributing across the line at a
+       width threshold. So any edit to any cell can rewrite the
+       separators, and 873f419 is an example. Lists have no
+       width-derived formatting and are stable. PLAN.md keeps its
+       tables, and accepts the churn, because the data there earns them.
      - Keep inline `code spans` short. Under the old 72-column wrap, a
        span landing on the boundary could be mangled: in 2242b34 that
        turned `* 2` into `- 2` in the logDetKuu note, silently asserting
-       something false. Less dangerous now, but still good practice. -->
+       something false. Less dangerous now, but still good practice.
+
+     What this file is FOR: a list of to-dos with enough context to act
+     on, addressed to Alex. It is not an investigation log. Evidence and
+     superseded reasoning go to AGENTS.md; completed work goes to the
+     Fixed bugs section below, which is the record. If an item is
+     fixed, write the Fixed bugs entry and DELETE the item; do not leave
+     a struck-through stub. -->
 ```
 
 # **v0.1.0-beta** **Public release**
 
-## A. Review Claude fixes (Alex)
+## A. Review Claude's changes (Alex)
 
-1.  **Review the RNG seeding fix, and answer two questions it raises.** **Written by Claude** on 29 July 2026: `src/rng.h` (new), `src/functions.cpp`, `src/jsdm.cpp`, `R/runOccJSDM.R`. Flagging it rather than leaving it to surface in a diff, since it changes files you own and you have not seen the design. Revert or rework it freely. It is tested (see below) but it has had no human review beyond Doug agreeing it should be fixed before the simulation study is re-run.
+Every code change Claude made, newest first. None has had human review beyond Doug asking for it. All are recoverable from git; revert or rework freely. Each says what to check. Full detail for each is in *Fixed bugs*, which is the record; this section is the queue.
 
-    **What it fixes.** Pointing `randinvg()` at the `thread_local` engine correctly closed the OpenMP data race, but neither engine it left behind read R's RNG state (`get_rng()` was seeded from the literal `12345 + omp_get_thread_num()`, `mvrnormArmaQuick_TS()` from `std::random_device{}()`), so `set.seed()` had no effect on the sampler. Two fits of the same data under one seed differed by 5.09 on `B0_output`. Not a bias -- both are valid streams -- but users could not reproduce a fit, and the literal seed was per *process*, so simulation-study replicates at the same index in different workers shared random numbers. Full detail, including three non-obvious traps for anyone reworking it, is in **Fixed bugs 28**; the third (`std::normal_distribution` caching the second Box-Muller deviate across `rng.seed()`) is the one most likely to bite.
+1.  **Deprecated dead code: 10 functions moved out of the package.** 30 July. `sample_z`, `sample_w`, `sample_cimk`, `loglik_sigma1` from `R/mcmcfun.R`; `sample_BCsL`, `sample_U`, `sample_Br`, `sample_BL_fixed` from `R/jsdmfun.R`; `plotReadIntensity`, `plotOccupancyStates` from `R/output.R`. All now in `deprecated/R/`, which `.Rbuildignore` excludes from the build.
 
-    **Question 1: is thread-count invariance worth having?** Reproducibility currently holds *for a given thread count*. Threads derive separate streams, so with OpenMP genuinely active, changing the thread count changes which stream produces which element. Making the fit invariant needs a different scheme -- a counter-based RNG keyed on the element index rather than the thread id. Doable, but a bigger change than the bug warranted, so it was left as your call.
+    **To check:** that you agree none is wanted. Each was verified unreachable (no callers in `R/`, `tests/` or `vignettes/`, absent from `NAMESPACE`, and not referenced as a string anywhere, so nothing could reach them via `do.call()`/`get()`/`match.fun()`), and each referenced undefined globals so could not have run as written. Nothing exported changed.
 
-    **Question 2: what does `R CMD config SHLIB_OPENMP_CXXFLAGS` return on your machine?** On Doug's machine it is *empty*, so every `#pragma omp` compiles to a no-op and the built `.so` contains no OpenMP runtime calls at all -- the package runs single-threaded there. If yours differs, your experience of both the thread-safety bug and of performance differs from his, and the answer decides whether the group D parallelism items are worth anything. See group
+2.  **C++: `&` to `&&` on booleans, and two unused constants removed.** 30 July, `src/functions.cpp`, `src/jsdm.cpp`. Eight `&` sites cleared a `-Wbitwise-instead-of-logical` warning. Safe because in C++ the relational operators bind tighter than `&`, so the parse was already the intended one and no operand has side effects.
 
-    ALEX TO REVIEW THE FIX
+    **To check, and this one went wider than asked:** `TRUNC` and `TRUNC_RECIP` were also deleted from both files. They were declared, used nowhere, and were the last package-attributable cause of the install WARNING. A comment records their values and origin. Say if you want them back behind `[[maybe_unused]]` instead.
 
-2.  **Review the `plotCollectionRates()` fix, and decide how far to take it.** **Written by Claude** (AI agent, in a session with Doug) on 29 July 2026, not by Doug. Touches `R/output.R` only. Reverted or reworked freely; it has had no human review beyond Doug reporting the error.
+3.  **Imports for three symbols live code needs.** 30 July, `R/occJSDM-package.R`. Added `stats::setNames`, `stats::rnbinom`, `tidyr::pivot_longer`.
 
-    **What was broken.** The function errored on *every* input with `object 'Min' not found`. `plotSpeciesRates()` had been extracted as a shared helper and never wired up to its only caller: it read columns `Min`/`Max` while the caller passed `quantile()`'s `2.5%`/`97.5%`, filtered on a `Species` column the caller never created, and referenced `speciesNames` as a free variable that exists in neither its arguments nor the namespace. Full detail in **Fixed bugs 31**.
+    **To check:** nothing, unless you disagree with the placement. Worth knowing it was not cosmetic: `pivot_longer` did not resolve from an installed namespace at all, and it is reached in the categorical-covariate branch of both exported GAM functions, so they would have failed with "could not find function" for any user with a categorical covariate.
 
-    **The part that matters most: the vignette calls this.** `vignettes/occJSDM.Rmd:515` calls `plotCollectionRates(fitmodel, idx_species = 1:10)` in a plain evaluated chunk -- no `eval = FALSE`. So the vignette cannot have been rebuilt since this broke, and `R CMD check` would have failed on it. That makes it a CRAN blocker, not a cosmetic plotting bug. **Worth rebuilding the vignette to confirm it now passes**, and worth asking what else has gone stale in it for the same reason.
+4.  **Guard on the two GAM effect functions against old fitted objects.** 30 July, `R/output.R`. `returnCovariateEffect()` and `plotCovariateEffect()` now stop with a clear message if `fitModel$infos$X0_psi` is missing, instead of failing inside `seq()` with `'from' must be a finite number`.
 
-    **Three decisions.**
+    **To check:** the message wording. `X0_psi` arrived with your GAM commit, so any fit saved before it hits this.
 
-    (a) **Is the helper's new contract the one you want?** `plotSpeciesRates(data_plot, idx_species, speciesNames)` now takes one row per species with `Min`/`Max` columns plus the *unsubset* names, and does the subsetting itself, so ordering is computed on exactly the rows plotted. If the helper was meant to serve the other three rate plots, this is the contract they would adopt -- so it should be a shape you are happy with.
+5.  **`predictNewSites()` could not be called without both `X_psi` and `X_s`.** 30 July, `R/output.R` and **`src/jsdm.cpp`**. Both now default to `NULL`, and `useEnvCov`/`useSpatial` adopt the tri-state `useBiotic` already used: `NULL` means use the term if the fit estimated it, `TRUE` means use it and error if not, `FALSE` means skip.
 
-    (b) **Do you want the other three fixed the same way?** `plotOccupancyRates()`, `plotFPTPStage2Rates()` and `plotStage1FPRates()` still order on the full species set while indexing a filtered one, which silently mismatches labels to bars (group B item 1). The test added for `plotCollectionRates()` asserts label-to-value pairing against an independent recomputation and is the template.
+    **To check, two API decisions that are yours:** (a) is the tri-state the shape you want, given it changes two documented defaults from `TRUE` to `NULL`? It is strictly more permissive, so no call that worked before changes. (b) should "no covariates and no spatial" error, as it now does, or should the function gain an `n_new` argument? Nothing in the arguments says how many sites to predict for.
 
-    (c) **Delete the commented-out block?** The original inline implementation is still sitting in `plotCollectionRates()`, below the return. It predates the extraction and is now doubly dead.
+    Fixing the guards also exposed three defects in `computeNewOutputs()` and the reshaping around it, all of which were unreachable until the guards worked, and all fixed here. Two are in your C++. Detail in *Fixed bugs* 34.
 
-        ALEX TO REVIEW THE FIX
+6.  **`listPriors$b_betatheta_slope_var`, a new hook.** 29 July, `R/runOccJSDM.R`. `B_betatheta`'s slope variance was hard-coded at `diag(2)` with no override, unlike `p`/`q`/`theta0`. Default unchanged, so behaviour is identical unless set.
 
-3.  **Investigate why `beta_theta`'s posterior gets overconfident as M rises, and review the new `listPriors` hook added to test it.** Two experiments this week, both by Claude, both negative -- the cause is not found, and it needs someone who knows the sampler.
+    **To check:** whether you want the hook at all. It was added to test a hypothesis (see B item 4), and it is a one-line revert.
 
-    **The finding.** `beta_theta` coverage falls *monotonically* with M (0.747 at M2 down to 0.579 at M20) while bias stays small and flat throughout -- a shrinking interval around a bias that is not itself shrinking. That is the signature of overconfidence, not of insufficient data: more information makes it worse, not better. Full numbers in group B item 4 and `PLAN.md` 13.7.
+7.  **`plotCollectionRates()` errored on every input.** 29 July, `R/output.R`. `plotSpeciesRates()` had been extracted as a shared helper and never wired up: it read `Min`/`Max` while the caller passed `quantile()`'s `2.5%`/`97.5%`, filtered on a `Species` column the caller never made, and referenced `speciesNames` as a free variable.
 
-    **Two candidate causes, both ruled out.** (a) `B_betatheta`'s slope prior variance, hard-coded to `diag(2)` -- tightened it 4x (SD 1.41 to 0.71) and coverage moved by 0.001-0.003, noise against the 3.1% SE. (b) Pseudo-replication in `X_theta` -- checked whether the M samples at a site share a covariate value, which would make added M look like independent information without being any. It does not: `X_theta` is drawn independently per sample, not per site (`R/simulateData.R:126`). Detail in `PLAN.md` 13.8-13.9.
+    **To check, three decisions:** (a) is the helper's new contract the shape you want, since it is what the other rate plots would adopt? (b) the same ordering defect in the other three rate plots is now fixed too. (c) the pre-extraction implementation is still sitting commented out below the return; delete it?
 
-    **So the cause is in the likelihood or the sampler's variance computation for `beta_theta`.** Worth a look: how the latent `w`/`z` state is aggregated across a site's M samples in `sample_beta_cpp_TS()` / `sample_betatheta_cpp_parallel()` (`src/functions.cpp`), or a numerical issue in the Polya-Gamma update they call. This is a sampler-code question -- the two obvious prior and data-generation explanations are both closed off.
+8.  **`set.seed()` did not control any C++ sampler.** 29 July, `src/rng.h` (new), `src/functions.cpp`, `src/jsdm.cpp`, `R/runOccJSDM.R`. Your fix for the OpenMP race was correct, but the replacement engines never read R's RNG state, so two fits under one seed differed by 5.09 on `B0_output`.
 
-    **What to review alongside it.** Testing (a) needed a real `listPriors` hook, since `B_betatheta`'s variance had none, unlike `p`/`q`/`theta0`. Added `listPriors$b_betatheta_slope_var` to `R/runOccJSDM.R`, default unchanged at 2, so nothing changes unless a caller sets it. Tested in `test-regression-bugs.R` and it reaches the sampler correctly, but has had no review from you.
+    **To check:** the design in `src/rng.h`, which documents three traps worth knowing before touching it. Also two questions: (a) is thread-count invariance worth having? Reproducibility currently holds for a given thread count. (b) what does `R CMD config SHLIB_OPENMP_CXXFLAGS` return on your machine? It is empty on Doug's, so every `#pragma omp` compiles to a no-op there and the package runs single-threaded.
 
-    **Qualified 30 July (`PLAN.md` 14.7).** Candidate (a) was ruled out on evidence from M10/M20 only, which are the arms where data dominates the prior. At M = 2 the prior is *not* inert: tightening it moves coverage 0.747 to 0.653. It remains ruled out as a **fix**, since that is the wrong direction, but the same knob turns out to control `B0`'s bias, which is now a decision in its own right. See item 5 below before changing anything here.
+9.  **`plotFPTPStage2Rates()` ignored its own `primerName` argument.** 27 July, `R/output.R`. It pooled quantiles across all primers regardless of what was passed, so changing `primerName` produced an identical plot. Now subsets to the requested primer and errors on an unknown one.
 
-    ALEX TO INVESTIGATE THE SAMPLER
-
-4.  **Review the `predictNewSites()` fix, and confirm two API decisions in it.** **Written by Claude** on 30 July 2026, not by Doug. Touches `R/output.R` and **`src/jsdm.cpp`**. Revert or rework freely; it has had no human review beyond Doug asking for the fix. Full account in Fixed bugs 34.
-
-    **What was broken.** `X_psi` and `X_s` had no defaults, so the `is.null()` guards you had written could never fire. Underneath that, the guards used `&` rather than `&&`, which evaluates both sides, so the missing promises were forced even when the caller had asked for neither term. `predictNewSites(fit, useEnvCov = FALSE, useSpatial = FALSE)` failed too. There was no way to call the function without supplying both matrices.
-
-    Fixing the guards made three code paths reachable for the first time, and all three were broken. Two of those fixes are in your C++, which is the main reason this needs your eyes:
-
-    (a) `computeNewOutputs()` sliced `Ks_all` and `Bs_output` before the `useSpatial` check, so `useSpatial = FALSE` aborted with `Cube::slice(): index out of bounds`. Moved inside the guard.
-    (b) It read the new-site count as `X.n_rows` unconditionally, so `useEnvCov = FALSE` returned a silently empty result. Now taken from whichever term is active.
-    (c) R-side: a fit with no spatial field returns `Bs_output` with a zero-length first dimension, which collapses under `apply()` and broke the `aperm()`. Only reshaped when the spatial term is in play.
-
-    **Decision 1: is the tri-state the API you want?** `useEnvCov` and `useSpatial` now default to `NULL` and follow the pattern `useBiotic` already used: `NULL` uses the term if the fit estimated it, `TRUE` uses it and errors if it did not, `FALSE` skips it. This matches what their roxygen always promised, which was unreachable because `useSpatial` hard-stopped instead of ignoring. It is strictly more permissive, so no call that worked before changes behaviour. But it does change two documented defaults from `TRUE` to `NULL`.
-
-    **Decision 2: should "no covariates and no spatial" be an error, or should the function take `n_new`?** With both terms off, nothing in the arguments says how many new sites to predict for; the answer would be the intercept plus the biotic term, identical at every site. It currently errors. The alternative is an explicit `n_new` argument, which would make that a legitimate call. I chose the error because it is the conservative reading, but it is a design question, not a bug.
-
-    ALEX TO REVIEW THE FIX
-
-5.  **Decide `b_betatheta`'s slope prior variance. It trades `B0`'s bias against `beta_theta`'s coverage, and both are open findings.** Measured 30 July 2026 (`PLAN.md` 14.7). This is a modelling decision, not a bug: nothing here is broken in a way that has a right answer without knowing what the prior is meant to encode. Nothing has been changed; the default is still `diag(2)` as you set it.
-
-    **What the knob does.** All three arms below are M = 2, R = 50, paired on identical truths, varying only `b_betatheta_slope_var`:
-
-    | variance                 | `B0` bias  | `beta_theta` coverage | `theta0` coverage |
-    |--------------------------|------------|-----------------------|-------------------|
-    | 2 (your current default) | -0.160     | 0.747                 | 0.986             |
-    | 0.5                      | -0.106     | 0.707                 | 0.982             |
-    | 0.1                      | **-0.044** | **0.653**             | 0.980             |
-
-    Paired, `B0`'s bias improvement is 2.1 SE at 0.5 and 4.0 SE at 0.1. `B0` coverage is 0.946-0.950 throughout, unchanged.
-
-    **Why this matters for `B0` (group B item 6).** That item was filed as a possible regression with no known cause. It now has one: `42198d9` widened `B_betatheta` from `diag(1)` to `diag(2)` while correcting the mean from 1 to 0, and that is exactly when `B0`'s bias doubled, from -0.135 to -0.228. Turning the variance back down moves the bias back, monotonically. The `jsdmfun.R` rewrite in the same pull is no longer the leading suspect.
-
-    **Why it is not simply "turn it back down".** The same change degrades `beta_theta`'s coverage, from 0.747 to 0.653 at variance 0.1. Group B items 4 and 6 pull in opposite directions on one parameter. Tightening buys a better point estimate for species intercepts at the cost of more overconfident collection-covariate intervals.
-
-    **What is not known.** Whether some intermediate value is better than both endpoints, since only three points were measured; whether the trade looks the same at M \> 2, since this was run only at the production setting; and whether the correct move is to keep `diag(2)` and fix `beta_theta`'s overconfidence at its source instead, which is item 3 above. If the sampler-level cause of item 3 turns out to be the real problem, this trade may dissolve.
-
-    **The hook exists**: `listPriors$b_betatheta_slope_var`, added for this test, defaults to 2 so current behaviour is unchanged. Reverting it is a one-line change if you would rather it stayed hard-coded.
-
-    ALEX TO DECIDE THE VALUE (or to decide that item 3 supersedes this)
-
-6.  **Review two C++ changes made to clear the install WARNING, one of which was wider than asked.** **Written by Claude** on 30 July 2026. Touches `src/functions.cpp` and `src/jsdm.cpp`. Revert freely.
-
-    **Change 1, requested: `&` to `&&` on boolean operands, 8 sites.** `src/functions.cpp:670,672,674,676` (in `sample_pq_cpp`'s counting loop) and `src/jsdm.cpp:203,219,235,252` (the four `isPointInBand*` helpers). `clang` reported these as `-Wbitwise-instead-of-logical`.
-
-    **This was safe, and here is the argument.** In C++ `==` and the relational operators bind tighter than `&`, so `a == b & c == d` already parsed as `(a == b) & (c == d)`, which is what was intended: the results were never wrong. Every operand is a plain comparison or an Armadillo element read, with no side effects, so short-circuiting cannot skip anything that mattered. The change is therefore semantics-preserving and only stops evaluating operands whose answer is already determined. 167 tests pass unchanged.
-
-    **Worth contrasting with the R-side version of the same habit** (Fixed bugs 34): there `&` *was* a real bug, because the unevaluated operand was a missing-argument promise, so forcing it turned an intended error message into `argument "X_psi" is missing`. Same idiom, different consequence, because R has lazy evaluation and C++ does not.
-
-    **Change 2, NOT requested, please check you are happy with it.** Removed `TRUNC` and `TRUNC_RECIP` from the top of both files (4 declarations). They were declared and referenced nowhere, and drew `-Wunused-const-variable`, which was the *only* remaining package-attributable cause of the install WARNING once change 1 landed. I took them out rather than leave the CRAN blocker half-fixed, and left a comment in each file recording the values (0.64 and 1/0.64, the truncation point from Windle 2013) and saying to restore them if the Polya-Gamma sampler is ever changed to use the truncated form. **If you would rather keep them, say so and I will restore them with a `// [[maybe_unused]]` or equivalent instead.**
-
-    **What this achieved, measured:** the package now contributes **zero** compiler warnings. `R CMD check` still reports an install WARNING, but it is no longer ours: the sole remaining "significant warning" is from **R's own header**, `R_ext/Boolean.h:62`, where a `#pragma` names a warning group this clang version does not recognise. That is an R-build and toolchain artifact, is environment-specific, and is not fixable from this package. Do not chase it.
-
-    ALEX TO REVIEW, ESPECIALLY CHANGE 2
+**Also from Claude, not code:** `TODO.Rmd` was renamed `TODO.md` and the RStudio wrap setting changed, because a 72-column wrap was silently corrupting inline code spans. Detail in *Fixed bugs*.
 
 ## **B. Inference-affecting bugs (wrong numbers, silently) (Alex)**
 
-1.  **`sample_ls()` evaluates the wrong density, so the GP length-scale is never recovered and rails at the top of its grid.** Found 27 July 2026 while writing the test suite.
+1.  **`sample_ls()` scores the wrong density, so the GP length-scale is never recovered.** `R/jsdmfun.R:1054`. Under the SoR approximation the fitted field `SE = Ks(l_s) %*% Bs` is a deterministic function of `Bs` and `l_s`, but `sample_ls()` treats `SE` as a GP draw and scores it under `N(0, sigma_s^2 K(l_s))` with `SE` held fixed. That is not the conditional posterior, and it is self-defeating: `SE` was already smoothed at the current `l_s`, so it scores better under ever-smoother covariances.
 
-    **This entry previously blamed `sigma_s` being hard-coded to 1 and proposed sampling it. That diagnosis was wrong and the proposed fix is disproven** -- see "What was ruled out" below. The real defect is deeper and is a modelling change, not a parameter addition.
+    **Measured:** `idx_ls` rails at the top of `l_s_grid` for every true `l_s` tried (0.074, 0.171, 0.300), with real spatial signal present. The profiled log-likelihood rises monotonically from -376 at `l_s = 0.01` to -154 at `l_s = 0.30`.
 
-    **The defect.** Under the SoR (subset-of-regressors) approximation the fitted spatial field is `SE = Ks(l_s) %*% Bs` (`computePsiCoef()`), i.e. a *deterministic function of `Bs` and `l_s`*. But `sample_ls()` (`R/jsdmfun.R:1054`) treats `SE` as a **GP draw** and scores its density under `N(0, sigma_s^2 K(l_s))` while holding `SE` fixed. That is not the conditional posterior of `l_s`, and it is self-defeating: `SE` was already smoothed at the current `l_s`, so it scores progressively better under ever-smoother covariances. The result is a likelihood that is **monotone increasing in `l_s`**, with nothing to penalise the upper bound.
+    **Impact:** biases the spatial term of every `useSpatField = TRUE` fit and makes `l_s` uninterpretable. Widening the grid would only move the rail.
 
-    **Measured.** `idx_ls` sits at 10 -- the maximum of `l_s_grid = seq(0.01, 0.3, length.out = 10)` -- with range 10-10 across the whole post-burn-in run, for **every** true `l_s` tried (0.074, 0.171, 0.300) and with genuine spatial signal present (`ds = 2`). Profiling the grid confirms the cause: the log-likelihood rises monotonically from -376 at `l_s = 0.01` to -154 at `l_s = 0.30`, so the true value is never competitive.
+    **Needs a derivation, not a code tweak.** Either recompute `eta` with `Ks(l_s*)` and score the observation likelihood under the proposal, or integrate out `Bs` and use the SoR marginal likelihood. **Do not attempt blind:** a subtly wrong conditional would be worse than the present state, which at least fails visibly. A cheap interim option is to revert to a documented, user-settable fixed `l_s`.
 
-    **What was ruled out** (recorded so it is not re-investigated):
-
-    (a) *Amplitude is not missing from the model.* `sigma_bs` **is** sampled (`R/jsdmfun.R:1211`) and **is** the SoR amplitude, since `Bs` carries prior variance `sigma_bs^2` and the kernel is built at unit amplitude (`K2(..., 1, l_s)`). A separate `sigma_s` would be redundant and would create an identifiability problem.
-    (b) *Passing the correct amplitude does not help.* Profiling the grid at the fitted field's actual amplitude (`sd(SE) = 0.85`) instead of 1 leaves the likelihood monotone -- it still rises to the grid maximum. So the one-line fix this entry used to propose would not work.
-    (c) *`logDetKuu` is correct.* Note the factor is `* 2`, not `- 2`: `sum(log(rcppeigen_get_diag(K_xx))) * 2` matches the true log-determinant at all ten grid points, as it should for a Cholesky factor. `rcppeigen_get_diag()` returns the **Cholesky** diagonal despite the name.
-    (d) *Not an artefact of weak data.* Identical behaviour with `ds = 2` (real spatial signal) as with `ds = 0`.
-
-    **Impact.** Biases the spatial term of every fit using `useSpatField = TRUE`, and makes `l_s` uninterpretable. Note widening `l_s_grid` alone would simply move the rail.
-
-    **Fix (needs Alex -- a derivation, not a code tweak).** Evaluate `l_s` where it actually acts, on the data: either recompute `eta` with `Ks(l_s*)` and score the observation likelihood under the proposal, or integrate out `Bs` and use the standard SoR marginal likelihood. The first is the smaller change but costs an `eta` recomputation per proposal; the second is cleaner and harder to derive. Roughly half a day if the intended conditional is already clear, longer if it needs settling. **Do not attempt blind** -- a subtly wrong conditional would be worse than the present state, which at least fails visibly.
-
-    **Cheap interim alternative (\~1 h).** Since `sample_ls()` does not work, and enabling it also caused the non-spatial crash (Fixed bugs 22 / group B item 1), reverting to a *documented, user-settable, fixed* `l_s` is arguably more honest than the current state: it removes a moving part that is not moving correctly and exposes the assumption instead of burying it in a call-site literal.
-
-    **Not visible before `b7b6aa2`.** While `sample_ls()` sat inside `if(F){...}` the length-scale was openly fixed, which was the original audit's complaint. Enabling it exposed that the update itself was never correct.
-
-    **Test coverage:** `tests/testthat/test-regression-bugs.R` asserts that `sample_ls()` is *reached* rather than that `idx_ls` varies, precisely so the test does not encode this defect. Revisit that test once this is fixed.
+    Four candidate causes were investigated and ruled out (missing amplitude, wrong amplitude passed, `logDetKuu`, weak data). Detail in AGENTS.
 
     ALEX TO CHECK
 
-2.  **`reparamFactorModel()` breaks the identity that residual covariance = `t(L) %*% L`, so reported species correlations are inflated.** Found 28 July 2026 by the coverage study; confirmed numerically. **Disputed -- see Alex's note at the end of this item.**
+2.  **`reparamFactorModel()` breaks residual covariance = `t(L) %*% L`, inflating reported species correlations.** `R/jsdmfun.R:48`. The rotation preserves `U %*% L` (verified to 4e-16) so the linear predictor is untouched, but it moves scale out of `U` into `L`, and `returnResidualCorrelationMatrix()` computes `cov2cor(t(L) %*% L)` from the reparameterised `L`. Measured `Var(U)` afterwards is `diag(0.23, 2.01)`, not the identity.
 
-    `reparamFactorModel()` (`R/jsdmfun.R:48`) rewrites the stored `U` and `L` each iteration as `L_new = diag(1/diag(R)) %*% R` and `U_new = U %*% Q %*% diag(diag(R))`, where `L = QR`. That **preserves `U %*% L`** -- verified to 4e-16 -- so the linear predictor is untouched and the rotation is legitimate for identifiability.
+    **Measured:** correlations move by up to 0.612, consistently toward the extremes. Across the grid `resid_cor` covers at 0.74-0.77 in nine of ten scenarios.
 
-    But `returnResidualCorrelationMatrix()` computes the correlation as `cov2cor(t(L) %*% L)` from the *stored, reparameterised* `L`. That identity holds only while `U` is standardised, and the reparameterisation moves scale out of `U` into `L`: measured `Var(U)` afterwards is `diag(0.23, 2.01)`, not the identity.
+    **Impact:** `returnResidualCorrelationMatrix()` and `plotResidualCorrelationMatrix()` overstate co-occurrence. This is the headline JSDM output.
 
-    **Measured**, `d = 2`, `S = 6`. These are `cov2cor()` output -- already correlations, not covariances:
+    **Fix, two options.** (a) Rotate by `Q` alone, dropping the `diag(diag(R))` scaling, so both the identifiability constraint and the covariance identity hold. (b) Keep the scaling and compute the correlation as `t(L) %*% Var(U) %*% L`. (a) is simpler and preserves the output contract.
 
-    | pair | original | after reparam |
-    |------|----------|---------------|
-    | 1    | +0.713   | **+0.926**    |
-    | 2    | -0.811   | **-0.958**    |
-    | 3    | -0.168   | **-0.780**    |
-    | 4    | +0.443   | **+0.875**    |
-    | 5    | +0.585   | **+0.285**    |
-
-    Maximum change **0.612**, consistently toward the extremes. Inflated point estimates with correctly-sized intervals is exactly what produces undercoverage, and across the full grid `resid_cor` covers at 0.74-0.77 in nine of ten scenarios (`PLAN.md` §12). The exception is diagnostic: `d_underfit` *over*covers at 0.980, so under-fitting the ordination widens the intervals enough to mask the bias -- a model with too few factors looks better calibrated than it is.
-
-    **Impact.** `returnResidualCorrelationMatrix()` and `plotResidualCorrelationMatrix()` overstate species co-occurrence. This is the headline JSDM output and the basis of the ordination interpretation.
-
-    **Fix, two options.** (a) Make the reparameterisation purely orthogonal -- rotate by `Q` alone, dropping the `diag(diag(R))` scaling. Then `t(L_new) %*% L_new = t(L) %*% L` and `Var(U_new) = I`, so both the identifiability constraint and the covariance identity hold. (b) Keep the scaling and compute the correlation as `t(L) %*% Var(U) %*% L`. (a) is simpler and preserves the existing output contract.
-
-    ------------------------------------------------------------------------
-
-    **Alex's note:** *"THIS IS NOT AN ISSUE FOR LOGISTIC MODELS (as the covariance matrix is not recoverable anyway, only the correlation one)."*
-
-    **Response -- the premise is right but does not resolve it.** In a logistic latent-variable model the scale is indeed unidentified and only the correlation is meaningful. But the table above is already correlations, and they still move by 0.612. `cov2cor()` does not absorb the change because `diag(1/diag(R))` rescales **per factor** while `cov2cor()` normalises **per species** -- a per-factor rescaling is not a global scale change, so it survives the normalisation.
-
-    **If it is nonetheless a non-issue, then the simulation study is measuring the wrong thing and that needs identifying**: it compares `cov2cor(crossprod(L_true))` from the simulator's own `L` against the same function of the stored `L`. Either that comparison is invalid, or the correlations really are inflated. Worth settling before the `resid_cor` row of `PLAN.md` §12 is quoted anywhere.
-
-    **Confirmed by the 29 July re-run, in a paired design.** `draw_truth()` seeds on (scenario, replicate), so the simulated data and true values are *bit-identical* between the pre- and post-fix runs -- verified, `max|truth difference| = 0`. Across that pair only **104 of 49,978** `resid_cor` coverage decisions flipped, and coverage was unmoved at 0.777 (0.752-0.768 in nine of ten cells). Same data, same truth, same answer: the undercoverage is not sampling noise and does not depend on the RNG or on any of the four fixes. `d_underfit` still *over*covers at 0.980, which is diagnostic -- under-fitting the ordination widens the intervals enough to hide the bias, so the defect's visible severity depends on the fitted factor dimension. See `PLAN.md` 12.1.
+    **Your note was that this is a non-issue for logistic models since only the correlation is recoverable.** The premise is right but the measured numbers above are already correlations: `cov2cor()` does not absorb the change, because `diag(1/diag(R))` rescales per *factor* while `cov2cor()` normalises per *species*. If it is nonetheless a non-issue, then the simulation study is measuring the wrong thing and that needs identifying before the `resid_cor` results are quoted. Full exchange in AGENTS.
 
     ALEX TO MAKE A DECISION
 
-3.  **Choose the informative priors for `p`, `q` and `theta0`.** Alex's note in this file: *"NEED TO CHOOSE THE INFORMATIVE PRIORS"*. **A design task, not a bug** -- an earlier version of this entry called the prior a defect, which was wrong.
+3.  **Choose the informative priors for `p`, `q` and `theta0`.** Your note: "NEED TO CHOOSE THE INFORMATIVE PRIORS". **This is a modelling decision, not a bug.** `p` and `q` enter `sample_pq_cpp()` symmetrically and no `p > q` constraint exists, so the likelihood is invariant under swapping them: the informative prior is what selects the correct mode. Flattening it leaves the model unidentified.
 
-    **An informative prior is required here, not optional.** `p` and `q` enter the sampler perfectly symmetrically --
-
-    ```         
-    p(l,s) = rbeta(a_p + [w=1 & detected], b_p + [w=1 & not detected])
-    q(l,s) = rbeta(a_q + [w=0 & detected], b_q + [w=0 & not detected])
-    ```
-
-    -- and **no `p > q` constraint is enforced anywhere in the code** (checked). The augmented likelihood is therefore invariant under swapping *(collected, `p`)* with *(not collected, `q`)*: the label-switching multimodality of false-positive occupancy models. The only thing selecting the correct mode is the prior, `Beta(5, 1)` pushing `p` high against `Beta(1, 20)` pushing `q` low; `theta0` gets the same treatment at Stage 1. Flatten them and the model is unidentified.
-
-    **What the study measured, correctly interpreted.** In `low_information` (true `p` in 0.1-0.3 against a prior mean of 0.833) `p` covers at **0.103** with bias **+0.49**, against 0.90-0.92 elsewhere. That is not a defect firing -- it is **the cost of the identifiability constraint, quantified**, in the regime where constraint and data disagree most.
-
-    **The decision.** How informative should the default be?
-
-    - Too weak: the chain can flip to the mirror mode, which presents as catastrophic nonsense rather than a warning.
-    - Too strong: low-detection studies -- the eDNA norm, and what `data/sampledata.rda` was deliberately regenerated to represent -- are biased upward by up to 0.5.
-
-    Worth informing with the Ji et al. (2025) posteriors, which are real detection rates from the system the model was built for.
-
-    **Already settled, no decision needed** (Alex, `42198d9`): all four hyperparameters now read from `listPriors`, so a user can override them, and the documented defaults match the code.
-
-    **Whatever is chosen, document the tradeoff** under `@param listPriors`. Someone running a low-detection study needs to know to set `a_p`/`b_p`, and nothing currently tells them.
+    The cost is visible: where true `p` is 0.1-0.3, coverage of `p` falls to 0.11 against 0.90 elsewhere. That is the price of the identifiability constraint in the regime eDNA work occupies, not a defect. The open question is how strong the default should be, and what to tell users with low detection rates.
 
     ALEX RESPONSE: WE'LL ACCEPT THIS PRIOR AND THE BIAS
 
-4.  **`beta_theta` still undercovers at 0.766 after the prior-mean fix, so a second cause remains.** Measured by the 29 July R = 100 re-run (`PLAN.md` 12.1).
+4.  **`beta_theta` intervals are overconfident, and it gets worse with more data.** Coverage 0.77 at the production `M = 2`, falling monotonically to 0.58 at `M = 20`, while bias stays small and flat. Shrinking intervals around a bias that is not shrinking is the signature of a real defect being exposed by more information, not fixed by it.
 
-    Alex's correction of the collection-covariate prior mean from 1 to 0 (Fixed bugs 25) was a real cause and did real work: every cell gained 0.03-0.05 coverage and two-thirds of the bias went (+0.112 -\> +0.038). But 0.766 against a nominal 0.95 is still far outside the 2.2-point SE, and the residue has the same signature as before -- **flat across model type, primer count, species count and factor misspecification** (0.709-0.771 in nine cells), which says structural rather than conditional.
+    **Three candidate causes ruled out**, each by measurement: Stage 1 under-identification (more data makes it worse, not better); the slope prior's width (tightening it 20-fold at `M = 2` moves coverage the wrong way); and pseudo-replication in `X_theta` (it is drawn per sample, not per site).
 
-    `low_information` is the one cell that now *over*covers, at 0.983, having been 0.860 pre-fix. A prior that no longer pulls, combined with the widened `diag(2)` variance, appears to overshoot when the data are thin -- see item 5.
+    **So the cause is in the likelihood or the sampler's variance computation for `beta_theta`.** Candidates: how the latent `w`/`z` state is aggregated across a site's `M` samples, or the Polya-Gamma update in `sample_beta_cpp_TS`/`sample_betatheta_cpp_parallel`. This needs someone who knows that code; it is not another prior experiment. Evidence in `PLAN.md` 13 and 14.
 
-    **This is the clearest open target in group A**: it is the largest remaining deviation that is definitely a defect (unlike `p`, which is the identifiability constraint working as intended).
+    ALEX TO INVESTIGATE THE SAMPLER
 
-    **M-ladder result, 29 July 2026 (`PLAN.md` 13.7): the opposite of the hypothesis, and this rules out under-identification.** Doug's directive was to re-run at M \> 10 and see if it fixes this. Coverage instead falls *monotonically* with M -- 0.747 at M2, 0.655 at M5, 0.603 at M10, **0.579 at M20** -- while bias stays small and flat throughout (+0.02 to +0.05). The matched control (`K30`: same row count as `M20`, spent on PCR replicates instead) covers at 0.706, beating every M arm above M2.
+5.  **Decide `b_betatheta`'s slope prior variance. It trades `B0` bias against `beta_theta` coverage.** Measured at `M = 2`, paired on identical truths, varying only that variance:
 
-    Shrinking intervals around a bias that is not itself shrinking is the signature of a real defect being *exposed* by more information, not resolved by it. More field samples make this worse, so the next step is not more data but finding what makes the interval overconfident.
+    - variance 2, your current default: `B0` bias -0.160, `beta_theta` coverage 0.747
+    - variance 0.5: `B0` bias -0.106, `beta_theta` coverage 0.707
+    - variance 0.1: `B0` bias -0.044, `beta_theta` coverage 0.653
 
-    **Tighter-prior result, 30 July 2026: the prior is not the cause, but the first test was run in the wrong place.** Tightening `B_betatheta`'s slope variance at M10/M20 moved coverage by 0.001-0.003 (`PLAN.md` 13.9). **At M = 2 it moves it a lot: 0.747 to 0.653** (`PLAN.md` 14.7). The conclusion survives, since tightening makes coverage *worse* and so is not a fix, but the prior is not inert as 13.9 implied: it was inert only in the arms tested, which were the ones where data dominates it. Bias falls while coverage falls faster, so the intervals shrink more than the bias does. A second candidate, pseudo-replication in `X_theta`, is also ruled out. **Full detail and the review item are above, under "Review Claude fixes" item 3**: this needs sampler-level investigation.
+    **This identified the cause of item 6 below.** `42198d9` widened `B_betatheta` from `diag(1)` to `diag(2)`, which is exactly when `B0`'s bias doubled. Turning it back down moves the bias back, monotonically.
 
-    ALEX TO REVIEW A3 ABOVE (THIS IS REDUNDANT WITH A3).
+    **But it is a trade, not a fix:** tightening helps `B0` and hurts `beta_theta`. Items 4 and 6 pull opposite ways on one knob. Not known: whether an intermediate value beats both endpoints, whether the trade holds at `M > 2`, and whether fixing item 4 at its source would dissolve it entirely.
 
-5.  **`theta0` now overcovers at 0.978-0.985, having been near nominal.** Measured by the same re-run (`PLAN.md` 12.3).
+    ALEX TO DECIDE THE VALUE (or that item 4 supersedes this)
 
-    Pre-fix it sat at 0.938-0.959, i.e. fine. Post-fix it is 0.978-0.985 in nine cells. The all-cell average of 0.944 hides this, because `low_information` pulls it down (0.602, up from 0.477 but still the worst cell in the table).
+6.  **`B0`'s bias doubled, and coverage does not show it.** Between the pre- and post-fix runs on identical data, nine of ten scenarios moved more negative: overall -0.135 to -0.228. Coverage held at 0.943 throughout, because the intervals are wide enough to absorb the shift, so this is invisible in the headline table and shows only in the bias column.
 
-    Overcoverage is the safe direction and this is not urgent, but the pattern points at the same edit as item 4 -- the widened `diag(2)` prior variance on the collection coefficients looks to have overshot. Worth examining the two together, since one change plausibly produced both.
-
-    **M-ladder result, 29 July 2026 (`PLAN.md` 13.7).** Overcoverage falls toward nominal as M rises (0.986 at M2, 0.944 at M10), while the matched control (`K30`: same row count, spent on PCR replicates instead) makes it worse at 0.996.
-
-    **That was read as Stage 1 under-identification. The reading has a hole in it, found 30 July.** Pre-fix, `theta0` sat at 0.938-0.959 at the *same* M = 2 where it now sits at 0.978-0.985. If M = 2 were simply too little information for `theta0`, it would have overcovered before Alex's fixes too. It did not. So the question is not whether `theta0` is fine at high M, which four arms already say it is, but **what changed at M = 2** -- the setting users actually run.
-
-    **Likely route: coupling, not `theta0`'s own prior.** `a_theta0`/`b_theta0` are untouched, still `Beta(1, 20)`, last changed 23 July before the pre-fix run. But `b_betatheta`'s variance was widened to `diag(2)` in Fixed bugs 25, which changes `beta_theta`, which drives the collection probability, which drives the latent `w`; and `sample_theta0(z, w, ...)` conditions on `w`. The tighter-prior run supports this weakly: `theta0` moved toward nominal in both arms tested (M10 0.944 to 0.940, M20 0.952 to 0.942), small because those are the arms where data dominates the prior. M2, where the prior should dominate, is the one arm not yet run at the tighter setting.
-
-    **Plan: `PLAN.md` 14.** Two arms at M = 2 varying only `b_betatheta_slope_var` (0.5 and 0.1 against the default 2), R = 50, about 16 minutes. If `theta0` walks toward 0.95 as the variance tightens, this closes as a downstream symptom of item 4 rather than a separate defect, and the two should be fixed together.
-
-    **The previous plan, "re-run the M10 or M20 arm at R = 200", is dropped.** It would confirm that `theta0` reaches nominal at high M, but that is not a claim the paper needs or that users can act on at M = 2 to 3. See `PLAN.md` 14.6.
-
-    **Priority: lowest of the open findings, and this should not grow.** Overcoverage is the safe direction; it costs power, not correctness. The case for the 16 minutes is that it likely resolves this as a side effect of diagnosing item 4, not that it matters on its own.
-
-    **Result, 30 July 2026 (`PLAN.md` 14.7): the coupling hypothesis is disproved.** A 20-fold reduction in `b_betatheta`'s slope variance moved `theta0` coverage by 0.006 (0.986, 0.982, 0.980 at variance 2, 0.5, 0.1). Paired, the bias change is detectable at 2.7 SE but far too small to matter. `b_betatheta` is not the route.
-
-    **Next test, if it is worth doing at all:** `theta0`'s own `Beta(1, 20)` prior, which already has `listPriors$a_theta0`/`b_theta0` hooks and needs no code change. Given this is the least urgent open finding and overcoverage is the safe direction, it is worth running only alongside another study, not on its own.
-
-    CLAUDE TO PIGGYBACK A theta0-PRIOR ARM ON THE NEXT RUN
-
-6.  **`B0` bias roughly doubled, and coverage does not show it.** Measured by the same re-run (`PLAN.md` 12.2). **Possible regression, cause not yet identified.**
-
-    Nine of ten cells moved more negative between the pre- and post-fix runs on identical data: base -0.113 -\> -0.208, `occupancy` -0.024 -\> -0.151, `primers_3` -0.031 -\> -0.151, `low_information` -0.931 -\> -1.056. Only `binary` moved the other way. Overall -0.135 -\> -0.228.
-
-    **Coverage stays at 0.943**, because the intervals are wide enough to absorb the shift -- so this is invisible in the headline table and shows only in the bias column. That is the argument for tracking both.
-
-    Nothing in the four fixes should move species intercepts this way. The likeliest candidate is the 421-line `jsdmfun.R` rewrite that shipped in the same pull (`42198d9`). An R = 8 probe on 29 July hinted at it and R = 100 confirmed it, so it is not noise. **`B0` is a headline quantity for a JSDM -- this needs a cause before the MEE paper reports species intercepts.**
-
-    **M-ladder result, 29 July 2026 (`PLAN.md` 13.7): partial confirmation, mechanism ambiguous.** Bias collapses from -0.160 at M2 to near zero at M10 (+0.002), which looks like item 5's clean pattern. But the matched control (`K30`) also improves it (-0.091), just less than M10/M20 do -- so the recovery is not cleanly Stage-1-specific; more data of either kind helps somewhat. Coverage stays 0.94-0.96 in every arm, consistent with the original finding that coverage does not reveal this bias.
-
-    Still needs the `jsdmfun.R` rewrite investigated as a candidate cause (see below), since the ladder does not rule it out -- it only shows that *some* of the effect is an M/data-volume story.
-
-    **Cause identified, 30 July 2026 (`PLAN.md` 14.7), found while testing something else.** `B0`'s bias responds strongly and monotonically to `b_betatheta`'s slope variance: -0.160 at the current default of 2, -0.106 at 0.5, -0.044 at 0.1. Paired against the same truths, that is +0.054 (2.1 SE) and +0.116 (4.0 SE).
-
-    **The history matches exactly.** `42198d9` widened `B_betatheta` from `diag(1)` to `diag(2)` while correcting the mean from 1 to 0, and that is precisely when `B0`'s bias doubled from -0.135 to -0.228. Turning the variance back down moves the bias back. So the widening, not the `jsdmfun.R` rewrite, is the leading candidate.
-
-    `B0` coverage is 0.946-0.950 across all three variances, unchanged, which is why the original grid never flagged this.
-
-    **But it is a trade-off, not a fix.** Tightening that variance helps `B0`'s bias and *hurts* `beta_theta`'s coverage (0.747 to 0.653 at variance 0.1, see item 4). Two open items pull in opposite directions on one knob. Setting it needs someone who knows what the prior is meant to encode.
-
-    ALEX TO DECIDE: filed as "Review Claude fixes" item 5, with the dose-response table and the trade-off against item 4.
-
-7.  **`q` (Stage 2 false positives) degrades hard as `K` rises.** Found 29 July 2026, as a side effect of the M-ladder run (`PLAN.md` 13.7) -- not something that run was built to look for.
-
-    Coverage: 0.945 at `M2` (K = 3) down to **0.614 at `K30`** (K = 30, same total rows as `M20`). `M20` itself, which keeps K = 3 and raises M instead, sits at 0.742 -- worse than `M2` but far better than `K30`. So more PCR replicates make `q` less well calibrated, not more, and the effect is bigger than the M-driven change in any of items 4-6.
-
-    Not investigated beyond this measurement. Worth checking against the same label-switching mechanism noted in item 3 above -- more PCR replicates sharpen the posterior, and if the informative prior is pulling `p`/`q` away from the true values by a fixed amount, sharper intervals would show it as *worse* coverage, exactly as seen here for `beta_theta` in item 4. If so this is not a new bug but the same cost-of-identifiability story, extended to K.
-
-    ALEX TO DIAGNOSE THE CAUSE AND DECIDE WHAT TO DO ABOUT THIS
+    Cause is now most likely the `B_betatheta` widening; see item 5, where the decision lives. `B0` is a headline quantity for a JSDM, so this wants settling before the paper reports species intercepts.
 
 ## **C. Crashes, unreachable code paths, and API bugs (Alex)**
 
-1.  **`thinOutput()`: two of the three original defects remain** (residual of the original audit's B.2; see Fixed bugs 16). The crash is gone and `thin` is now honoured, but
+1.  **`thinOutput()`: two of the three original defects remain.** The crash is gone and `thin` is honoured, but (a) the 2-D branch thins **by row** (`R/output.R:57`), silently dropping *sites* from the `psi_output`/`w_output`/`theta_output` posterior-mean matrices, whose rows are sites and not iterations; and (b) the scalar `WAIC` falls through to `print("Dimension not recognised")` and becomes `NULL`.
 
-    (a) the 2-D branch still thins **by row** (`x[idx_thinned,,drop=F]`, `R/output.R:57`), which silently drops *sites* from the `psi_output` / `w_output` / `theta_output` posterior-mean matrices under the default `summarisedLatentPresences = TRUE` -- those matrices are `n x S`, so their rows are sites, not iterations; and (b) the scalar `WAIC` still falls through to `print("Dimension not recognised")` (`:62`) and becomes `NULL`. Also worth settling: `thinOutput()` is no longer in `NAMESPACE` (de-exported), but `man/thinOutput.Rd` still ships a `\usage` block for it, so the manual documents a function users cannot call. Either re-export it or drop the `.Rd`.
+    Also: it is no longer in `NAMESPACE` but `man/thinOutput.Rd` still ships a `\usage` block, so the manual documents a function users cannot call. Either re-export or drop the `.Rd`.
 
-        ALEX TO DISABLE IT FOR NOW, BUT LET'S KEEP IT THERE
+    Note the CRAN plan's option for shrinking `sampleresults.rda` depends on this working, so it is not simply deletable.
+
+    ALEX TO DISABLE IT FOR NOW, BUT LET'S KEEP IT THERE
 
 2.  **Assorted smaller items.**
 
-    (a) `createDataIdx()` is called with `maxP` (`R/runOccJSDM.R:638`) for `model = "occupancy"` too, where `maxP` was never assigned -- it survives only because R's lazy evaluation never forces the promise; pass `NULL` explicitly.
+    (a) `createDataIdx()` is called with `maxP` (`R/runOccJSDM.R:638`) for `model = "occupancy"` too, where `maxP` was never assigned. It survives only because lazy evaluation never forces the promise; pass `NULL` explicitly.
 
-    (b) `d <- get_param(listParams, "n_factors")` defaults to 0, and the cap at `:716` uses `ncol(OTU)`, which is `NULL` for a single-species vector `OTU` -- `if (d > NULL)` errors.
+    (b) `d <- get_param(listParams, "n_factors")` defaults to 0, and the cap at `:716` uses `ncol(OTU)`, which is `NULL` for a single-species vector: `if (d > NULL)` errors.
 
     (c) `reparamFactorModel(A_output, C_output)` (`:1273`) assumes `qr.Q()` is square; when `ncov_psi < gt` it is not, and `diag(diag(R_current), nrow = d)` recycles.
 
-    (d) The spatial-covariate numeric check at `:540` runs *before* the "names present in `data$info`" check at `:544`, so a mistyped spatial covariate name gives `undefined columns selected` rather than the intended message.
+    (d) The spatial-covariate numeric check at `:540` runs before the "names present in `data$info`" check at `:544`, so a mistyped name gives `undefined columns selected` rather than the intended message.
 
-    (e) `simulateOccJSDMData()`'s `@details` still says "For two-stage eDNA data specifically, use `simulateOccJSDMData()`" -- a self-reference left over from the merge of `simulateOccJSDMDataGeneral()`.
+    (e) `simulateOccJSDMData()`'s `@details` still says "For two-stage eDNA data specifically, use `simulateOccJSDMData()`", a self-reference left from a merge.
 
-    (f) `computeSpeciesDetected()`'s roxygen still documents the removed Beta-approximation signature (`ab_p`, `K`, `primer`, `alpha`) instead of its actual arguments.
+    (f) `computeSpeciesDetected()`'s roxygen documents the removed Beta-approximation signature instead of its actual arguments.
 
-        ALEX WILL REVIEW THE ABOVE
+    ALEX WILL REVIEW THE ABOVE
 
-3.  **`plotSpeciesResponseCurve()` is exported but has an internal helper's signature.** It takes `species_name, target_cov, beta_mcmc_j, list_matrix, raw_df, n_points` -- raw MCMC pieces and a raw data frame, with no `fitModel` argument -- while every other plotting function in `R/output.R` takes the fitted object. A user holding a `runOccJSDM()` result has no documented way to assemble these arguments. Either give it a `fitModel` signature like its neighbours, or drop it from `NAMESPACE` and let `plotCovariateEffect()` call it internally. Until this is settled it is untestable, which is why the new smoke tests cover the other two GAM exports and not this one.
+3.  **`plotSpeciesResponseCurve()` is exported but has an internal helper's signature.** It takes `species_name, target_cov, beta_mcmc_j, list_matrix, raw_df, n_points`, with no `fitModel` argument, while every other plotting function takes the fitted object. A user holding a fit has no documented way to assemble those arguments. Either give it a `fitModel` signature, or drop it from `NAMESPACE` and let `plotCovariateEffect()` call it internally. Until settled it is untestable, which is why the smoke tests cover the other two GAM exports and not this one.
+
+    This is also one of the two remaining `R CMD check` WARNINGs: `man/plotSpeciesResponseCurve.Rd` documents arguments the function does not have.
 
     WAIT FOR ALEX
 
-4.  **`computeNewOutputs()` prints to stdout on every call, and it cannot be silenced.** Found 30 July 2026 while testing the `predictNewSites()` fix (Fixed bugs 34).
+4.  **`computeNewOutputs()` prints to stdout on every call and cannot be silenced.** `src/jsdm.cpp` runs `Rcout << "Computing species ..."` inside the species loop unconditionally, so every `predictNewSites()` call prints one line per species. `suppressMessages()` does not catch it, because `Rcout` is stdout rather than R's condition system.
 
-    `src/jsdm.cpp:476` runs `Rcout << "Computing species " << j + 1 << " out of " << S << std::endl;` inside the species loop, unconditionally. Every `predictNewSites()` call therefore prints one line per species, with no way to turn it off: `suppressMessages()` does not catch it, because `Rcout` is stdout rather than R's condition system, and `suppressWarnings()` does not either. `capture.output()` works but forces the caller to discard everything.
-
-    **Why it matters beyond tidiness.** It pollutes test output, which is how it was noticed: the new `predictNewSites()` tests interleave `Computing species 1 out of 4` with testthat's progress dots. It would do the same inside any user script, vignette chunk, or Shiny app that predicts in a loop. Unconditional console output from a compute function is also the kind of thing CRAN reviewers pick up.
-
-    **Fix.** Add a `verbose` argument, defaulting to `FALSE`, threaded from `predictNewSites()` through to `computeNewOutputs()`, and guard the `Rcout`. Progress reporting is genuinely useful for a slow prediction over many species, so removing it outright would be a loss; making it opt-in keeps it.
-
-    **Related, same anti-pattern, already tracked:** `thinOutput()` uses `print("Dimension not recognised")` at `R/output.R:43` and `:63` where it should warn or error. That is part of item 1 above, not a separate fix, but worth doing in the same pass since it is the same class of problem.
+    It pollutes any script, vignette chunk or app that predicts in a loop, and unconditional console output from a compute function is the kind of thing CRAN reviewers pick up. **Fix:** a `verbose` argument defaulting to `FALSE`, threaded from `predictNewSites()`. Progress reporting is useful on a slow prediction, so making it opt-in beats deleting it.
 
     ALEX TO DECIDE AND FIX (touches `src/jsdm.cpp`)
 
 ## **D. Dead and broken internal code (Alex)**
 
-None of this is reachable from an exported function, but it will draw `R CMD check` "no visible binding" notes and is a trap for anyone reading the source. Suggest moving the genuinely dead functions to `deprecated/` and wiring up the two missing imports.
+Ten dead functions were moved to `deprecated/` on 30 July (section A item 1). What remains is below. A systematic scan found 38 dead R functions plus 8 unused `RcppExports` wrappers in total, so most of this is still outstanding.
 
-### Plan for items 1-3, written 30 July 2026
+1.  **Four more dead functions in `R/jsdmfun.R`, awaiting a decision rather than a sweep.** All are unreachable by the same test as the ten already moved, but none is sampler code, and two look like unfinished intent:
 
-**The catalogue in items 1-3 is incomplete.** It names 14 functions. A systematic scan (every function defined in `R/`, counting call sites in `R/`, `tests/` and `vignettes/`, excluding roxygen comment lines, and checking `NAMESPACE`) finds **38 dead R functions plus 8 unused `RcppExports.R` wrappers**. Deprecating only the 14 named would leave two thirds of the problem and most of the `R CMD check` NOTE behind.
+    - `computePredictiveProbs()`: references `fitModel`, `psi_output`, `X_ord`, `beta_ord_output`, none of which exist. Looks straightforwardly superseded by `predictNewSites()`.
+    - `partition_r2()`: calls `pseudo_R2()` with one argument; it takes two. Relates to the live *MEE paper* item on site variance partitioning, so may be groundwork rather than abandoned.
+    - `returnSpatialEffectMean()` and `plotSpatialEffect()`: reference a global `Xs_centers` and a nonexistent `returnSpatialEffect()`. This pair is the only spatial-field plotting anywhere in the package.
 
-Counts by file: `mcmcfun.R` 17, `jsdmfun.R` 17, `output.R` 3, `diagnostics.R` 1, `RcppExports.R` 8, `zzz.R` 1.
+    ALEX/DOUG TO DECIDE WHICH OF THESE FOUR GO
 
-**Three different treatments, and conflating them is the trap:**
+2.  **The remaining dead functions, once the above is settled.** Roughly 24 more in `R/jsdmfun.R` and `R/mcmcfun.R`, plus `computeMinESS()` in `R/diagnostics.R`, plus 8 unused wrappers in `RcppExports.R`.
 
-**(a) Move to `deprecated/`.** The genuinely dead R functions. `deprecated/` is already tracked, already excluded by `.Rbuildignore`, and already holds `functions_old.cpp` and the old vignette, so the precedent and the mechanism both exist. Suggested layout: `deprecated/R/mcmcfun-dead.R`, `deprecated/R/jsdmfun-dead.R`, `deprecated/R/output-dead.R`, each with a header saying what it was and when it was moved.
+    The wrappers need different handling: **do not edit `RcppExports.R`**, it is generated. Remove the `// [[Rcpp::export]]` tag in the C++ and re-run `Rcpp::compileAttributes()`.
 
-**(b) Remove the `// [[Rcpp::export]]` tag in C++, then re-run `Rcpp::compileAttributes()`.** The 8 `RcppExports.R` wrappers (`XsBs`, `XtOmegaX_SoR`, `convert_to_correlation`, `dist_matrix`, `findClosestPoint`, `gpCovMatrix`, `sample_betatheta_cpp`, `sample_w_cpp`). **Do not edit `RcppExports.R`**: it is generated, and hand edits are silently overwritten by the next `document()`. If the C++ function itself is also unused, it can go to `deprecated/functions_old.cpp` alongside the existing dead C++.
+    Two things the scan flags that must **not** be deleted: `.onLoad()` (zero callers because R itself calls it; removing it would drop the `mc.cores` cap set for CRAN compliance) and `thinOutput()` (uncallable today, but group C item 1 and the CRAN plan depend on it).
 
-**(c) Leave alone. Two false positives the scan flags that must not be deleted:**
+    CLAUDE TO CONTINUE AFTER THE ITEM 1 DECISION
 
-- **`.onLoad()`** (`R/zzz.R`). Zero callers because **R itself calls it** on namespace load. Deleting it would silently drop the `mc.cores` cap set for CRAN compliance.
-- **`thinOutput()`** (`R/output.R`). Genuinely uncallable today (not exported, no callers), but the CRAN plan's option (a) for shrinking `sampleresults.rda` depends on it, and it is group C item 1. **Fix it or decide against it before deprecating it**; do not sweep it up here.
+3.  **`globalVariables()` for the data-masked column names.** The `R CMD check` undefined-globals NOTE is down from 84 symbols to 65 as dead code has been removed. What will remain is `dplyr`/`ggplot2` NSE references (`x`, `y`, `Species`, `Min`, `2.5%` and so on), which are false positives and want one `utils::globalVariables()` call in `R/occJSDM-package.R`.
 
-**Doug's directives, and one ambiguity to settle.** Item 1 says "deprecate, but keep for reference", which is exactly what `deprecated/` is for. Item 3 says "deprecate both". **Item 2 says "deprecate the sample functions not used in the MCMC", which is narrower than the item's own text**: item 2 also lists `computePredictiveProbs()`, `partition_r2()`, `returnSpatialEffectMean()` and `plotSpatialEffect()`, which are not `sample_*` functions. All four are dead by the same test. Confirm whether they go too, or stay pending a decision.
+    **Do this last.** Every dead function removed shrinks the list, so enumerating it earlier means writing entries for code about to be deleted. There is no `globalVariables()` anywhere yet, so this sets the convention.
 
-**Verified before proposing any of this:** no dead name is referenced as a string anywhere in `R/`, `src/` or `tests/`, so nothing is reachable by `do.call()`, `get()` or `match.fun()`. That is the failure mode a caller-count scan would otherwise miss, and it is why the scan alone was not treated as sufficient.
+    **Done when** `devtools::check()` reports no NOTE under "checking R code for possible problems", not merely a shorter one.
 
-**Execution order:**
+    CLAUDE TO DO AFTER ITEMS 1 AND 2
 
-1.  Move group (a) file by file, running `devtools::test()` after each file rather than at the end, so a break is attributable to one move.
-2.  Handle group (b), then `Rcpp::compileAttributes()` and `devtools::document()`.
-3.  Re-run `devtools::check()` and record how far the undefined-globals NOTE falls. **Measured so far: 84 symbols down to 65**, a 23% reduction, from items 1, 3 and the four `sample_*` of item 2 alone. Removed: `Freq`, `Frequency`, `M`, `N3`, `OTU`, `Occupancy`, `Type`, `Var1`, `Var2`, `data_info`, `p`, `primerIdx`, `sumM`, `w`, `z`, plus `U`, `gt`, `gts`, `computeBscoef` earlier. The remaining `jsdmfun.R` functions and the 8 `RcppExports` wrappers are still to go.
-4.  Only then start item 4 phase 2 (`globalVariables()`), which is blocked on this precisely so the surviving list is enumerated once.
+4.  **`sample_rnb()` cannot run as written** (`R/jsdmfun.R`). Groundwork for the count-data item, not yet called from anywhere, but it has a scoping bug that will bite when wired up: `r_current <- rnb[s]` reads `rnb` inside the `sapply()` whose result is being assigned to `rnb`, so lookup falls through to the namespace and fails. The current size vector needs to come in as an argument.
 
-**What "done" looks like:** 167 tests still passing, the NOTE reduced to data-masked column names only, and no entry in it naming a function that no longer exists.
-
-**Risk, stated plainly:** this deletes a lot of Alex's code from the package build. It is recoverable from `deprecated/` and from git, and none of it is reachable, but it is his call whether "not currently reachable" means "not wanted". Worth his sign-off before step 1 rather than after step 4.
-
-1.  ~~`R/mcmcfun.R` dead samplers~~ **DONE 30 July 2026** (Claude). `sample_z()`, `sample_w()`, `sample_cimk()` and `loglik_sigma1()` moved to `deprecated/R/mcmcfun-dead-samplers.R`, per "DEPRECATE, BUT KEEP FOR REFERENCE". The three samplers referenced undeclared `M`, `sumM`, `n`, `z`, `w`, `y` and are superseded by the `_cpp` versions; `loglik_sigma1()` was an unfinished stub whose entire body was `p[primerIdx[]]`.
-
-2.  `R/jsdmfun.R`. **The four `sample_*` functions are DONE, 30 July 2026** (Claude): `sample_BCsL()`, `sample_U()`, `sample_Br()` and `sample_BL_fixed()` moved to `deprecated/R/jsdmfun-dead-samplers.R`, per Doug's scoping to sampler code only. All four were unreachable (no callers in `R/`, `tests/` or `vignettes/`, not in `NAMESPACE`, no string references so nothing could reach them via `do.call()`/`get()`/`match.fun()`) and all four referenced undefined globals, so none could have run as written. Superseded by the `_cpp` implementations. Measured effect: `R CMD check`'s undefined-globals NOTE fell from 84 symbols to 80, losing exactly `U`, `gt`, `gts` and `computeBscoef`. 167 tests unchanged.
-
-    **Still open in this item, deliberately.** **Four more functions** listed here are dead by the same test but are **not** sampler code, so Doug's directive did not cover them: `computePredictiveProbs()` (references `fitModel`, `psi_output`, `X_ord`, `beta_ord_output`, none of which exist), `partition_r2()` (calls `pseudo_R2()` with one argument; it takes two), and the pair `returnSpatialEffectMean()` / `plotSpatialEffect()` (reference a global `Xs_centers` and a nonexistent `returnSpatialEffect()`).
-
-    Two of them look like unfinished intent rather than abandoned code, which is why they were not swept up: `partition_r2()` relates to the live *MEE paper* item on site variance partitioning, and the spatial pair is the only spatial-field plotting anywhere in the package. `computePredictiveProbs()` looks straightforwardly superseded by `predictNewSites()`.
-
-    ALEX/DOUG TO DECIDE ON THE REMAINING FOUR
-
-3.  ~~`R/output.R` dead plots~~ **DONE 30 July 2026** (Claude). `plotReadIntensity()` and `plotOccupancyStates()` moved to `deprecated/R/output-dead-plots.R`, per "DEPRECATE BOTH". The first read `results_output$mu1_output` / `mu0_output` / `sigma1_output` / `sigma0_output` and `infos$maxexplogy1`, none of which `runOccJSDM()` produces any more; the second referenced undefined `data_info` / `OTU`. Their roxygen blocks moved with them, so nothing re-attached to the following function, and `man/plotReadIntensity.Rd` was removed by `document()` as a consequence. `NAMESPACE` is unchanged: neither was exported.
-
-4.  **Missing imports, and the wider `R CMD check` undefined-globals NOTE.** Plan written 30 July 2026 from a full `R CMD check` run, which corrected this entry's premise.
-
-    **This entry named the wrong functions.** It cited `plotCovariateTrend()` as the live `tidyr` user and `createSplinesObjects()` as the live `splines` user. Both are **dead**: zero call sites, not exported. Verified by mapping every symbol in the check NOTE to its enclosing function and counting callers.
-
-    **What is actually live and missing an import:**
-
-    | symbol | needs | live caller |
-    |----|----|----|
-    | `pivot_longer` | `tidyr` | `returnCovariateEffect_base`, `plotCovariateEffect_base` (Alex's GAM functions, both exported, both used in the vignette) |
-    | `setNames` | `stats` | `create_covariates_matrix`, `transform_new_covariates` (the latter is on `predictNewSites()`'s path) |
-    | `rnbinom` | `stats` | `simulateData`, reached from `simulateOccJSDMData()` |
-
-    **Dead-code-only, so do not import these; delete the code instead** (items 1-3 and 5 above): `bs` from `splines` in `createSplinesObjects()`, `dnbinom` from `stats` in `sample_rnb()`, and the third `pivot_longer` in `plotCovariateTrend()`. `splines` is not in `DESCRIPTION` at all, so importing it would add a dependency purely to support code that should not ship.
-
-    **The NOTE is three different problems wearing one hat.** Roughly 90 symbols are listed, and treating them uniformly is the trap:
-
-    (a) **Genuine missing imports.** The three rows above. `R CMD check` names `dnbinom`, `rnbinom` and `setNames` itself in its "Consider adding" line; it cannot name `pivot_longer` because it does not know which package that is meant to come from.
-    (b) **Data-masked column names, which are false positives.** `x`, `y`, `species`, `Min`, `Max`, `2.5%`, `97.5%`, `Output`, `value`, `upper`, `lower`, `iter`, `chain` and so on are `dplyr`/`ggplot2` NSE references, not undefined objects. These are silenced with `utils::globalVariables()`, or avoided with the `.data$` pronoun. Silencing is cosmetic; the NOTE is the only symptom.
-    (c) **Genuinely undefined objects in dead code, which are real bugs.** `computeBscoef`, `computePsiOutput`, `transformCoefficients`, `returnSpatialEffect`, `sample_beta_cpp`, `sample_beta_nocov_cpp` are functions that do not exist. `Ks_new`, `Xs_centers`, `X_ord`, `Tr`, `data_info`, `gt`, `gts` and the rest are undefined variables. All sit inside the functions already catalogued in items 1-3. These do not want imports; they want deleting.
-
-    **Sequencing matters, and it is the main thing to get right.** Do items 1-3 (deprecate the dead code) **first**. Category (c) then disappears entirely, and category (b) shrinks to whatever the surviving functions use. Doing item 4 first means writing `globalVariables()` entries for code that is about to be deleted, and then deleting them again.
-
-    **Upgraded 30 July: this is not only a NOTE. There is a latent runtime failure behind it.** Verified against a properly installed copy, with `tidyr` not attached: `pivot_longer` does not resolve from the package namespace at all (absent from both the namespace and its imports environment). It is reached only in the **categorical covariate** branch of `returnCovariateEffect_base()` (`R/jsdmfun.R:429`) and `plotCovariateEffect_base()` (`:612`); the numeric branch summarises to mean and quantiles and never calls it. So both exported GAM functions will fail with `could not find function "pivot_longer"` on any categorical occupancy covariate, for a real installed user.
-
-    Nobody has hit it because every test and every vignette chunk uses numeric covariates. `create_covariates_matrix()` carries `cat_levels` and `is_numeric`, so categorical covariates are otherwise supported: this is a genuine gap, not an unreachable branch.
-
-    **Phase 1: DONE 30 July 2026.** Added `setNames` and `rnbinom` to the `stats` list and a new `@importFrom tidyr pivot_longer`, both in `R/occJSDM-package.R`. **Verified by re-running `devtools::check()`: the "checking dependencies in R code" NOTE is gone entirely** (3 notes down to 2), and `pivot_longer`, `setNames` and `rnbinom` have left the undefined-globals list. `dnbinom` and `bs` remain in it, correctly, since they were deliberately not imported. Steps as executed:
-
-    1.  Add to the consolidated tag in `R/occJSDM-package.R`, which is where the package's `@importFrom stats ...` line already lives: `setNames` and `rnbinom` to the existing `stats` list, and a new `@importFrom tidyr pivot_longer`.
-    2.  **Do not import `dnbinom` or `bs`.** `dnbinom` is used only by `sample_rnb()` (item 5, not wired up) and `bs` only by `createSplinesObjects()` (dead). `bs` would additionally mean adding `splines` to `DESCRIPTION`, a new declared dependency existing purely to support code that should not ship. Both should go when that code goes.
-    3.  Added a test, but asserting on the **imports environment** rather than calling the functions. A functional test of the categorical branch would pass under `devtools::test()` whether or not the import existed, because `load_all()` resolves unimported symbols through the global environment: that is precisely how this gap survived the suite. Checking `exists(fn, envir = parent.env(asNamespace("occJSDM")), inherits = FALSE)` holds under both `load_all()` and `R CMD check`. 167 tests passing.
-    4.  Re-run `devtools::check()` and confirm the `Namespace in Imports field not imported from: tidyr` NOTE is gone, and that `pivot_longer`, `setNames` and `rnbinom` have left the undefined-globals list.
-
-    **Phase 2: `globalVariables()` for the data-masked names. Do this after items 1-3, not before.**
-
-    Measured 30 July: **38 functions generate undefined-global complaints, and 19 of them are dead** (zero callers, not exported): `computePredictiveProbs`, `loglik_sigma1`, `plotCovariateTrend`, `plotOccupancyStates`, `plotSpatialEffect`, `returnSpatialEffectMean`, and the twelve unused `sample_*` functions. Removing the dead code halves the complaint sources at a stroke, and takes the whole of category (c) with it.
-
-    Doing Phase 2 first means enumerating NSE names for functions that are about to be deleted, then deleting the entries again. Wait.
-
-    When it is time: one `utils::globalVariables()` call in `R/occJSDM-package.R`, next to the imports, with a comment saying what it is and why. Not scattered across files. There is currently no `globalVariables()` anywhere in the package, so this establishes the convention.
-
-    **Success criterion for the whole item:** `devtools::check()` reports no NOTE in either "checking dependencies in R code" or "checking R code for possible problems". Shrinking the list is not finishing it.
-
-    PHASE 1 DONE. CLAUDE TO DO PHASE 2 AFTER ITEMS 1-3
-
-5.  **`sample_rnb()` cannot run as written** (new in `0abb104`, `R/jsdmfun.R:581-614`). Groundwork for the count-data item under *MEE paper*, not yet called from anywhere, but it has a scoping bug that will bite the moment it is wired up: `r_current <- rnb[s]` (`:590`) reads `rnb` inside the `sapply()` at `:588` whose result is *being assigned to* `rnb`, so at that point `rnb` does not exist in the function frame and lookup falls through to the namespace and fails with `object 'rnb' not found`. The current size vector needs to come in as an argument, e.g. `sample_rnb(z, eta, rnb, tune_sd = ...)`. Two more things to settle while there: `tune_sd = 5` is a random-walk SD on the *log* scale, so proposals land a factor of `exp(+/-10)` away and acceptance will be near zero (something in the 0.1-1 range is the usual starting point); and the prior terms are stubbed to `0` with the intended `dgamma()` commented out, referencing `prior_shape`/`prior_rate`, which are not defined anywhere. The Metropolis step itself looks right -- the `log(r_star) - log(r_current)` Jacobian is the correct correction for a log-scale random walk under a flat prior on `r`.
+    Two more to settle while there: `tune_sd = 5` is a random-walk SD on the *log* scale, so proposals land a factor of `exp(+/-10)` away and acceptance will be near zero (0.1 to 1 is the usual starting range); and the prior terms are stubbed to `0` with the intended `dgamma()` commented out, referencing `prior_shape`/`prior_rate`, which are not defined anywhere. The Metropolis step itself looks right: the `log(r_star) - log(r_current)` Jacobian is the correct correction for a log-scale random walk under a flat prior on `r`.
 
     ALEX's WORK IN PROGRESS FOR THE COUNTS
 
@@ -501,7 +296,7 @@ Counts by file: `mcmcfun.R` 17, `jsdmfun.R` 17, `output.R` 3, `diagnostics.R` 1,
 
 2.  **extensive testing on simulated datasets** -- **suite built and the R = 100 study run; three things remain.** What exists is summarised under *Completed* below; the authoritative specification and the results table are in `dev/simstudy/PLAN.md`.
 
-    (a) **Re-run once group A items 1-3 are fixed.** This is the evidence the fixes worked. Without it they rest on the same code-reading that this exercise showed to be unreliable, and the R = 100 table in `PLAN.md` §12 is already partly stale -- it predates Alex's `42198d9`, which corrected the collection-covariate prior, so `beta_theta` should improve markedly. One command, a few hours:
+    (a) **Re-run once group B items 1, 2 and 4 are fixed.** This is the evidence the fixes worked. Without it they rest on the same code-reading that this exercise showed to be unreliable, and the R = 100 table in `PLAN.md` §12 is already partly stale -- it predates Alex's `42198d9`, which corrected the collection-covariate prior, so `beta_theta` should improve markedly. One command, a few hours:
 
         ```         
         Rscript dev/simstudy/run_study.R --cores=5 --caffeinate
@@ -511,7 +306,7 @@ Counts by file: `mcmcfun.R` 17, `jsdmfun.R` 17, `output.R` 3, `diagnostics.R` 1,
 
     (c) **Decide how the results are presented** (`PLAN.md` open item 4). Currently a private Claude artifact (<https://claude.ai/code/artifact/ad3d46eb-1fd4-49b5-b795-6b71474ef1d5>), updated 29 July 2026 with the post-fix re-run and the before/after comparison; a pkgdown article is the obvious home -- see item 3.
 
-    **One constraint carried from the bug list:** `l_s` is excluded from coverage checks because it is not recoverable while group A item 1 is open, so no cell of the study speaks to spatial range. Two earlier constraints have since lapsed -- `sigma_h` is now sampled (Fixed bugs 24) and the OpenMP RNG race is closed (Fixed bugs 26), so tier 1's "structural assertions only" rule can be revisited once reproducibility is confirmed on a multi-threaded platform.
+    **One constraint carried from the bug list:** `l_s` is excluded from coverage checks because it is not recoverable while group B item 1 is open, so no cell of the study speaks to spatial range. Two earlier constraints have since lapsed -- `sigma_h` is now sampled (Fixed bugs 24) and the OpenMP RNG race is closed (Fixed bugs 26), so tier 1's "structural assertions only" rule can be revisited once reproducibility is confirmed on a multi-threaded platform.
 
 3.  **Stand up a pkgdown site.** Discussed 28 July; not started.
 
@@ -529,7 +324,7 @@ Counts by file: `mcmcfun.R` 17, `jsdmfun.R` 17, `output.R` 3, `diagnostics.R` 1,
 
     And pkgdown builds every `@examples` block, so the **first build will fail on the group B functions that error unconditionally** (`predictNewSites()` among them). That is the same exposure `\donttest{}` creates under `R CMD check`, which is exactly why the CRAN plan sequences item 8 after the group B fixes. So do this after group B, or expect to `@examples`-guard several functions first.
 
-    **Sequencing caveat:** consider whether to publish a site while group A items 3, 4 and 6 are open. The site would document functions whose credible intervals are currently overconfident, without saying so anywhere a reader would see.
+    **Sequencing caveat:** consider whether to publish a site while group B items 2, 4 and 5 are open. The site would document functions whose credible intervals are currently overconfident, without saying so anywhere a reader would see.
 
 # **Future versions**
 
@@ -565,7 +360,7 @@ Items 16 and 18 are marked **partially fixed**: the crash in each is gone, but p
 
 9.  ~~**WAIC running means divide by the raw iteration counter.**~~ **FIXED.** A dedicated `currentWAICiter` counter is initialised to 1 (`R/runOccJSDM.R:831`) and incremented only inside the WAIC block (`:1200`), so the running means now divide by the number of WAIC accumulations rather than by the raw MCMC iteration index. A guard, `if (numIters != (currentWAICiter - 1)) stop("Current wAIC iter wrong")` (`:1251`), asserts the two agree. Confirmed introduced by `b7b6aa2` via `git log -S currentWAICiter`. *(This fix was not recorded when the other `b7b6aa2` fixes were logged; recovered on 27 July while reconciling cross-references.)*
 
-10. ~~**Non-thread-safe RNG inside the OpenMP loops.**~~ **PARTIALLY FIXED.** `sample_beta_nocov_cpp_TS()` (`src/functions.cpp:308`) now calls the thread-safe `sample_beta_cpp_TS()` rather than the non-TS `sample_beta_cpp()`, which closes the race in `sample_betatheta_cpp_parallel()` (`src/functions.cpp:607`) -- the thread-safe path the audit described as "half-finished" is now wired up on that side. **The `samplePGvariables()` path (`src/jsdm.cpp:398`) is still affected** via `randinvg()`'s `R::rnorm` call; that residual is tracked as **group A item 5** above. *(Also not recorded at the time; recovered 27 July.)*
+10. ~~**Non-thread-safe RNG inside the OpenMP loops.**~~ **PARTIALLY FIXED.** `sample_beta_nocov_cpp_TS()` (`src/functions.cpp:308`) now calls the thread-safe `sample_beta_cpp_TS()` rather than the non-TS `sample_beta_cpp()`, which closes the race in `sample_betatheta_cpp_parallel()` (`src/functions.cpp:607`) -- the thread-safe path the audit described as "half-finished" is now wired up on that side. **The `samplePGvariables()` path (`src/jsdm.cpp:398`) is still affected** via `randinvg()`'s `R::rnorm` call; that residual is tracked as **group B item 5** above. *(Also not recorded at the time; recovered 27 July.)*
 
 **Post-audit fixes:**
 
@@ -619,7 +414,7 @@ Items 16 and 18 are marked **partially fixed**: the crash in each is gone, but p
 
     This was the most clearly evidenced item in the whole audit: at R = 100 the intercept -- the one coefficient whose prior mean *was* overridden -- covered at 0.937, while the slopes covered at 0.496 with bias +0.113, against true slopes averaging +0.01. Across the full grid `beta_theta` undercovered in **every** cell (0.676-0.730).
 
-    **Confirmed by the 29 July re-run**: `beta_theta` improved in every cell, to 0.709-0.771, with two-thirds of the bias removed. It is still well short of nominal, so a second cause remains -- tracked as group A item 4.
+    **Confirmed by the 29 July re-run**: `beta_theta` improved in every cell, to 0.709-0.771, with two-thirds of the bias removed. It is still well short of nominal, so a second cause remains -- tracked as group B item 4.
 
 26. ~~**Non-thread-safe RNG in the hottest OpenMP loop.**~~ **FIXED.** `randinvg()` (`src/jsdm.cpp:86`) now draws from the `thread_local` `rnorm()` rather than `R::rnorm`; the old line is commented out beside it. That closes the last hole on the `samplePGvariables()` path, whose Polya-Gamma helpers were already converted in `53c38f1`.
 
@@ -627,7 +422,7 @@ Items 16 and 18 are marked **partially fixed**: the crash in each is gone, but p
 
 27. ~~**Stage 2 hyperparameters documented as settable but never read.**~~ **FIXED.** `a_p`, `b_p`, `a_q` and `b_q` now read from `listPriors` (`R/runOccJSDM.R:751-754`), matching the behaviour `@param listPriors` already claimed, and the documented defaults were corrected to match the code (5/1 and 1/20). A user running a low-detection study can now override the prior without editing the package.
 
-    **Only the wiring is closed.** What the default *should be* remains open and is a design decision, not a defect -- see group A item 3.
+    **Only the wiring is closed.** What the default *should be* remains open and is a design decision, not a defect -- see group B item 3.
 
 28. **`set.seed()` did not control any of the C++ samplers, so `runOccJSDM()` was not reproducible.** Found 29 July 2026 while writing the regression test for Fixed bugs 26; fixed the same day.
 
@@ -735,4 +530,4 @@ Finished work, kept for context rather than as tasks. Bug fixes live under *Fixe
 
     - **It is a paired comparison, and that is worth protecting.** `draw_truth()` seeds on (scenario, replicate), so the simulated data and true values are bit-identical between the pre- and post-fix runs -- verified, `max|truth difference| = 0`. Every difference is therefore attributable to the code rather than to sampling variation, which is what makes statements like "only 104 of 49,978 `resid_cor` decisions flipped" possible. **Do not change `simstudy_seed()`**, or future runs lose comparability with these two.
 
-    It found six defects -- three while the tests were being written, three from the run -- none of which the static audit had caught. Four of the six are now fixed (Fixed bugs 24-27 and group B); the rest are group A items 1-3.
+    It found six defects -- three while the tests were being written, three from the run -- none of which the static audit had caught. Four of the six are now fixed (Fixed bugs 24-27 and group B); the rest are group B items 1, 2 and 4.
