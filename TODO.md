@@ -322,24 +322,6 @@ None of this is reachable from an exported function, but it will draw `R CMD che
 
 # **MEE paper**
 
-34. ~~**`predictNewSites()` could not be called without supplying both `X_psi` and `X_s`.**~~ **FIXED 30 July 2026** (Claude; `R/output.R`, `src/jsdm.cpp`). Residual of the original audit's B.4, previously tracked as group C item 2.
-
-    **The filed defect.** `X_psi` and `X_s` had no defaults, so the `is.null()` guards the author had written could never fire: R raised `argument "X_psi" is missing, with no default` first.
-
-    **Worse than filed.** Those guards used `&`, not `&&`. Since `&` evaluates both sides, the missing promises were forced even when the caller had asked for neither term, so `predictNewSites(fit, useEnvCov = FALSE, useSpatial = FALSE)` failed too. There was no way to call the function at all without both matrices.
-
-    **The fix.** Both default to `NULL`. `useEnvCov` and `useSpatial` adopt the tri-state `useBiotic` already used: `NULL` uses the term if the fit estimated it, `TRUE` uses it and errors if it did not, `FALSE` skips it. That is what their roxygen always claimed, and was unreachable because `useSpatial` hard-stopped on a fit with no spatial field instead of ignoring it. Strictly more permissive: every call that worked before still works identically.
-
-    **Three further defects, exposed by making those paths reachable, all pre-existing and all fixed here:**
-
-    (a) `computeNewOutputs()` sliced `Ks_all` and `Bs_output` unconditionally, so `useSpatial = FALSE` aborted with `Cube::slice(): index out of bounds`. Moved inside the `useSpatial` guard.
-    (b) It read the new-site count as `X.n_rows` unconditionally, so `useEnvCov = FALSE` silently returned a zero-row result. Now taken from whichever term is active; both being off is an explicit error, since nothing then determines how many sites to predict for.
-    (c) A fit with no spatial field returns `Bs_output` with a zero-length first dimension, which collapses under `apply()` and broke the `aperm()` with `'perm' is of wrong length`. Only reshaped when the spatial term is in play.
-
-    **Tested beyond absence of error** (`test-api-contracts.R`): each term measurably changes the prediction when toggled, probabilities stay in `[0,1]`, and quantiles stay ordered. Without the first of those the switches could have been cosmetic and the shape assertions would still have passed.
-
-    **Noticed, not fixed:** `computeNewOutputs()` prints `Computing species i out of S` to stdout via `Rcout` on every call, unconditionally, and it cannot be silenced. Filed separately as group C item 5.
-
 ## A. Alex to dos
 
 1.  Trait matrix currently not allowing for categorical variables
@@ -573,6 +555,24 @@ Items 16 and 18 are marked **partially fixed**: the crash in each is gone, but p
     (b) `returnCovariateEffect_base()`'s per-species loop labelled each row `speciesNames[i]` (the loop counter) instead of `speciesNames[sp_idx]` -- the same class of defect as Fixed bugs 32 -- mislabelling every species whenever `idx_species` wasn't the prefix `1:k`.
 
     Verified against a live fit: the default now facets all 10 species correctly; `idx_species = c(3, 1)` plots and labels `OTU_3`/`OTU_1` correctly (previously mislabelled `OTU_1`/`OTU_2`, then errored once the default was exercised). Full test suite passes (119/119). `R/jsdmfun.R`, `R/output.R`.
+
+34. ~~**`predictNewSites()` could not be called without supplying both `X_psi` and `X_s`.**~~ **FIXED 30 July 2026** (Claude; `R/output.R`, `src/jsdm.cpp`). Residual of the original audit's B.4, previously tracked as group C item 2.
+
+    **The filed defect.** `X_psi` and `X_s` had no defaults, so the `is.null()` guards the author had written could never fire: R raised `argument "X_psi" is missing, with no default` first.
+
+    **Worse than filed.** Those guards used `&`, not `&&`. Since `&` evaluates both sides, the missing promises were forced even when the caller had asked for neither term, so `predictNewSites(fit, useEnvCov = FALSE, useSpatial = FALSE)` failed too. There was no way to call the function at all without both matrices.
+
+    **The fix.** Both default to `NULL`. `useEnvCov` and `useSpatial` adopt the tri-state `useBiotic` already used: `NULL` uses the term if the fit estimated it, `TRUE` uses it and errors if it did not, `FALSE` skips it. That is what their roxygen always claimed, and was unreachable because `useSpatial` hard-stopped on a fit with no spatial field instead of ignoring it. Strictly more permissive: every call that worked before still works identically.
+
+    **Three further defects, exposed by making those paths reachable, all pre-existing and all fixed here:**
+
+    (a) `computeNewOutputs()` sliced `Ks_all` and `Bs_output` unconditionally, so `useSpatial = FALSE` aborted with `Cube::slice(): index out of bounds`. Moved inside the `useSpatial` guard.
+    (b) It read the new-site count as `X.n_rows` unconditionally, so `useEnvCov = FALSE` silently returned a zero-row result. Now taken from whichever term is active; both being off is an explicit error, since nothing then determines how many sites to predict for.
+    (c) A fit with no spatial field returns `Bs_output` with a zero-length first dimension, which collapses under `apply()` and broke the `aperm()` with `'perm' is of wrong length`. Only reshaped when the spatial term is in play.
+
+    **Tested beyond absence of error** (`test-api-contracts.R`): each term measurably changes the prediction when toggled, probabilities stay in `[0,1]`, and quantiles stay ordered. Without the first of those the switches could have been cosmetic and the shape assertions would still have passed.
+
+    **Noticed, not fixed:** `computeNewOutputs()` prints `Computing species i out of S` to stdout via `Rcout` on every call, unconditionally, and it cannot be silenced. Filed separately as group C item 5.
 
 # **Completed work**
 
