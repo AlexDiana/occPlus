@@ -377,13 +377,13 @@ editor_options:
     Tested the `diag(2)` slope-variance hypothesis directly -- added a
     `listPriors$b_betatheta_slope_var` override (`R/runOccJSDM.R`,
     default unchanged at 2) and re-ran M10/M20 at variance 0.5 (SD 0.71
-    against the default's 1.41). Coverage moved by 0.001-0.003 --
-    noise. **The prior's width is not the cause.**
+    against the default's 1.41). Coverage moved by 0.001-0.003 -- noise.
+    **The prior's width is not the cause.**
 
     Also checked and ruled out: pseudo-replication in `X_theta`, i.e.
-    whether the M samples at a site share a covariate value, which
-    would make added M look like independent information without being
-    any. It does not -- `X_theta` is drawn independently per sample
+    whether the M samples at a site share a covariate value, which would
+    make added M look like independent information without being any. It
+    does not -- `X_theta` is drawn independently per sample
     (`R/simulateData.R:126`), not per site.
 
     **So the overconfidence is in the likelihood or the sampler's
