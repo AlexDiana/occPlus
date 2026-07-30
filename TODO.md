@@ -222,11 +222,11 @@ Ten dead functions were moved to `deprecated/` on 30 July (section A item 1). Wh
 
 1.  Listserv announcement (beta release), drafted July 20 2026:
 
-    > Subject: New R package (beta) — occJSDM, a combined occupancy and joint species distribution model
+    > Subject: New R package (beta) - occJSDM, a combined occupancy and joint species distribution model
     >
     > Hi all,
     >
-    > Announcing **occJSDM**, an R package for combining occupancy and joint species distribution modelling (<https://github.com/AlexDiana/occJSDM>). The package is \`eDNA-aware' and thus can be used on metabarcoding data.
+    > Announcing **occJSDM**, an R package for combining occupancy and joint species distribution modelling (<https://github.com/AlexDiana/occJSDM>). The package is 'eDNA-aware' and thus can be used on metabarcoding data.
     >
     > Note this is **beta software**, under active development.
     >
@@ -235,7 +235,7 @@ Ten dead functions were moved to `deprecated/` on 30 July (section A item 1). Wh
     > Highlights:
     >
     > - Occupancy modelling: Accounts for both false-negative and false-positive error at two stages (field and lab), per species. Stage 1: estimates species eDNA collection probability in the field, given true eDNA presence at the site, and contamination probability, given true eDNA absence at the site. Stage 2: estimates species eDNA detection probability in the lab (i.e. successful DNA extraction, PCR, and sequencing), given successful eDNA collection in Stage 1, and contamination probability, given eDNA non-collection in Stage 1. In datasets where multiple primers have been used, each species' detection probability is estimated per primer (allowing one to compare each primer's efficiency for each species), while species occupancies are estimated using information across all primers. Both environmental and detection covariates are supported.
-    > - JSDM: Integrates the occupancy model with a full-featured JSDM: species fit jointly, with latent-factor residual correlations. The JSDM optionally supports species traits shaping occupancy responses (trait X env interaction, aka \`fourth-corner analyses') and spatial autocorrelation (GP kernel) across sites.
+    > - JSDM: Integrates the occupancy model with a JSDM: species fit jointly, with latent-factor residual correlations. The JSDM optionally supports species traits shaping occupancy responses (trait x env interaction, aka 'fourth-corner analyses') and spatial autocorrelation (GP kernel) across sites.
     > - occJSDM not only fits a full-featured two-stage occupancy model (both field and PCR replicates required), but if given simpler study designs, can collapse to a classical occupancy model (field replicates only) or to a pure JSDM (no replicates).
     > - MCMC fitting with diagnostics, variance partitioning, ordination, and pairwise residual correlation outputs built in.
     > - occJSDM leverages the taxonomic breadth of eDNA datasets by using ordination (each site's position on the latent axes, and each species' loadings on those axes) to predict species occupancies. Thus, each species' predicted occupancy at a site is informed by the estimated occupancies of the other species at that site, thereby using co-occurrence structure. We also allow species to borrow strength from other species sharing similar traits, in contrast to the classical approach of having rare species borrow strength from abundant species, as is used in multi-species occupancy models.
@@ -246,12 +246,6 @@ Ten dead functions were moved to `deprecated/` on 30 July (section A item 1). Wh
 
 2.  **Review of the draft, 30 July 2026 (Claude).** Checked every feature claim against the code and the coverage study.
 
-    **Mechanical errors.**
-
-    - The subject line uses an em-dash. Your own standing rule is a plain double hyphen, and this is the last em-dash left in this file.
-    - `` `eDNA-aware' `` uses TeX-style open/close quotes, which render as a literal backtick in a plain-text email. Same for `` `fourth-corner ``.
-    - "trait X env interaction" should be "trait-by-environment" or "trait x env".
-
     **Overstatement: four highlighted features have open inference bugs.** The disclaimer says "beta software, under active development", which readers will take as "the API may change", not "these specific outputs are currently miscalibrated". That gap matters for a listserv audience who will use the numbers.
 
     - **Residual correlations and ordination** are highlighted in three of the five bullets, and are the least reliable output in the package: `reparamFactorModel()` inflates correlations by up to 0.612 and `resid_cor` covers at 0.74-0.77 in nine of ten scenarios (group B item 2, unresolved).
@@ -261,7 +255,15 @@ Ten dead functions were moved to `deprecated/` on 30 July (section A item 1). Wh
 
     What the study says *does* hold, and is therefore safe to claim: environmental effects on occupancy (0.947), the trait-by-environment term (0.948), and Stage 2 false-positive rates (0.945).
 
-    **The "borrowing strength" contrast is not accurate as written.** Multi-species occupancy models pool *all* species toward a community mean through random effects; they do not specifically pool rare species toward abundant ones. And occJSDM does the same thing, through the species intercepts. The genuine novelty is that pooling is *trait-mediated* via the fourth-corner term, which happens to be the best-supported claim in the whole announcement. Worth stating that directly rather than as a contrast with a caricature.
+    **The "borrowing strength" contrast is accurate. An earlier version of this review said it was not; that was wrong on both counts.**
+
+    Doug's point, which is correct: although an MSOM formally shrinks every species toward a community mean, the mean is estimated most sharply by the well-sampled species, so in practice rare species are pulled toward what common species look like. "Rare species borrow strength from abundant species" is a fair plain-language description of the effect, not a caricature of the mechanism.
+
+    And occJSDM genuinely does something different, which the code confirms. `sample_sigmab()` computes the residual `B - computeBtcoef(G, Tr, A, C, ...)`, and `computeBtcoef()` returns `Tr %*% G + A %*% C + Btilde`. So the shrinkage *target* for a species' covariate coefficients is its **trait-predicted** value, not a bare community mean. A rare species with distinctive traits is pulled toward what its traits imply, not toward the common species.
+
+    **Worth claiming slightly more than the draft does.** The target includes `A %*% C`, the *latent* trait term, so species also borrow from others with similar inferred trait profiles even where no measured trait explains the similarity. The draft says "species sharing the same traits", which covers only the observed-trait channel.
+
+    This is also the best-validated claim in the announcement: the fourth-corner term covers at 0.948 in the study.
 
     **Two working features are not mentioned at all.**
 
