@@ -244,6 +244,36 @@ Ten dead functions were moved to `deprecated/` on 30 July (section A item 1). Wh
     >
     > Feedback, feature requests, and bug reports are very welcome.
 
+2.  **Review of the draft, 30 July 2026 (Claude).** Checked every feature claim against the code and the coverage study.
+
+    **Mechanical errors.**
+
+    - The subject line uses an em-dash. Your own standing rule is a plain double hyphen, and this is the last em-dash left in this file.
+    - `` `eDNA-aware' `` uses TeX-style open/close quotes, which render as a literal backtick in a plain-text email. Same for `` `fourth-corner ``.
+    - "trait X env interaction" should be "trait-by-environment" or "trait x env".
+
+    **Overstatement: four highlighted features have open inference bugs.** The disclaimer says "beta software, under active development", which readers will take as "the API may change", not "these specific outputs are currently miscalibrated". That gap matters for a listserv audience who will use the numbers.
+
+    - **Residual correlations and ordination** are highlighted in three of the five bullets, and are the least reliable output in the package: `reparamFactorModel()` inflates correlations by up to 0.612 and `resid_cor` covers at 0.74-0.77 in nine of ten scenarios (group B item 2, unresolved).
+    - **Spatial autocorrelation (GP kernel)**: `sample_ls()` scores the wrong density, so the length-scale rails at the top of its grid for every true value tried, and the spatial term of every `useSpatField = TRUE` fit is biased (group B item 1).
+    - **"Both environmental and detection covariates are supported"**: the environmental side holds (`B` covers at 0.947), but collection-covariate effects cover at 0.77 and get *worse* with more data (group B item 4).
+    - **Baseline occupancy**: `B0`'s bias doubled and coverage does not reveal it (group B items 5 and 6).
+
+    What the study says *does* hold, and is therefore safe to claim: environmental effects on occupancy (0.947), the trait-by-environment term (0.948), and Stage 2 false-positive rates (0.945).
+
+    **The "borrowing strength" contrast is not accurate as written.** Multi-species occupancy models pool *all* species toward a community mean through random effects; they do not specifically pool rare species toward abundant ones. And occJSDM does the same thing, through the species intercepts. The genuine novelty is that pooling is *trait-mediated* via the fourth-corner term, which happens to be the best-supported claim in the whole announcement. Worth stating that directly rather than as a contrast with a caricature.
+
+    **Two working features are not mentioned at all.**
+
+    - **Nonlinear species response curves.** `listParams = list(splineVars = TRUE)` expands each numeric occupancy covariate into a B-spline basis (verified: 2 covariates become 10 columns, with knots stored for prediction), and `plotCovariateEffect()` draws the resulting curve on the probability scale. Most latent-variable JSDMs are linear on the link scale, so this is a real differentiator and it is invisible in the current text.
+    - **Prediction at new sites.** `predictNewSites()` is exported and now works for any combination of terms. Spatial prediction at unsampled locations is an expected feature of a modern SDM package, and reviewers will look for it.
+
+    **Do not advertise WAIC yet.** `extractWAIC()` is exported, but there is an open item under *MEE paper* to switch to integrated WAIC because the current one overfits. Advertising a model-selection criterion that is about to change is worse than staying quiet.
+
+    **Gaps reviewers will notice, worth not inviting.** "Full-featured JSDM" appears twice and invites comparison with HMSC, which has phylogenetic correlation and built-in cross-validation; occJSDM has neither, and does not yet support count data. Softening that phrase avoids the question. The genuinely distinctive claim, and the one to lead with, is **false positives modelled at both stages, per species and per primer**: false-positive occupancy models are rare in general, and combining one with a JSDM appears to be new.
+
+    DOUG TO REVISE
+
 # **MEE paper**
 
 ## A. Alex to dos
