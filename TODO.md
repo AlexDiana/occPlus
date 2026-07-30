@@ -73,6 +73,22 @@ output: html_document
 
     ALEX TO INVESTIGATE THE SAMPLER
 
+4.  **Review the `predictNewSites()` fix, and confirm two API decisions in it.** **Written by Claude** on 30 July 2026, not by Doug. Touches `R/output.R` and **`src/jsdm.cpp`**. Revert or rework freely; it has had no human review beyond Doug asking for the fix. Full account in Fixed bugs 34.
+
+    **What was broken.** `X_psi` and `X_s` had no defaults, so the `is.null()` guards you had written could never fire. Underneath that, the guards used `&` rather than `&&`, which evaluates both sides, so the missing promises were forced even when the caller had asked for neither term. `predictNewSites(fit, useEnvCov = FALSE, useSpatial = FALSE)` failed too. There was no way to call the function without supplying both matrices.
+
+    Fixing the guards made three code paths reachable for the first time, and all three were broken. Two of those fixes are in your C++, which is the main reason this needs your eyes:
+
+    (a) `computeNewOutputs()` sliced `Ks_all` and `Bs_output` before the `useSpatial` check, so `useSpatial = FALSE` aborted with `Cube::slice(): index out of bounds`. Moved inside the guard.
+    (b) It read the new-site count as `X.n_rows` unconditionally, so `useEnvCov = FALSE` returned a silently empty result. Now taken from whichever term is active.
+    (c) R-side: a fit with no spatial field returns `Bs_output` with a zero-length first dimension, which collapses under `apply()` and broke the `aperm()`. Only reshaped when the spatial term is in play.
+
+    **Decision 1: is the tri-state the API you want?** `useEnvCov` and `useSpatial` now default to `NULL` and follow the pattern `useBiotic` already used: `NULL` uses the term if the fit estimated it, `TRUE` uses it and errors if it did not, `FALSE` skips it. This matches what their roxygen always promised, which was unreachable because `useSpatial` hard-stopped instead of ignoring. It is strictly more permissive, so no call that worked before changes behaviour. But it does change two documented defaults from `TRUE` to `NULL`.
+
+    **Decision 2: should "no covariates and no spatial" be an error, or should the function take `n_new`?** With both terms off, nothing in the arguments says how many new sites to predict for; the answer would be the intercept plus the biotic term, identical at every site. It currently errors. The alternative is an explicit `n_new` argument, which would make that a legitimate call. I chose the error because it is the conservative reading, but it is a design question, not a bug.
+
+    ALEX TO REVIEW THE FIX
+
 ## **B. Inference-affecting bugs (wrong numbers, silently) (Alex)**
 
 1.  **`sample_ls()` evaluates the wrong density, so the GP length-scale is never recovered and rails at the top of its grid.** Found 27 July 2026 while writing the test suite.
@@ -220,7 +236,7 @@ output: html_document
 
         ALEX TO DISABLE IT FOR NOW, BUT LET'S KEEP IT THERE
 
-2.  ~~**`predictNewSites()` still has no defaults for `X_psi` / `X_s`**~~ **FIXED 30 July 2026 by Claude, see Fixed bugs 34.** Both now default to `NULL`, `useEnvCov`/`useSpatial` adopt `useBiotic`'s tri-state, and three downstream defects the fix exposed are also closed. Needs Alex's review: it touches `src/jsdm.cpp`.
+2.  ~~**`predictNewSites()` still has no defaults for `X_psi` / `X_s`**~~ **FIXED 30 July 2026 by Claude, see Fixed bugs 34.** Both now default to `NULL`, `useEnvCov`/`useSpatial` adopt `useBiotic`'s tri-state, and three downstream defects the fix exposed are also closed. Needs Alex's review, filed as section A item 4: it touches `src/jsdm.cpp` and changes two documented defaults.
 
 3.  **Assorted smaller items.**
 
