@@ -120,7 +120,7 @@ Baseline as of 30 July 2026, after the group D item 4 phase 1 imports: **0 error
 
 **Open, and tracked in `TODO.md`:**
 
-- **WARNING: bitwise `&` on boolean operands** (`src/functions.cpp:670-676`, `src/jsdm.cpp:252`). Blocks CRAN. Group C. Not a correctness bug in C++, since `==` binds tighter than `&` and the operands have no side effects; it just does not short-circuit.
+- **WARNING: package cannot be installed cleanly.** **The package's own C++ is now warning-free** as of 30 July: the bitwise-`&` sites and the unused `TRUNC`/`TRUNC_RECIP` constants are gone (section A item 6). What remains is **not ours**: the sole significant warning comes from R's own header, `R_ext/Boolean.h:62`, where a `#pragma` names a warning group this clang version does not recognise. That is an R-build and toolchain artifact, environment-specific, and not fixable from this package. **Do not chase it, and do not re-file it.**
 - **WARNING: `plotSpeciesResponseCurve.Rd` documents arguments the function does not have.** Group C. Symptom of that function being exported with an internal helper's signature.
 - **NOTE: undefined globals.** Group D item 4 phase 2, which separates data-masked column names from genuinely undefined objects in dead code. The companion `tidyr` NOTE is **fixed**: phase 1 added the three imports that live code actually needed. Note this was not purely cosmetic; `pivot_longer` was unresolvable from the installed namespace, so the GAM functions would have failed on any categorical covariate.
 

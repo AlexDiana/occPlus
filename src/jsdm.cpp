@@ -17,8 +17,11 @@ using namespace Rcpp;
 
 // [[Rcpp::depends(RcppArmadillo)]]
 
-const double TRUNC = .64;
-const double TRUNC_RECIP = 1.0 / .64;
+// TRUNC = 0.64 and TRUNC_RECIP = 1/0.64, the truncation point from
+// Windle (2013), were declared here but never used, and drew an
+// -Wunused-const-variable warning that made R CMD check report a
+// WARNING on installation. Removed rather than silenced; restore them
+// if the Polya-Gamma sampler is ever changed to use the truncated form.
 
 // Mathematical constants computed using Wolfram Alpha
 #define MATH_PI        3.141592653589793238462643383279502884197169399375105820974
@@ -200,7 +203,7 @@ bool isPointInBandRight(arma::mat X_tilde, arma::vec x_grid, arma::vec y_grid, i
 
   for(int k = 0; k < X_tilde.n_rows; k++){
 
-    if((X_tilde(k,1) < y_grid[j + 1]) & (X_tilde(k,1) > y_grid[j - 1])){
+    if((X_tilde(k,1) < y_grid[j + 1]) && (X_tilde(k,1) > y_grid[j - 1])){
       if(X_tilde(k,0) < x_grid[i + 1]){
         return(true);
       }
@@ -216,7 +219,7 @@ bool isPointInBandLeft(arma::mat X_tilde, arma::vec x_grid, arma::vec y_grid, in
 
   for(int k = 0; k < X_tilde.n_rows; k++){
 
-    if((X_tilde(k,1) < y_grid[j + 1]) & (X_tilde(k,1) > y_grid[j - 1])){
+    if((X_tilde(k,1) < y_grid[j + 1]) && (X_tilde(k,1) > y_grid[j - 1])){
       if(X_tilde(k,0) > x_grid[i - 1]){
         return(true);
       }
@@ -232,7 +235,7 @@ bool isPointInBandUp(arma::mat X_tilde, arma::vec x_grid, arma::vec y_grid, int 
 
   for(int k = 0; k < X_tilde.n_rows; k++){
 
-    if((X_tilde(k,0) < x_grid[i + 1]) & (X_tilde(k,0) > x_grid[i - 1])){
+    if((X_tilde(k,0) < x_grid[i + 1]) && (X_tilde(k,0) > x_grid[i - 1])){
       if(X_tilde(k,1) > y_grid[j-1]){
         return(true);
       }
@@ -249,7 +252,7 @@ bool isPointInBandDown(arma::mat X_tilde, arma::vec x_grid, arma::vec y_grid, in
 
   for(int k = 0; k < X_tilde.n_rows; k++){
 
-    if((X_tilde(k,0) < x_grid[i + 1]) & (X_tilde(k,0) > x_grid[i - 1])){
+    if((X_tilde(k,0) < x_grid[i + 1]) && (X_tilde(k,0) > x_grid[i - 1])){
       if(X_tilde(k,1) < y_grid[j+1]){
         return(true);
       }

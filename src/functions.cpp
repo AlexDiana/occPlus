@@ -33,8 +33,11 @@ void setOccJSDMSeed(unsigned int seed) {
 
 // [[Rcpp::depends(RcppArmadillo)]]
 
-const double TRUNC = .64;
-const double TRUNC_RECIP = 1.0 / .64;
+// TRUNC = 0.64 and TRUNC_RECIP = 1/0.64, the truncation point from
+// Windle (2013), were declared here but never used, and drew an
+// -Wunused-const-variable warning that made R CMD check report a
+// WARNING on installation. Removed rather than silenced; restore them
+// if the Polya-Gamma sampler is ever changed to use the truncated form.
 
 // Mathematical constants computed using Wolfram Alpha
 #define MATH_PI        3.141592653589793238462643383279502884197169399375105820974
@@ -667,13 +670,13 @@ List sample_pq_cpp(NumericMatrix& c_imk,
 
         if(y_NA(i,s) == 0){
 
-          if(idx_p_k[i] == (l+1) & w(idx_ki, s) == 1 & c_imk(i,s) == 1){
+          if(idx_p_k[i] == (l+1) && w(idx_ki, s) == 1 && c_imk(i,s) == 1){
             w1_primerl_cases_1 += 1;
-          } else if(idx_p_k[i] == (l+1) & w(idx_ki, s) == 1 & c_imk(i,s) == 0){
+          } else if(idx_p_k[i] == (l+1) && w(idx_ki, s) == 1 && c_imk(i,s) == 0){
             w1_primerl_cases_0 += 1;
-          } else if(idx_p_k[i] == (l+1) & w(idx_ki, s) == 0 & c_imk(i,s) == 2){
+          } else if(idx_p_k[i] == (l+1) && w(idx_ki, s) == 0 && c_imk(i,s) == 2){
             w0_primerl_cases_1 += 1;
-          } else if(idx_p_k[i] == (l+1) & w(idx_ki, s) == 0 & c_imk(i,s) == 0){
+          } else if(idx_p_k[i] == (l+1) && w(idx_ki, s) == 0 && c_imk(i,s) == 0){
             w0_primerl_cases_0 += 1;
           }
 
