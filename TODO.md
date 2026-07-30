@@ -114,6 +114,44 @@ editor_options:
 
         ALEX TO REVIEW THE FIX
 
+3.  **Investigate why `beta_theta`'s posterior gets overconfident as M
+    rises, and review the new `listPriors` hook added to test it.** Two
+    experiments this week, both by Claude, both negative -- the cause is
+    not found, and it needs someone who knows the sampler.
+
+    **The finding.** `beta_theta` coverage falls *monotonically* with M
+    (0.747 at M2 down to 0.579 at M20) while bias stays small and flat
+    throughout -- a shrinking interval around a bias that is not itself
+    shrinking. That is the signature of overconfidence, not of
+    insufficient data: more information makes it worse, not better. Full
+    numbers in group B item 4 and `PLAN.md` 13.7.
+
+    **Two candidate causes, both ruled out.** (a) `B_betatheta`'s slope
+    prior variance, hard-coded to `diag(2)` -- tightened it 4x (SD 1.41
+    to 0.71) and coverage moved by 0.001-0.003, noise against the 3.1%
+    SE. (b) Pseudo-replication in `X_theta` -- checked whether the M
+    samples at a site share a covariate value, which would make added M
+    look like independent information without being any. It does not:
+    `X_theta` is drawn independently per sample, not per site
+    (`R/simulateData.R:126`). Detail in `PLAN.md` 13.8-13.9.
+
+    **So the cause is in the likelihood or the sampler's variance
+    computation for `beta_theta`.** Worth a look: how the latent `w`/`z`
+    state is aggregated across a site's M samples in
+    `sample_beta_cpp_TS()` / `sample_betatheta_cpp_parallel()`
+    (`src/functions.cpp`), or a numerical issue in the Polya-Gamma
+    update they call. This is a sampler-code question -- the two obvious
+    prior and data-generation explanations are both closed off.
+
+    **What to review alongside it.** Testing (a) needed a real
+    `listPriors` hook, since `B_betatheta`'s variance had none, unlike
+    `p`/`q`/`theta0`. Added `listPriors$b_betatheta_slope_var` to
+    `R/runOccJSDM.R`, default unchanged at 2, so nothing changes
+    unless a caller sets it. Tested in `test-regression-bugs.R` and it
+    reaches the sampler correctly, but has had no review from you.
+
+    ALEX TO INVESTIGATE THE SAMPLER
+
 ## **B. Inference-affecting bugs (wrong numbers, silently) (Alex)**
 
 1.  **`sample_ls()` evaluates the wrong density, so the GP length-scale
@@ -373,28 +411,12 @@ editor_options:
     step is not more data but finding what makes the interval
     overconfident.
 
-    **Tighter-prior result, 30 July 2026 (`PLAN.md` 13.9): disproved.**
-    Tested the `diag(2)` slope-variance hypothesis directly -- added a
-    `listPriors$b_betatheta_slope_var` override (`R/runOccJSDM.R`,
-    default unchanged at 2) and re-ran M10/M20 at variance 0.5 (SD 0.71
-    against the default's 1.41). Coverage moved by 0.001-0.003 -- noise.
-    **The prior's width is not the cause.**
-
-    Also checked and ruled out: pseudo-replication in `X_theta`, i.e.
-    whether the M samples at a site share a covariate value, which would
-    make added M look like independent information without being any. It
-    does not -- `X_theta` is drawn independently per sample
-    (`R/simulateData.R:126`), not per site.
-
-    **So the overconfidence is in the likelihood or the sampler's
-    variance computation for `beta_theta`, not the prior.** Candidates:
-    how the latent `w`/`z` state is aggregated across a site's M
-    samples, or a numerical issue in the Polya-Gamma update
-    (`sample_beta_cpp_TS`/`sample_betatheta_cpp_parallel`,
-    `src/functions.cpp`). This needs someone who knows that code, not
-    another prior-tuning experiment.
-
-    ALEX TO INVESTIGATE: the sampler, not the prior.
+    **Tighter-prior result, 30 July 2026: disproved.** Tightening
+    `B_betatheta`'s slope variance 4x moved coverage by 0.001-0.003 --
+    noise. A second candidate, pseudo-replication in `X_theta`, is also
+    ruled out. **Full detail and the review item are above, under
+    "Review Claude fixes" item 3**: this needs sampler-level
+    investigation, not another prior experiment.
 
 5.  **`theta0` now overcovers at 0.978-0.985, having been near
     nominal.** Measured by the same re-run (`PLAN.md` 12.3).
