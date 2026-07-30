@@ -328,9 +328,51 @@ None of this is reachable from an exported function, but it will draw `R CMD che
 
     CLAUDE TO DEPRECATE BOTH
 
-4.  **Missing imports for code that *is* live**: `plotCovariateTrend()` (`R/jsdmfun.R:1552`) calls `pivot_longer()` and `createSplinesObjects()` (`:245`) calls `ns()`, but neither `tidyr` nor `splines` is imported in `NAMESPACE`. (`createSplinesObjects()` also ignores its own `df` argument and hard-codes `df = 5`.) `rnbinom()` (`R/jsdmfun.R:451`) and `dnbinom()` (`:594-595`) are likewise not imported from `stats`.
+4.  **Missing imports, and the wider `R CMD check` undefined-globals NOTE.** Plan written 30 July 2026 from a full `R CMD check` run, which corrected this entry's premise.
 
-    CLAUDE TO FIX
+    **This entry named the wrong functions.** It cited `plotCovariateTrend()` as the live `tidyr` user and `createSplinesObjects()` as the live `splines` user. Both are **dead**: zero call sites, not exported. Verified by mapping every symbol in the check NOTE to its enclosing function and counting callers.
+
+    **What is actually live and missing an import:**
+
+    | symbol | needs | live caller |
+    |---|---|---|
+    | `pivot_longer` | `tidyr` | `returnCovariateEffect_base`, `plotCovariateEffect_base` (Alex's GAM functions, both exported, both used in the vignette) |
+    | `setNames` | `stats` | `create_covariates_matrix`, `transform_new_covariates` (the latter is on `predictNewSites()`'s path) |
+    | `rnbinom` | `stats` | `simulateData`, reached from `simulateOccJSDMData()` |
+
+    **Dead-code-only, so do not import these; delete the code instead** (items 1-3 and 5 above): `bs` from `splines` in `createSplinesObjects()`, `dnbinom` from `stats` in `sample_rnb()`, and the third `pivot_longer` in `plotCovariateTrend()`. `splines` is not in `DESCRIPTION` at all, so importing it would add a dependency purely to support code that should not ship.
+
+    **The NOTE is three different problems wearing one hat.** Roughly 90 symbols are listed, and treating them uniformly is the trap:
+
+    (a) **Genuine missing imports.** The three rows above. `R CMD check` names `dnbinom`, `rnbinom` and `setNames` itself in its "Consider adding" line; it cannot name `pivot_longer` because it does not know which package that is meant to come from.
+    (b) **Data-masked column names, which are false positives.** `x`, `y`, `species`, `Min`, `Max`, `2.5%`, `97.5%`, `Output`, `value`, `upper`, `lower`, `iter`, `chain` and so on are `dplyr`/`ggplot2` NSE references, not undefined objects. These are silenced with `utils::globalVariables()`, or avoided with the `.data$` pronoun. Silencing is cosmetic; the NOTE is the only symptom.
+    (c) **Genuinely undefined objects in dead code, which are real bugs.** `computeBscoef`, `computePsiOutput`, `transformCoefficients`, `returnSpatialEffect`, `sample_beta_cpp`, `sample_beta_nocov_cpp` are functions that do not exist. `Ks_new`, `Xs_centers`, `X_ord`, `Tr`, `data_info`, `gt`, `gts` and the rest are undefined variables. All sit inside the functions already catalogued in items 1-3. These do not want imports; they want deleting.
+
+    **Sequencing matters, and it is the main thing to get right.** Do items 1-3 (deprecate the dead code) **first**. Category (c) then disappears entirely, and category (b) shrinks to whatever the surviving functions use. Doing item 4 first means writing `globalVariables()` entries for code that is about to be deleted, and then deleting them again.
+
+    **The fix, once the dead code is gone:**
+
+    1.  Add `importFrom(tidyr, pivot_longer)` and `importFrom(stats, setNames, rnbinom)` via roxygen tags on the functions that use them. `tidyr` is already in `DESCRIPTION` Imports but nothing imports from it, which is its own NOTE: *"Namespace in Imports field not imported from: tidyr"*.
+    2.  Add a single `utils::globalVariables()` call in one package-level file for the surviving NSE names, with a comment saying what it is for. Do not scatter it.
+    3.  Re-run `R CMD check` and confirm the NOTE is gone rather than merely smaller.
+
+    **Do not attempt this until the vignette builds.** `R CMD check` cannot reach the code-inspection stage while the vignette errors, which it currently does (see item 6). The check above needed `--no-build-vignettes` to get this far.
+
+    CLAUDE TO FIX, AFTER ITEMS 1-3 AND THE VIGNETTE
+
+6.  **The vignette still does not build: `plotCovariateEffect()` has no default for `covNames`.** Found 30 July 2026 by `R CMD check`, which fails at `creating vignettes` before it reaches any code inspection.
+
+    `vignettes/occJSDM.Rmd:369-374` calls `plotCovariateEffect(fitmodel, idx_species = 1:10)` in an evaluated chunk. The signature is `(fitModel, covNames, idx_species, confidence)` and `covNames` has no default, so the chunk errors with `argument "covNames" is missing, with no default`.
+
+    **This is the second such failure in the same vignette.** Fixed bugs 31 fixed `plotCollectionRates()`, which the vignette also called in an evaluated chunk, and I noted at the time that the vignette could not have been rebuilt in a long while and that more was likely to surface. This is the more.
+
+    **Two possible fixes, and it is a design choice.** Either give `covNames` a `NULL` default resolving to all occupancy covariates, matching what Fixed bugs 33 did for `idx_species` on the same two functions; or change the vignette to name a covariate explicitly. The first is more consistent with the rest of `R/output.R`, where every plotting function defaults to "all of them".
+
+    **A CRAN blocker either way**: `R CMD check` builds vignettes, so the package cannot pass while this stands. Worth fixing before item 4, which cannot even be measured until the check runs to completion.
+
+    **Do not assume this is the last one.** The right move is to fix it, run `devtools::check()` to completion, and see what the next chunk does, rather than fixing this one and declaring the vignette healthy.
+
+    CLAUDE TO FIX, THEN RE-RUN check() TO SEE WHAT IS NEXT
 
 5.  **`sample_rnb()` cannot run as written** (new in `0abb104`, `R/jsdmfun.R:581-614`). Groundwork for the count-data item under *MEE paper*, not yet called from anywhere, but it has a scoping bug that will bite the moment it is wired up: `r_current <- rnb[s]` (`:590`) reads `rnb` inside the `sapply()` at `:588` whose result is *being assigned to* `rnb`, so at that point `rnb` does not exist in the function frame and lookup falls through to the namespace and fails with `object 'rnb' not found`. The current size vector needs to come in as an argument, e.g. `sample_rnb(z, eta, rnb, tune_sd = ...)`. Two more things to settle while there: `tune_sd = 5` is a random-walk SD on the *log* scale, so proposals land a factor of `exp(+/-10)` away and acceptance will be near zero (something in the 0.1-1 range is the usual starting point); and the prior terms are stubbed to `0` with the intended `dgamma()` commented out, referencing `prior_shape`/`prior_rate`, which are not defined anywhere. The Metropolis step itself looks right -- the `log(r_star) - log(r_current)` Jacobian is the correct correction for a log-scale random walk under a flat prior on `r`.
 
