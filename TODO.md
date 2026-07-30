@@ -226,18 +226,16 @@ Ten dead functions were moved to `deprecated/` on 30 July (section A item 1). Wh
     >
     > Hi all,
     >
-    > Announcing **occJSDM**, an R package for combining occupancy and joint species distribution modelling (<https://github.com/AlexDiana/occJSDM>). The package is 'eDNA-aware' and thus can be used on metabarcoding data.
+    > Announcing **occJSDM**, an R package for combining occupancy and joint species distribution modelling (<https://github.com/AlexDiana/occJSDM>).
     >
-    > Note this is **beta software**, under active development. We are validating it against simulated data where the true parameters are known, and the results so far are uneven: environmental effects on occupancy, trait-by-environment interactions, and Stage 2 false-positive rates all recover well, but we would treat pairwise species correlations, the spatial term, and collection-covariate effects with caution for now, and we are working on them.
+    > occJSDM extends the occPlus two-stage eDNA occupancy model of Ji et al. (2025, *Ecology Letters*, <doi:10.1111/ele.70302>) by adding a JSDM layer. Unusually for an occupancy model, false positives are estimated explicitly at both the field and lab stages and separately for each species and each primer.
     >
-    > occJSDM extends the occPlus two-stage eDNA occupancy model of Ji et al. (2025, *Ecology Letters*, <doi:10.1111/ele.70302>) by adding a JSDM layer.
-    >
-    > Unusually for an occupancy model, false positives are estimated explicitly rather than assumed away, at both the field and lab stages and separately for each species and each primer. This is what lets the model use metabarcoding data, where contamination and mis-assignment are expected rather than exceptional.
+    > Note this is **beta software**. We are validating it against simulated data. Environmental effects on occupancy, trait-by-environment interactions, and Stage 2 false-positive rates recover well, but we would treat pairwise species correlations, the spatial term, and collection-covariate effects with caution for now.
     >
     > Highlights:
     >
     > - Occupancy modelling: Accounts for both false-negative and false-positive error at two stages (field and lab), per species. Stage 1: estimates species eDNA collection probability in the field, given true eDNA presence at the site, and contamination probability, given true eDNA absence at the site. Stage 2: estimates species eDNA detection probability in the lab (i.e. successful DNA extraction, PCR, and sequencing), given successful eDNA collection in Stage 1, and contamination probability, given eDNA non-collection in Stage 1. In datasets where multiple primers have been used, each species' detection probability is estimated per primer (allowing one to compare each primer's efficiency for each species), while species occupancies are estimated using information across all primers. Both environmental and detection covariates are supported.
-    > - JSDM: Integrates the occupancy model with a JSDM: species fit jointly with nonlinear response curves (GAMs) and latent-factor residual correlations. The JSDM optionally supports species traits shaping occupancy responses (trait x env interactions, aka 'fourth-corner analyses') and spatial autocorrelation (GP kernel) across sites. Occupancies predicted at unsampled sites.
+    > - JSDM: Integrates the occupancy model with a JSDM: species fit jointly with nonlinear response curves and latent-factor residual correlations. The JSDM optionally supports species traits shaping occupancy responses (trait x env interactions, aka 'fourth-corner analyses') and spatial autocorrelation (GP kernel) across sites. Occupancies predicted at unsampled sites.
     > - occJSDM not only fits a two-stage occupancy model (both field and PCR replicates required), but if given simpler study designs, can collapse to a classical occupancy model (field replicates only) or to a pure JSDM (no replicates).
     > - MCMC fitting with diagnostics, variance partitioning, ordination, and pairwise residual correlation outputs built in.
     > - occJSDM leverages the taxonomic breadth of eDNA datasets by using ordination (each site's position on the latent axes, and each species' loadings on those axes) to predict species occupancies. Thus, each species' predicted occupancy at a site is informed by the estimated occupancies of the other species at that site, thereby using co-occurrence structure. We also allow species to borrow strength from other species sharing similar traits, including inferred traits, in contrast to the classical approach of having rare species borrow strength from abundant species, as is used in multi-species occupancy models.
@@ -245,46 +243,6 @@ Ten dead functions were moved to `deprecated/` on 30 July (section A item 1). Wh
     > Vignettes included for data simulation and model fitting/interpretation.
     >
     > Feedback, feature requests, and bug reports are very welcome.
-
-2.  **Review of the draft. Second pass, 30 July 2026 (Claude).**
-
-    **Fixed since the first pass:** em-dash in the subject, TeX-style quotes, "trait X env", "full-featured" (twice). Added on the first pass's recommendation: nonlinear response curves, prediction at unsampled sites, and "including inferred traits".
-
-    **The three new or unchecked claims all hold, with caveats.** Verified against the shipped fit: `returnVariancePartitioning()`, `returnOrdinationScores()` and `returnResidualCorrelationMatrix()` all run; `predictNewSites()` works for any combination of terms; and `splineVars = TRUE` expands each numeric occupancy covariate into a B-spline basis.
-
-    **Tighten "nonlinear response curves (GAMs)".** Three things a reader will assume that are not true:
-
-    - **It is a fixed-df regression spline, not a penalized smooth.** `splines::bs(col_data, df = 5)`, with df hard-coded to 5 and no smoothness selection. The only regularisation is the normal prior on the coefficients. Anyone reading "GAM" will picture `mgcv::s()` with REML or GCV choosing the smoothness. Defensible in the broad sense, but "spline-based nonlinear response curves" would not set an expectation the code does not meet.
-    - **It is off by default.** `splineVars` defaults to `FALSE`, so the advertised behaviour is opt-in.
-    - **It applies to occupancy covariates only.** `spline_vars` is hard-coded `FALSE` for the collection-covariate and spatial matrices. Since the previous bullet says "Both environmental and detection covariates are supported", a reader may reasonably infer the nonlinearity covers both.
-
-    Also worth knowing, though probably too much detail for an announcement: a covariate needs at least 50 unique values (`df_spline * min_obs_per_df`) or it silently falls back to linear with a message.
-
-    **Variance partitioning is the one highlighted output with no calibration evidence either way.** It runs, but it is not among the parameter blocks the coverage study checks, so unlike every other claim here there is neither support nor a known problem. Worth being aware of before it is quoted.
-
-    **Still unaddressed from the first pass: four highlighted features have open inference bugs.** This is the substantive point and it is unchanged.
-
-    - **Residual correlations and ordination**, highlighted in three of the five bullets, are the least reliable output in the package: inflated by up to 0.612, covering at 0.74-0.77 (group B item 2).
-    - **Spatial autocorrelation (GP kernel)**: the length-scale is never recovered and the spatial term of every `useSpatField = TRUE` fit is biased (group B item 1).
-    - **"Both environmental and detection covariates"**: environmental holds at 0.947, collection covariates cover at 0.77 and worsen with more data (group B item 4).
-    - **Baseline occupancy**: `B0`'s bias doubled, invisibly to coverage (group B items 5 and 6).
-
-    Safe to claim on the study's evidence: environmental effects (0.947), the trait-by-environment term (0.948), Stage 2 false-positive rates (0.945).
-
-    "Beta software, under active development" will read as "the API may change", not "these particular outputs are currently miscalibrated". A single sentence naming the two or three outputs to treat with caution would close that gap without undermining the release.
-
-    **The borrowing-strength contrast is accurate**, and an earlier version of this review wrongly said otherwise. An MSOM's community mean is estimated most sharply by well-sampled species, so rare species are in practice pulled toward what common species look like. And occJSDM genuinely differs: `sample_sigmab()` takes the residual after `computeBtcoef(G, Tr, A, C, ...)`, which is `Tr %*% G + A %*% C + Btilde`, so the shrinkage target is the trait-predicted value rather than a community mean. The `A %*% C` term is why "including inferred traits" is right to add. This is also the best-validated claim in the announcement.
-
-    **Ordering.** The genuinely distinctive claim is false positives modelled at both stages, per species and per primer. False-positive occupancy models are rare, and combining one with a JSDM appears to be new. It is currently the densest paragraph in the list. Consider leading with it in one short sentence before the detail.
-
-    **Two sentences added to the draft on Doug's instruction, 30 July 2026.**
-
-    - A calibration caveat attached to the beta notice, naming what recovers well (environmental effects, trait-by-environment, Stage 2 false positives) and what to treat with caution (pairwise species correlations, the spatial term, collection-covariate effects). Framed as "we are validating against simulated data", which is itself a credibility signal most packages cannot make, so it should read as rigour rather than apology. `B0`'s bias was deliberately left out: its *coverage* is fine, the problem is only visible in the bias, and naming it would need more explanation than an announcement can carry. Worth revisiting if it is not fixed before release.
-    - A lead sentence on false positives, placed before "Highlights" so the distinguishing feature is stated once in plain terms before the dense paragraph.
-
-    **One thing to check before sending.** The false-positive sentence claims this is "unusual", which is safe. It stops short of claiming it is novel to combine false-positive occupancy with a JSDM, which is what I suspect is true but have not verified against the literature. If you are confident of it, that is a stronger sentence and worth making; the claim is yours to stand behind, not mine.
-
-    DOUG TO REVISE
 
 # **MEE paper**
 
