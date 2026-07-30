@@ -146,9 +146,9 @@ editor_options:
     **What to review alongside it.** Testing (a) needed a real
     `listPriors` hook, since `B_betatheta`'s variance had none, unlike
     `p`/`q`/`theta0`. Added `listPriors$b_betatheta_slope_var` to
-    `R/runOccJSDM.R`, default unchanged at 2, so nothing changes
-    unless a caller sets it. Tested in `test-regression-bugs.R` and it
-    reaches the sampler correctly, but has had no review from you.
+    `R/runOccJSDM.R`, default unchanged at 2, so nothing changes unless
+    a caller sets it. Tested in `test-regression-bugs.R` and it reaches
+    the sampler correctly, but has had no review from you.
 
     ALEX TO INVESTIGATE THE SAMPLER
 
