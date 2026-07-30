@@ -96,7 +96,7 @@ output: html_document
     **What the knob does.** All three arms below are M = 2, R = 50, paired on identical truths, varying only `b_betatheta_slope_var`:
 
     | variance                 | `B0` bias  | `beta_theta` coverage | `theta0` coverage |
-    |--------------------|-----------------|------------------|-----------------|
+    |--------------------------|------------|-----------------------|-------------------|
     | 2 (your current default) | -0.160     | 0.747                 | 0.986             |
     | 0.5                      | -0.106     | 0.707                 | 0.982             |
     | 0.1                      | **-0.044** | **0.653**             | 0.980             |
@@ -381,7 +381,7 @@ Counts by file: `mcmcfun.R` 17, `jsdmfun.R` 17, `output.R` 3, `diagnostics.R` 1,
     **What is actually live and missing an import:**
 
     | symbol | needs | live caller |
-    |------------------------|------------------------|------------------------|
+    |----|----|----|
     | `pivot_longer` | `tidyr` | `returnCovariateEffect_base`, `plotCovariateEffect_base` (Alex's GAM functions, both exported, both used in the vignette) |
     | `setNames` | `stats` | `create_covariates_matrix`, `transform_new_covariates` (the latter is on `predictNewSites()`'s path) |
     | `rnbinom` | `stats` | `simulateData`, reached from `simulateOccJSDMData()` |
