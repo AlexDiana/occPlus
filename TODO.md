@@ -96,7 +96,7 @@ output: html_document
     **What the knob does.** All three arms below are M = 2, R = 50, paired on identical truths, varying only `b_betatheta_slope_var`:
 
     | variance                 | `B0` bias  | `beta_theta` coverage | `theta0` coverage |
-    |--------------------------|------------|-----------------------|-------------------|
+    |--------------------|-----------------|------------------|-----------------|
     | 2 (your current default) | -0.160     | 0.747                 | 0.986             |
     | 0.5                      | -0.106     | 0.707                 | 0.982             |
     | 0.1                      | **-0.044** | **0.653**             | 0.980             |
@@ -368,7 +368,7 @@ Counts by file: `mcmcfun.R` 17, `jsdmfun.R` 17, `output.R` 3, `diagnostics.R` 1,
 
 2.  `R/jsdmfun.R`. **The four `sample_*` functions are DONE, 30 July 2026** (Claude): `sample_BCsL()`, `sample_U()`, `sample_Br()` and `sample_BL_fixed()` moved to `deprecated/R/jsdmfun-dead-samplers.R`, per Doug's scoping to sampler code only. All four were unreachable (no callers in `R/`, `tests/` or `vignettes/`, not in `NAMESPACE`, no string references so nothing could reach them via `do.call()`/`get()`/`match.fun()`) and all four referenced undefined globals, so none could have run as written. Superseded by the `_cpp` implementations. Measured effect: `R CMD check`'s undefined-globals NOTE fell from 84 symbols to 80, losing exactly `U`, `gt`, `gts` and `computeBscoef`. 167 tests unchanged.
 
-    **Still open in this item, deliberately.** Four more functions listed here are dead by the same test but are **not** sampler code, so Doug's directive did not cover them: `computePredictiveProbs()` (references `fitModel`, `psi_output`, `X_ord`, `beta_ord_output`, none of which exist), `partition_r2()` (calls `pseudo_R2()` with one argument; it takes two), and the pair `returnSpatialEffectMean()` / `plotSpatialEffect()` (reference a global `Xs_centers` and a nonexistent `returnSpatialEffect()`).
+    **Still open in this item, deliberately.** **Four more functions** listed here are dead by the same test but are **not** sampler code, so Doug's directive did not cover them: `computePredictiveProbs()` (references `fitModel`, `psi_output`, `X_ord`, `beta_ord_output`, none of which exist), `partition_r2()` (calls `pseudo_R2()` with one argument; it takes two), and the pair `returnSpatialEffectMean()` / `plotSpatialEffect()` (reference a global `Xs_centers` and a nonexistent `returnSpatialEffect()`).
 
     Two of them look like unfinished intent rather than abandoned code, which is why they were not swept up: `partition_r2()` relates to the live *MEE paper* item on site variance partitioning, and the spatial pair is the only spatial-field plotting anywhere in the package. `computePredictiveProbs()` looks straightforwardly superseded by `predictNewSites()`.
 
@@ -385,7 +385,7 @@ Counts by file: `mcmcfun.R` 17, `jsdmfun.R` 17, `output.R` 3, `diagnostics.R` 1,
     **What is actually live and missing an import:**
 
     | symbol | needs | live caller |
-    |----|----|----|
+    |------------------------|------------------------|------------------------|
     | `pivot_longer` | `tidyr` | `returnCovariateEffect_base`, `plotCovariateEffect_base` (Alex's GAM functions, both exported, both used in the vignette) |
     | `setNames` | `stats` | `create_covariates_matrix`, `transform_new_covariates` (the latter is on `predictNewSites()`'s path) |
     | `rnbinom` | `stats` | `simulateData`, reached from `simulateOccJSDMData()` |
