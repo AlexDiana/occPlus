@@ -50,11 +50,8 @@ output: html_document
 
 ## A. Review Claude's changes (Alex)
 
-Every code change Claude made, newest first. None has had human review beyond Doug asking for it. 
-All are recoverable from git; revert or rework freely. Each says what to check. 
-Full detail for each is in *Fixed bugs*, which is the record; this section is the queue.
+Every code change Claude made, newest first. None has had human review beyond Doug asking for it. All are recoverable from git; revert or rework freely. Each says what to check. Full detail for each is in *Fixed bugs*, which is the record; this section is the queue.
 
- 
 1.  **`set.seed()` did not control any C++ sampler.** 29 July, `src/rng.h` (new), `src/functions.cpp`, `src/jsdm.cpp`, `R/runOccJSDM.R`. Your fix for the OpenMP race was correct, but the replacement engines never read R's RNG state, so two fits under one seed differed by 5.09 on `B0_output`.
 
     **To check:** the design in `src/rng.h`, which documents three traps worth knowing before touching it. Also two questions: (a) is thread-count invariance worth having? Reproducibility currently holds for a given thread count. (b) what does `R CMD config SHLIB_OPENMP_CXXFLAGS` return on your machine? It is empty on Doug's, so every `#pragma omp` compiles to a no-op there and the package runs single-threaded.
@@ -95,7 +92,7 @@ ALEX: We don't care about reproducibility.
 
     ALEX TO INVESTIGATE THE SAMPLER
 
-5.  **Decide `b_betatheta`'s slope prior variance. It trades `B0` bias against `beta_theta` coverage.** Measured at `M = 2`, paired on identical truths, varying only that variance:
+4.  **Decide `b_betatheta`'s slope prior variance. It trades `B0` bias against `beta_theta` coverage.** Measured at `M = 2`, paired on identical truths, varying only that variance:
 
     - variance 2, your current default: `B0` bias -0.160, `beta_theta` coverage 0.747
     - variance 0.5: `B0` bias -0.106, `beta_theta` coverage 0.707
@@ -107,13 +104,11 @@ ALEX: We don't care about reproducibility.
 
     ALEX TO DECIDE THE VALUE (or that item 4 supersedes this)
 
-6.  **`B0`'s bias doubled, and coverage does not show it.** Between the pre- and post-fix runs on identical data, nine of ten scenarios moved more negative: overall -0.135 to -0.228. Coverage held at 0.943 throughout, because the intervals are wide enough to absorb the shift, so this is invisible in the headline table and shows only in the bias column.
+5.  **`B0`'s bias doubled, and coverage does not show it.** Between the pre- and post-fix runs on identical data, nine of ten scenarios moved more negative: overall -0.135 to -0.228. Coverage held at 0.943 throughout, because the intervals are wide enough to absorb the shift, so this is invisible in the headline table and shows only in the bias column.
 
     Cause is now most likely the `B_betatheta` widening; see item 5, where the decision lives. `B0` is a headline quantity for a JSDM, so this wants settling before the paper reports species intercepts.
 
-ALEX RESPONSE: WE COULD ADD A SIMULATION STUDY ON THE ONE-STAGE MODEL ONLY, THAT WOULD REVEALE
-WHETHER THERE IS ANY ISSUE IN B0 (since there is no beta_theta). If there is no issue, we could
-delete this point and be sure that the issue is only beta_theta.
+ALEX RESPONSE: WE COULD ADD A SIMULATION STUDY ON THE ONE-STAGE MODEL ONLY, THAT WOULD REVEALE WHETHER THERE IS ANY ISSUE IN B0 (since there is no beta_theta). If there is no issue, we could delete this point and be sure that the issue is only beta_theta.
 
 ## **C. Crashes, unreachable code paths, and API bugs (Alex)**
 
@@ -139,13 +134,13 @@ delete this point and be sure that the issue is only beta_theta.
 
     ALEX WILL REVIEW THE ABOVE
 
-4.  **`computeNewOutputs()` prints to stdout on every call and cannot be silenced.** `src/jsdm.cpp` runs `Rcout << "Computing species ..."` inside the species loop unconditionally, so every `predictNewSites()` call prints one line per species. `suppressMessages()` does not catch it, because `Rcout` is stdout rather than R's condition system.
+3.  **`computeNewOutputs()` prints to stdout on every call and cannot be silenced.** `src/jsdm.cpp` runs `Rcout << "Computing species ..."` inside the species loop unconditionally, so every `predictNewSites()` call prints one line per species. `suppressMessages()` does not catch it, because `Rcout` is stdout rather than R's condition system.
 
     It pollutes any script, vignette chunk or app that predicts in a loop, and unconditional console output from a compute function is the kind of thing CRAN reviewers pick up. **Fix:** a `verbose` argument defaulting to `FALSE`, threaded from `predictNewSites()`. Progress reporting is useful on a slow prediction, so making it opt-in beats deleting it.
 
     ALEX TO DECIDE AND FIX (touches `src/jsdm.cpp`)
-    
-  ALEX RESPONSE: Added a verbose argument
+
+ALEX RESPONSE: Added a verbose argument
 
 ## **D. Dead and broken internal code (Alex)**
 
@@ -217,39 +212,37 @@ Ten dead functions were moved to `deprecated/` on 30 July (section A item 1). Wh
 
 7.  **Performance of `runOccJSDM()`**
 
-ALEX NOTE: After manually comparing each MCMC step with microbenchmark(), the slowest step is definitely
-the sample_betatheta_cpp_parallel. There are few things to note, first the parallelisation does not seem to achieve much speed up, and 
-even in its current state, it is not macos compatible since it uses openMP (rather than RcppParallel).
-Moreover, the slowest step of the sampler seems to be the sample_Omega_cpp, which samples a very
-large number of PG variables (N x S). We could consider an alternative PG sampler to speed up the computation.
+ALEX NOTE: After manually comparing each MCMC step with microbenchmark(), the slowest step is definitely the sample_betatheta_cpp_parallel. There are few things to note, first the parallelisation does not seem to achieve much speed up, and even in its current state, it is not macos compatible since it uses openMP (rather than RcppParallel). Moreover, the slowest step of the sampler seems to be the sample_Omega_cpp, which samples a very large number of PG variables (N x S). We could consider an alternative PG sampler to speed up the computation.
 
-    Ordered by expected speedup per unit of effort. Nothing here has been profiled -- worth running `profvis::profvis()` on a vignette- sized fit first to confirm where the time actually goes.
+```         
+Ordered by expected speedup per unit of effort. Nothing here has been profiled -- worth running `profvis::profvis()` on a vignette- sized fit first to confirm where the time actually goes.
 
-    **Before profiling, check whether OpenMP is even on.** Measured 29 July 2026 on the macOS development machine: `R CMD config SHLIB_OPENMP_CXXFLAGS` is *empty*, so the `$(SHLIB_OPENMP_CXXFLAGS)` in `src/Makevars` expands to nothing, every `#pragma omp` compiles to a no-op, and `nm -u src/occJSDM.so | grep -c '__kmpc\|_GOMP'` returns 0. The package is running single-threaded here despite `libomp.dylib` appearing in `otool -L` (pulled in transitively by R's own libraries, not by us).
+**Before profiling, check whether OpenMP is even on.** Measured 29 July 2026 on the macOS development machine: `R CMD config SHLIB_OPENMP_CXXFLAGS` is *empty*, so the `$(SHLIB_OPENMP_CXXFLAGS)` in `src/Makevars` expands to nothing, every `#pragma omp` compiles to a no-op, and `nm -u src/occJSDM.so | grep -c '__kmpc\|_GOMP'` returns 0. The package is running single-threaded here despite `libomp.dylib` appearing in `otool -L` (pulled in transitively by R's own libraries, not by us).
 
-    Consequences: the parallel sections are currently dead weight on this machine, the thread-safety bug of Fixed bugs 26 could never have manifested locally, and any timing measured here says nothing about a Linux build where OpenMP *is* active. Worth confirming what Alex's machine and CRAN's check farm do before investing in items 1 and 2 below -- the payoff differs completely between the two cases.
+Consequences: the parallel sections are currently dead weight on this machine, the thread-safety bug of Fixed bugs 26 could never have manifested locally, and any timing measured here says nothing about a Linux build where OpenMP *is* active. Worth confirming what Alex's machine and CRAN's check farm do before investing in items 1 and 2 below -- the payoff differs completely between the two cases.
 
-    A.  **Parallelise over chains -- but use a PSOCK cluster, not `mclapply()`.** The `for (chain in 1:nchain)` loop (`R/runOccJSDM.R:895`) is serial and embarrassingly parallel; each chain touches only its own `*_output_chain` arrays, so running the chains in separate *processes* gives close to an `nchain`-fold speedup and sidesteps the RNG thread-safety problem in bug A.2 entirely (each process has its own RNG state). Portability constraints, though:
+A.  **Parallelise over chains -- but use a PSOCK cluster, not `mclapply()`.** The `for (chain in 1:nchain)` loop (`R/runOccJSDM.R:895`) is serial and embarrassingly parallel; each chain touches only its own `*_output_chain` arrays, so running the chains in separate *processes* gives close to an `nchain`-fold speedup and sidesteps the RNG thread-safety problem in bug A.2 entirely (each process has its own RNG state). Portability constraints, though:
 
-        - **`parallel::mclapply()` is not an option.** It is fork-based, and R ships a Windows stub whose body is `if (cores > 1L) stop("'mc.cores' > 1 is not supported on Windows")` -- a hard error, not a fallback. That would break the package on Alex's machine and on CRAN's Windows check. Even on Linux/macOS, forking a session with a live threaded-BLAS or OpenMP pool (OpenBLAS on most Linux distros, Accelerate on macOS) is a well-known deadlock source -- and doubly so if A.2 is fixed by *keeping* OpenMP.
-        - **`parallel::makeCluster()` (PSOCK) + `parLapply()` works on all three platforms**, and `parallel::clusterSetRNGStream()` gives reproducible, independent L'Ecuyer streams per chain, which is strictly better than the current situation. The cost is that workers are fresh R sessions (`clusterEvalQ(cl, library(occJSDM))`, plus serialising the data out and the per-chain arrays back) -- negligible against a multi-minute MCMC, though the return trip is not free given how large `Bs_output`/`U_output` are (see D.7).
-        - **Make it opt-in**: a `cores = 1L` argument, serial by default, so existing behaviour is unchanged and CRAN's two-core limit for examples/tests/vignettes is respected.
+    - **`parallel::mclapply()` is not an option.** It is fork-based, and R ships a Windows stub whose body is `if (cores > 1L) stop("'mc.cores' > 1 is not supported on Windows")` -- a hard error, not a fallback. That would break the package on Alex's machine and on CRAN's Windows check. Even on Linux/macOS, forking a session with a live threaded-BLAS or OpenMP pool (OpenBLAS on most Linux distros, Accelerate on macOS) is a well-known deadlock source -- and doubly so if A.2 is fixed by *keeping* OpenMP.
+    - **`parallel::makeCluster()` (PSOCK) + `parLapply()` works on all three platforms**, and `parallel::clusterSetRNGStream()` gives reproducible, independent L'Ecuyer streams per chain, which is strictly better than the current situation. The cost is that workers are fresh R sessions (`clusterEvalQ(cl, library(occJSDM))`, plus serialising the data out and the per-chain arrays back) -- negligible against a multi-minute MCMC, though the return trip is not free given how large `Bs_output`/`U_output` are (see D.7).
+    - **Make it opt-in**: a `cores = 1L` argument, serial by default, so existing behaviour is unchanged and CRAN's two-core limit for examples/tests/vignettes is respected.
 
-        Structurally this needs the chain body extracted into a function returning its own `*_output_chain` arrays -- mechanical, since the loop already writes only to per-chain objects. The one piece of genuinely shared state is the WAIC accumulator, which currently streams across chains sequentially via the single `currentWAICiter` counter introduced by the fix in Fixed bugs 9; parallelising forces one accumulator per chain plus a merge (`mean_lik` is a plain mean; `M2` merges with the standard parallel-variance formula), and the `if (numIters != (currentWAICiter - 1)) stop(...)` guard at `R/runOccJSDM.R:1251` will need to be restated in terms of the summed per-chain counts. The `z_output_mean` / `psi_output_mean` / `w_output_mean` / `theta_output_mean` running means merge by simple addition of the per-chain partials.
+    Structurally this needs the chain body extracted into a function returning its own `*_output_chain` arrays -- mechanical, since the loop already writes only to per-chain objects. The one piece of genuinely shared state is the WAIC accumulator, which currently streams across chains sequentially via the single `currentWAICiter` counter introduced by the fix in Fixed bugs 9; parallelising forces one accumulator per chain plus a merge (`mean_lik` is a plain mean; `M2` merges with the standard parallel-variance formula), and the `if (numIters != (currentWAICiter - 1)) stop(...)` guard at `R/runOccJSDM.R:1251` will need to be restated in terms of the summed per-chain counts. The `z_output_mean` / `psi_output_mean` / `w_output_mean` / `theta_output_mean` running means merge by simple addition of the per-chain partials.
 
-    B.  **Drop the `options(mc.cores = ...)` call in `.onLoad()`.** `R/zzz.R` sets a global option at load time, which changes the user's session state and affects every other package that reads `mc.cores` -- CRAN policy is explicitly against this. It should be replaced by the `cores` argument in D.1. (Also `parallel::detectCores()` can return `NA`, which `min(2L, NA)` happily propagates.)
+B.  **Drop the `options(mc.cores = ...)` call in `.onLoad()`.** `R/zzz.R` sets a global option at load time, which changes the user's session state and affects every other package that reads `mc.cores` -- CRAN policy is explicitly against this. It should be replaced by the `cores` argument in D.1. (Also `parallel::detectCores()` can return `NA`, which `min(2L, NA)` happily propagates.)
 
-    C.  **`computePsiCoef()` is called three times per iteration.** `R/jsdmfun.R:984`, `:1052` and `:1074`. Each call recomputes `t(computeBtcoef(...))`, `X %*% B` (`n x p` by `p x S`), `KsBproduct()` and `H %*% L`. The second call exists only to refresh `XB`/`SE` before `sample_U_cpp()`, but neither depends on `U`, so they are unchanged from the first call; and the third differs from the second only in the updated `U`. Call it once at the top, reuse `XB`/`SE`, then recompute just `UL <- U %*% L` and `eta <- XB + SE + UL` at the end -- roughly a two-thirds saving on this block.
+C.  **`computePsiCoef()` is called three times per iteration.** `R/jsdmfun.R:984`, `:1052` and `:1074`. Each call recomputes `t(computeBtcoef(...))`, `X %*% B` (`n x p` by `p x S`), `KsBproduct()` and `H %*% L`. The second call exists only to refresh `XB`/`SE` before `sample_U_cpp()`, but neither depends on `U`, so they are unchanged from the first call; and the third differs from the second only in the updated `U`. Call it once at the top, reuse `XB`/`SE`, then recompute just `UL <- U %*% L` and `eta <- XB + SE + UL` at the end -- roughly a two-thirds saving on this block.
 
-    D.  **Precompute the constant parts of the `c_imk` update.** `R/runOccJSDM.R:1104` recomputes `y > 0` (an `N3 x S` logical) every iteration although `y` never changes; and `w_all <- w[idx_w_k, , drop = FALSE]` (`:1100`) materialises a second `N3 x S` copy. Hoist `y_pos <- (y > 0)` above the chain loop, and consider folding the `w_all` gather into `sample_pq_cpp()` so the copy never reaches R.
+D.  **Precompute the constant parts of the `c_imk` update.** `R/runOccJSDM.R:1104` recomputes `y > 0` (an `N3 x S` logical) every iteration although `y` never changes; and `w_all <- w[idx_w_k, , drop = FALSE]` (`:1100`) materialises a second `N3 x S` copy. Hoist `y_pos <- (y > 0)` above the chain loop, and consider folding the `w_all` gather into `sample_pq_cpp()` so the copy never reaches R.
 
-    E.  **Make the WAIC accumulation optional, and cheaper.** The three `computeModelLoglik*_cpp()` calls evaluate `R::dbinom` over `n*S + N*S + N3*S` elements at every stored iteration. For binary data `dbinom(y, 1, p, log = TRUE)` is just `y*log(p) + (1-y)*log(1-p)`, several times faster than the general call, and `log(p)` / `log(1-p)` can be tabulated once per iteration (`sample_w_cim_cipp()` already does exactly this at `src/functions.cpp:458-469`). Also add a `computeWAIC = TRUE/FALSE` argument for users who are not doing model comparison.
+E.  **Make the WAIC accumulation optional, and cheaper.** The three `computeModelLoglik*_cpp()` calls evaluate `R::dbinom` over `n*S + N*S + N3*S` elements at every stored iteration. For binary data `dbinom(y, 1, p, log = TRUE)` is just `y*log(p) + (1-y)*log(1-p)`, several times faster than the general call, and `log(p)` / `log(1-p)` can be tabulated once per iteration (`sample_w_cim_cipp()` already does exactly this at `src/functions.cpp:458-469`). Also add a `computeWAIC = TRUE/FALSE` argument for users who are not doing model comparison.
 
-    F.  **Vectorise the starting-value loops.** `R/runOccJSDM.R:946-961` and `:974-981` are triple-nested R loops over `S x n x M` to initialise `w` and `z`. Negligible on the vignette dataset, slow for realistic `S`. Both reduce to grouped "any positive" reductions: `w` from `rowsum(y > 0, idx_w_k) > 0`, `z` from `rowsum(w, idx_z_w) > 0`.
+F.  **Vectorise the starting-value loops.** `R/runOccJSDM.R:946-961` and `:974-981` are triple-nested R loops over `S x n x M` to initialise `w` and `z`. Negligible on the vignette dataset, slow for realistic `S`. Both reduce to grouped "any positive" reductions: `w` from `rowsum(y > 0, idx_w_k) > 0`, `z` from `rowsum(w, idx_z_w) > 0`.
 
-    G.  **Do not allocate posterior arrays that are never filled.** The `summarisedLatentPresences = FALSE` half of this was resolved by the fix in Fixed bugs 15 (`w_output_chain` / `theta_output_chain` are now written rather than allocated and abandoned), so what remains is the sizing question: `Bs_output` (`ps x S x niter x nchain`) and `U_output` (`n x d x niter x nchain`) are the two largest components of the 62 MB `sampleresults.rda`; a `keep =` argument selecting which blocks to retain, or storing the latent-factor blocks pre-thinned, would address both the runtime allocation and the CRAN size blocker.
+G.  **Do not allocate posterior arrays that are never filled.** The `summarisedLatentPresences = FALSE` half of this was resolved by the fix in Fixed bugs 15 (`w_output_chain` / `theta_output_chain` are now written rather than allocated and abandoned), so what remains is the sizing question: `Bs_output` (`ps x S x niter x nchain`) and `U_output` (`n x d x niter x nchain`) are the two largest components of the 62 MB `sampleresults.rda`; a `keep =` argument selecting which blocks to retain, or storing the latent-factor blocks pre-thinned, would address both the runtime allocation and the CRAN size blocker.
 
-    H.  **Reduce the repeated `arma::inv()` calls in the samplers.** `sample_beta_cpp()` (`src/functions.cpp:249-253`), `sampleB()` and `sampleBuniv()` (`src/jsdm.cpp:579-583`, `:600-604`) each call `arma::inv(B)` twice plus `arma::inv(arma::trimatl(L))`, executed `S` or `n` times per iteration. In every caller `B` is diagonal, so this is a dense general inverse of a diagonal matrix. `sampleB_SoR()` (`src/jsdm.cpp:817-839`) already shows the right pattern: take the precision directly as an argument, and draw via a triangular solve against a standard normal instead of forming the inverse Cholesky factor explicitly.
+H.  **Reduce the repeated `arma::inv()` calls in the samplers.** `sample_beta_cpp()` (`src/functions.cpp:249-253`), `sampleB()` and `sampleBuniv()` (`src/jsdm.cpp:579-583`, `:600-604`) each call `arma::inv(B)` twice plus `arma::inv(arma::trimatl(L))`, executed `S` or `n` times per iteration. In every caller `B` is diagonal, so this is a dense general inverse of a diagonal matrix. `sampleB_SoR()` (`src/jsdm.cpp:817-839`) already shows the right pattern: take the precision directly as an argument, and draw via a triangular solve against a standard normal instead of forming the inverse Cholesky factor explicitly.
+```
 
 ## B. Doug to dos
 
