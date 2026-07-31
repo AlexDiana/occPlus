@@ -686,3 +686,25 @@ This narrows that investigation considerably. Four candidate causes are now rule
 - **The intercept path (here: nominal at 0.966 once the slopes are gone)**
 
 What remains is whatever handles the covariate columns specifically in the Polya-Gamma update. That is also the step Alex's `microbenchmark()` profiling identified as the slowest in the sampler, so the two lines of enquiry converge on the same code.
+
+### 15.6 Confirmation at R = 200 (31 July 2026)
+
+**Run:** 200 fits, 39.9 min, 0 failures.
+
+**Validity check passed.** Replicates 1-50 reuse the R = 50 seeds and reproduce that run **bit-for-bit**: 6,541 rows matched with truth *and* posterior means identical. So this is a genuine superset of 15.4 rather than a separate experiment, and the two can be read together. Worth noting that this check is only possible because `set.seed()` controls the sampler (*Fixed bugs* 28), the property judged not worth caring about at the user-facing level.
+
+**`B0` bias:**
+
+| arm | `beta_theta` slopes | bias | SE | from zero |
+|---|---|---|---|---|
+| `base` | present | -0.2078 | 0.0307 | 6.8 SE |
+| **`nocollcov`** | **absent** | **-0.0633** | 0.0192 | **3.3 SE** |
+| `binary` | none at all | +0.0122 | 0.0119 | 1.0 SE |
+
+**The residual is real.** At R = 50 it was 1.5 SE and 15.4 called it suggestive; at R = 200 it is 3.3 SE. Removing the slopes removes 70% of the bias, so fixing group B item 4 will recover most of `B0`, but a genuine remainder survives. `binary` at 1.0 SE from zero is what "no bias" looks like for comparison.
+
+**Consequence for the `B0` item: it cannot be closed.** Alex proposed deleting it if the one-stage test showed no issue. The test, in its sharpened form, shows a smaller issue rather than none. The item stays open with its cause now split: most of it is downstream of `beta_theta`, and a measurable part is not.
+
+**The 15.5 narrowing holds at four times the replicates.** `beta_theta` intercept-only coverage is **0.968** with SE 0.013, against 0.763 with the slopes present. Nominal on any reading. The overconfidence is specific to the covariate columns, and that conclusion no longer rests on 50 fits.
+
+**A cost note for future planning.** This took 39.9 min against a 30 min projection scaled linearly from the R = 50 run. The arithmetic no longer holds: RcppParallel now spawns TBB threads *inside* each PSOCK worker, so 5 workers oversubscribe the 4 performance cores. Load average ran at 15 with cpu/wall at 6.0x. Per-fit throughput therefore falls as worker count rises, and "fits/min x cores" over-predicts. Measure rather than extrapolate until the interaction between `--cores` and the internal threading is characterised.
