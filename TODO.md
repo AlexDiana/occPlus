@@ -94,9 +94,11 @@ Every code change Claude made, newest first. None has had human review beyond Do
 
 3.  **`beta_theta` intervals are overconfident, and it gets worse with more data.** Coverage 0.77 at the production `M = 2`, falling monotonically to 0.58 at `M = 20`, while bias stays small and flat. Shrinking intervals around a bias that is not shrinking is the signature of a real defect being exposed by more information, not fixed by it.
 
-    **Three candidate causes ruled out**, each by measurement: Stage 1 under-identification (more data makes it worse, not better); the slope prior's width (tightening it 20-fold at `M = 2` moves coverage the wrong way); and pseudo-replication in `X_theta` (it is drawn per sample, not per site).
+    **Narrowed 31 July: the defect is in the *slopes*, not in `beta_theta` as a block.** Refitting `base` with `ncov_theta = 0`, so only the intercept row remains, gives `beta_theta` coverage of **0.966**, i.e. nominal, against 0.763 with the slopes present (`PLAN.md` 15.5). Whatever is wrong is specific to the covariate columns.
 
-    **So the cause is in the likelihood or the sampler's variance computation for `beta_theta`.** Candidates: how the latent `w`/`z` state is aggregated across a site's `M` samples, or the Polya-Gamma update in `sample_beta_cpp_TS`/`sample_betatheta_cpp_parallel`. This needs someone who knows that code; it is not another prior experiment. Evidence in `PLAN.md` 13 and 14.
+    **Four candidate causes now ruled out**, each by measurement: Stage 1 under-identification (more data makes it worse, not better); the slope prior's width (tightening it 20-fold at `M = 2` moves coverage the wrong way); pseudo-replication in `X_theta` (it is drawn per sample, not per site); and the intercept path (nominal once the slopes are gone).
+
+    **So the cause is in whatever handles the covariate columns in the Polya-Gamma update**, in `sample_beta_cpp_TS`/`sample_betatheta_cpp_parallel`. Note this is the same step Alex's `microbenchmark()` profiling identified as the slowest in the sampler, so the calibration problem and the performance bottleneck sit in the same code. This needs someone who knows it; it is not another prior experiment. Evidence in `PLAN.md` 13, 14 and 15.5.
 
     ALEX TO INVESTIGATE THE SAMPLER
 
@@ -118,11 +120,19 @@ Every code change Claude made, newest first. None has had human review beyond Do
 
 ALEX RESPONSE: WE COULD ADD A SIMULATION STUDY ON THE ONE-STAGE MODEL ONLY, THAT WOULD REVEALE WHETHER THERE IS ANY ISSUE IN B0 (since there is no beta_theta). If there is no issue, we could delete this point and be sure that the issue is only beta_theta.
 
-    **Planned as `PLAN.md` 15, with two adjustments.** First, existing data already points hard at Alex's answer: `B0` bias separates perfectly on whether a cell estimates `beta_theta` at all. All nine cells that do have bias between -0.125 and -1.056; `binary`, the only cell that does not, is at **+0.012**. And 14.7 showed `B0`'s bias tracking `beta_theta`'s prior variance monotonically (-0.160 at variance 2, -0.044 at 0.1). Two independent lines, same direction.
+    **Ran 31 July (`PLAN.md` 15.4): Alex's hypothesis is 73% right, not 100%.** The designed arm was `base` with `ncov_theta = 0`, which keeps the two-stage machinery, the latent `w`/`z` and `p`/`q`/`theta0`, and removes only the `beta_theta` slopes. `B0` bias:
 
-    Second, **"one-stage only" is not the sharp test**: the `occupancy` cell is already one-stage and still estimates `beta_theta`, with bias -0.151, indistinguishable from the two-stage cells. What makes `binary` different is not the number of stages but that it has **no collection covariates**.
+    - `base`, slopes present: -0.208 (SE 0.031)
+    - `nocollcov`, slopes removed: **-0.057** (SE 0.039)
+    - `binary`, no `beta_theta` at all: +0.012 (SE 0.012)
 
-    So the designed arm is `base` with `ncov_theta = 0`: everything else held, only the `beta_theta` slopes removed. Verified feasible, and about 8 minutes at R = 50. If the bias vanishes, this item closes as downstream of item 4 and fixing `beta_theta` fixes both.
+    Removing the slopes removes **73% of the bias**, a shift of +0.151 at 3.0 SE. It does not eliminate it: the residual is 1.5 SE from zero, so suggestive rather than established, but it is four times `binary`'s.
+
+    **So this item cannot simply be deleted, which is what Alex proposed if there were no issue.** Fixing item 4 should recover most of `B0`, and that is the useful part of his prediction. But something in the two-stage machinery contributes independently of the collection-covariate slopes, and `B0` is a headline JSDM quantity whose coverage stays at 0.94-0.96 throughout and so will never reveal it.
+
+    **Suggested next step, cheap:** re-run the `nocollcov` arm at higher R to establish whether the -0.057 residual is real. At R = 50 it is 1.5 SE from zero; the arm costs 7.5 minutes, so R = 200 is half an hour and would settle it.
+
+    ALEX/CLAUDE: CONFIRM THE RESIDUAL BEFORE CLOSING
 
 ## **C. Crashes, unreachable code paths, and API bugs (Alex)**
 

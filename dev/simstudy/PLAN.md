@@ -648,3 +648,41 @@ One arm, identical to `base` except that the Stage 1 design matrix has no covari
 **Cost:** one arm at the `base` configuration, about 40 s per fit, so roughly 8 minutes at R = 50. Pair it against the existing `base` cell with `seed_label`, noting that pairing will be partial in the same way as the M ladder: `draw_truth()` consumes no RNG that depends on `ncov_theta`, so the drawn truths match, but the simulator's own stream diverges once it builds a differently-shaped `X_theta`.
 
 **Read it against bias, not coverage.** `B0` coverage sits at 0.94-0.96 in every cell including `binary`, so it will not distinguish anything here. This is the finding that only the bias column reveals, which is the whole reason it went unnoticed for two days.
+
+### 15.4 Results (31 July 2026)
+
+**Run:** 50 fits, 7.5 min, 0 failures. `beta_theta` came back with 10 elements per replicate rather than 20, confirming the slopes were genuinely absent and only the intercept row remained.
+
+**`B0` bias, arms not paired, so SEs are across replicates:**
+
+| arm | `beta_theta` slopes | `B0` bias | SE |
+|---|---|---|---|
+| `base` | present | -0.208 | 0.031 |
+| **`nocollcov`** | **absent** | **-0.057** | 0.039 |
+| `binary` | no `beta_theta` at all | +0.012 | 0.012 |
+
+Removing the slopes removes **73% of the bias**: a shift of +0.151 at 3.0 SE. But it does not eliminate it. The residual -0.057 sits between `base` and `binary`, and is 1.5 SE from zero, so it is suggestive rather than established.
+
+**This is outcome 3 of 15.3, not outcome 1.** Both mechanisms contribute. Most of `B0`'s bias is downstream of `beta_theta`, which is the useful part of Alex's prediction and means fixing `beta_theta` should recover most of `B0`. But something in the two-stage machinery contributes independently of the collection-covariate slopes, so the `B0` item cannot simply be deleted on this evidence.
+
+Worth stating plainly because the temptation is to round 73% up to "solved": if `beta_theta` were fixed tomorrow and `B0`'s bias fell to -0.057, that is still four times `binary`'s +0.012, in a headline JSDM quantity, and coverage would not reveal it.
+
+### 15.5 The unplanned finding: the defect is in the slopes, not the block
+
+`beta_theta` coverage, same two arms:
+
+| arm | elements per replicate | coverage |
+|---|---|---|
+| `base` | 20 (intercept + slope, x 10 species) | 0.763 |
+| `nocollcov` | 10 (intercept only) | **0.966** |
+
+**With the slopes removed, `beta_theta`'s intercept row is perfectly calibrated.** So the overconfidence tracked as `TODO.md` group B item 4 is not a property of `beta_theta` as a parameter block: it is specific to the **slope** estimation.
+
+This narrows that investigation considerably. Four candidate causes are now ruled out:
+
+- Stage 1 under-identification (13.7: more data makes it worse, not better)
+- The slope prior's width (14.7: tightening 20-fold at `M = 2` moves coverage the wrong way)
+- Pseudo-replication in `X_theta` (13.9: drawn per sample, not per site)
+- **The intercept path (here: nominal at 0.966 once the slopes are gone)**
+
+What remains is whatever handles the covariate columns specifically in the Polya-Gamma update. That is also the step Alex's `microbenchmark()` profiling identified as the slowest in the sampler, so the two lines of enquiry converge on the same code.

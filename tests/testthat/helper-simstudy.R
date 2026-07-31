@@ -130,7 +130,24 @@ simstudy_scenarios <- function() {
     mk("M2_tight",  M = 2L, K = 3L, seed_label = "mladder",
                     listPriors = list(b_betatheta_slope_var = 0.5)),
     mk("M2_vtight", M = 2L, K = 3L, seed_label = "mladder",
-                    listPriors = list(b_betatheta_slope_var = 0.1)))
+                    listPriors = list(b_betatheta_slope_var = 0.1)),
+
+    # --- No collection covariates (PLAN.md 15) --------------------------
+    #
+    # Alex's discriminator for the B0 bias, sharpened. B0 bias separates
+    # perfectly on whether a cell estimates beta_theta: -0.125 to -1.056 in
+    # the nine that do, +0.012 in `binary`, the one that does not. But
+    # `binary` differs in many ways at once, and `occupancy` is already
+    # one-stage yet still estimates beta_theta (bias -0.151), so neither
+    # existing cell isolates the cause.
+    #
+    # This arm is `base` with ncov_theta = 0: the two-stage machinery, the
+    # latent w/z and p/q/theta0 all stay, and only the beta_theta *slopes*
+    # go. The intercept row, logit(theta_baseline), necessarily remains.
+    #
+    # Read it against B0 bias, not coverage: B0 covers at 0.94-0.96 in every
+    # cell including `binary`, so coverage cannot distinguish anything here.
+    mk("nocollcov", ncov_theta = 0L, seed_label = "nocollcov"))
 }
 
 # --- Seam 1: how the true parameters are chosen --------------------------
@@ -213,7 +230,12 @@ simstudy_fit <- function(sim, scenario,
   }
 
   occCov <- paste0("X_psi.EnvCov.", seq_len(scenario$ncov_psi))
-  collCov <- if (scenario$model %in% c("occupancy", "two_stage")) "X_theta" else NULL
+  # A scenario with ncov_theta = 0 has no X_theta column at all: the simulator
+  # produces a 1 x S beta_theta (the intercept row only). Passing
+  # collCovariates regardless errors with "Covariate names provided not in
+  # data$info". Needed for the ncov_theta = 0 arm in PLAN.md 15.
+  collCov <- if (scenario$model %in% c("occupancy", "two_stage") &&
+                 scenario$ncov_theta > 0) "X_theta" else NULL
 
   dat <- sim$data_list
   if (!isTRUE(scenario$fit_traits)) dat$traits <- NULL
