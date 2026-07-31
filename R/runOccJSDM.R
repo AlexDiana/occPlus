@@ -402,20 +402,25 @@ runOccJSDM <- function(data,
                        listPriors = list()){
 
   {
-    data = occ_data_effort
-    listParams = list(n_factors = 3)
-    threshold = 1
-    occCovariates = c("season_year","z_prop_closed")
-    collCovariates = c("predator_season_year", "z_log_effort_m_total")
-    spatCovariates = c()
-    MCMCparams = list(
-      nchain = 2,
-      nburn = 5000,
-      niter = 5000,
-      nthin = 1 )
-    listPriors = list(
-      a_theta0 = 1,
-      b_theta0 = 100)# listParams = list(n_factors = 3, splineVars = F)
+    # Debugging scaffold: a set of arguments to paste in when stepping through
+    # this function by hand. Everything here must stay commented out. In 8f9f315
+    # part of it was left live, which overwrote every argument with a dataset
+    # that does not exist in the package.
+    #
+    # data = occ_data_effort
+    # listParams = list(n_factors = 3)
+    # threshold = 1
+    # occCovariates = c("season_year","z_prop_closed")
+    # collCovariates = c("predator_season_year", "z_log_effort_m_total")
+    # spatCovariates = c()
+    # MCMCparams = list(
+      # nchain = 2,
+      # nburn = 5000,
+      # niter = 5000,
+      # nthin = 1 )
+    # listPriors = list(
+      # a_theta0 = 1,
+      # b_theta0 = 100)# listParams = list(n_factors = 3, splineVars = F)
     # threshold = 1
     # occCovariates = c( "X_psi.EnvCov.1", "X_psi.EnvCov.2", "X_psi.EnvCov.3",
     #                    "X_psi.EnvCov.4", "X_psi.EnvCov.5" ,"X_psi.EnvCov.6")
@@ -430,7 +435,7 @@ runOccJSDM <- function(data,
     #   a_theta0 = 1,
     #   b_theta0 = 100)
     # listPriors = list()
-    summarisedLatentPresences = T
+    # summarisedLatentPresences = T
   }
 
   # data structure infer

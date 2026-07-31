@@ -39,7 +39,8 @@ Imports:
     purrr,
     tibble,
     ggrepel,
-    FastGP
+    FastGP,
+    RcppParallel
 LinkingTo: 
     Rcpp,
     RcppArmadillo,

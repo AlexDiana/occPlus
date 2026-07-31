@@ -1,2 +1,9 @@
 PKG_CXXFLAGS = $(SHLIB_OPENMP_CXXFLAGS)
 PKG_LIBS = $(SHLIB_OPENMP_CXXFLAGS) $(LAPACK_LIBS) $(BLAS_LIBS) $(FLIBS)
+
+# src/functions.cpp uses RcppParallel (TBB) for the *_parallel samplers added in
+# 8f9f315. LinkingTo in DESCRIPTION makes the headers visible but does NOT link
+# the libraries, so without the line below the built .so has an undefined
+# RcppParallel::tbbParallelFor and fails to load at all, taking every function
+# in the package with it. This is the invocation RcppParallel documents.
+PKG_LIBS += $(shell "${R_HOME}/bin/Rscript" -e "RcppParallel::RcppParallelLibs()")
