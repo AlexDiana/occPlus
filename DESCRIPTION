@@ -42,7 +42,8 @@ Imports:
     FastGP
 LinkingTo: 
     Rcpp,
-    RcppArmadillo
+    RcppArmadillo,
+    RcppParallel
 LazyData: true
 LazyDataCompression: xz
 Suggests: 

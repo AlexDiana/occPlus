@@ -30,5 +30,4 @@ Simulate data for any supported model type
 }
 \details{
 General-purpose simulation function that supports multiple model types.
-For two-stage eDNA data specifically, use \code{\link{simulateOccJSDMData}}.
 }

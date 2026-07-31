@@ -13,12 +13,20 @@ setOccJSDMSeed <- function(seed) {
     invisible(.Call(`_occJSDM_setOccJSDMSeed`, seed))
 }
 
+sample_z_cpp_parallel <- function(w, psi, theta, theta0, M, sumM) {
+    .Call(`_occJSDM_sample_z_cpp_parallel`, w, psi, theta, theta0, M, sumM)
+}
+
 sample_z_cpp <- function(w, psi, theta, theta0, M, sumM) {
     .Call(`_occJSDM_sample_z_cpp`, w, psi, theta, theta0, M, sumM)
 }
 
 sample_w_cpp <- function(logy1, mu0, sigma0, mu1, sigma1, theta, theta0, p, q, M, K, sumL, sumM, sumK, maxL, z) {
     .Call(`_occJSDM_sample_w_cpp`, logy1, mu0, sigma0, mu1, sigma1, theta, theta0, p, q, M, K, sumL, sumM, sumK, maxL, z)
+}
+
+sample_w_cim_cipp_parallel <- function(y, y_NA, theta, theta0, p, q, M, K, sumL, sumM, sumK, P, primerId, maxL, z) {
+    .Call(`_occJSDM_sample_w_cim_cipp_parallel`, y, y_NA, theta, theta0, p, q, M, K, sumL, sumM, sumK, P, primerId, maxL, z)
 }
 
 sample_w_cim_cipp <- function(y, y_NA, theta, theta0, p, q, M, K, sumL, sumM, sumK, P, primerId, maxL, z) {
@@ -93,8 +101,8 @@ samplePGvariables <- function(Xbeta) {
     .Call(`_occJSDM_samplePGvariables`, Xbeta)
 }
 
-computeNewOutputs <- function(X, B0_output, B_output, Ks_all, Bs_output, L_output, sigmah_output, idx_ls_output, conflevels, useEnvCov, useSpatial, useBiotic, model) {
-    .Call(`_occJSDM_computeNewOutputs`, X, B0_output, B_output, Ks_all, Bs_output, L_output, sigmah_output, idx_ls_output, conflevels, useEnvCov, useSpatial, useBiotic, model)
+computeNewOutputs <- function(X, B0_output, B_output, Ks_all, Bs_output, L_output, sigmah_output, idx_ls_output, conflevels, useEnvCov, useSpatial, useBiotic, model, verbose) {
+    .Call(`_occJSDM_computeNewOutputs`, X, B0_output, B_output, Ks_all, Bs_output, L_output, sigmah_output, idx_ls_output, conflevels, useEnvCov, useSpatial, useBiotic, model, verbose)
 }
 
 convert_to_correlation <- function(L_output_vec, niter, S, d) {

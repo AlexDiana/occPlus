@@ -1,3 +1,4 @@
+// [[Rcpp::depends(RcppParallel)]]
 #include <RcppArmadillo.h>
 #include <random>
 #ifdef _OPENMP
@@ -7,6 +8,9 @@
 // [[Rcpp::plugins(openmp)]]
 
 #include "rng.h"
+#include <RcppParallel.h>
+#include <cmath>
+#include <algorithm>
 
 // inline double exprnd(double rate) {
 //   std::exponential_distribution<double> dist(rate);
@@ -14,6 +18,7 @@
 // }
 
 using namespace Rcpp;
+using namespace RcppParallel;
 
 //' Seed the package's C++ random number generators
 //'
@@ -199,6 +204,93 @@ static double samplepg(double z) {
   return X;
 }
 
+// Pure C++ replacement for R::pnorm(x, 0.0, 1.0, 1, 1)
+// Completely thread-safe for OpenMP and avoids R-API lock contention.
+inline double fast_log_pnorm(double x) {
+  // Phi(x) = 0.5 * erfc(-x / sqrt(2))
+  // 0.70710678118654752440 is 1 / sqrt(2)
+  return std::log(0.5 * std::erfc(-x * 0.70710678118654752440));
+}
+
+static double samplepg_fast(double z) {
+  double orig_z = (double)std::fabs((double)z);
+
+  // -------------------------------------------------------------
+  // FAST PATH: Normal Approximation for large Z
+  // Skips the expensive rejection loop.
+  // Mean = 1 / (2z), Var = 1 / (4z^3)
+  // -------------------------------------------------------------
+  if (orig_z > 12.0) {
+    double mu = 0.5 / orig_z;
+    double var = 0.25 / (orig_z * orig_z * orig_z);
+
+    // Assumes your custom rnorm() returns a standard normal draw
+    double draw = mu + std::sqrt(var) * rnorm();
+
+    // Ensure strict positivity (draws < 0 are astronomically rare here)
+    return (draw > 1e-12) ? draw : mu;
+  }
+
+  // -------------------------------------------------------------
+  // EXACT SAMPLER: Devroye method for Z <= 12
+  // -------------------------------------------------------------
+  // PG(b, z) = 0.25 * J*(b, z/2)
+  z = orig_z * 0.5;
+
+  double t = MATH_2_PI; // Point on the intersection
+  double K = z*z/2.0 + MATH_PI2/8.0;
+  double logA = (double)std::log(4.0) - MATH_LOG_PI - z;
+  double logK = (double)std::log(K);
+  double Kt = K * t;
+  double w = (double)std::sqrt(MATH_PI_2);
+
+  // Replaced R::pnorm with pure C++ fast_log_pnorm
+  double logf1 = logA + fast_log_pnorm(w*(t*z - 1)) + logK + Kt;
+  double logf2 = logA + 2*z + fast_log_pnorm(-w*(t*z+1)) + logK + Kt;
+
+  double p_over_q = (double)std::exp(logf1) + (double)std::exp(logf2);
+  double ratio = 1.0 / (1.0 + p_over_q);
+
+  double u, X;
+
+  // Main sampling loop
+  while(1) {
+    // Step 1: Sample X ~ g(x|z)
+    u = runif();
+    if(u < ratio) {
+      X = t + exprnd(1.0)/K; // truncated exponential
+    } else {
+      X = tinvgauss(z, t);   // truncated Inverse Gaussian
+    }
+
+    // Step 2: Iteratively calculate Sn(X|z)
+    int i = 1;
+    double Sn = aterm(0, X, t);
+    double U = runif() * Sn;
+    int asgn = -1;
+    bool even = false;
+
+    while(1) {
+      Sn = Sn + asgn * aterm(i, X, t);
+
+      // Accept if n is odd
+      if(!even && (U <= Sn)) {
+        return X * 0.25; // Return directly
+      }
+
+      // Return to step 1 if n is even
+      if(even && (U > Sn)) {
+        break;
+      }
+
+      even = !even;
+      asgn = -asgn;
+      i++;
+    }
+  }
+  return X;
+}
+
 static double rpg(int n, double z){
 
   double x = 0;
@@ -261,8 +353,51 @@ static arma::vec sample_beta_cpp(arma::mat& X, arma::mat& B, arma::vec& b,
   return(result);
 }
 
+// High-performance multivariate normal sampler given lower-triangular Cholesky factor L
+// where Precision Matrix = L * L.t()  => Covariance = (L * L.t())^{-1}
+inline arma::vec mvrnorm_from_chol_prec(const arma::vec& mean, const arma::mat& L) {
+  arma::vec z = arma::randn<arma::vec>(mean.n_elem);
+  // Solves L.t() * x = z  => Var(x) = (L * L.t())^{-1}
+  arma::vec x = arma::solve(arma::trimatu(L.t()), z);
+  return mean + x;
+}
+
+static arma::vec sample_beta_cpp_TS_opt(const arma::mat& X,
+                                        const arma::mat& invB,
+                                        const arma::vec& invB_b,
+                                        const arma::vec& Omega,
+                                        const arma::vec& k) {
+  // X is (N_sub x P)
+  // Fast compute of X.t() * diag(Omega) * X without dense matrix multiplication
+  arma::mat X_weighted = X;
+  X_weighted.each_col() %= arma::sqrt(Omega); // Weighted rows
+  arma::mat Xt_Omega_X = X_weighted.t() * X_weighted;
+
+  // Precision matrix: Xt * Omega * X + B_inv
+  arma::mat Prec = Xt_Omega_X + invB;
+
+  // Cholesky decomposition: Prec = L * L.t()
+  arma::mat L;
+  bool success = arma::chol(L, Prec, "lower");
+  if (!success) {
+    // Fallback for numerical edge cases
+    Prec.diag() += 1e-8;
+    L = arma::chol(Prec, "lower");
+  }
+
+  // Mean vector computation via triangular solves
+  arma::vec rhs = X.t() * k + invB_b;
+  arma::vec tmp = arma::solve(arma::trimatl(L), rhs);
+  arma::vec mu  = arma::solve(arma::trimatu(L.t()), tmp);
+
+  // Sample beta ~ N(mu, Prec^{-1})
+  return mvrnorm_from_chol_prec(mu, L);
+}
+
 static arma::vec sample_beta_cpp_TS(arma::mat& X, arma::mat& B, arma::vec& b,
                           arma::vec& Omega, arma::vec& k){
+
+  arma::mat invB = arma::inv(B);
 
   // arma::mat cov_matrix = arma::inv(arma::trans(X) * Omega * X + arma::inv(B));
   arma::mat tX = arma::trans(X);
@@ -270,8 +405,8 @@ static arma::vec sample_beta_cpp_TS(arma::mat& X, arma::mat& B, arma::vec& b,
   // arma::mat cov_matrix = arma::inv(tXOmega * X + arma::inv(B));
   // arma::vec result = mvrnormArma(cov_matrix * (arma::trans(X) * k + arma::inv(B) * b), cov_matrix);
 
-  arma::mat L = arma::trans(arma::chol(tXOmega * X + arma::inv(B)));
-  arma::vec tmp = arma::solve(arma::trimatl(L), tX * k + arma::inv(B) * b);
+  arma::mat L = arma::trans(arma::chol(tXOmega * X + invB));
+  arma::vec tmp = arma::solve(arma::trimatl(L), tX * k + invB * b);
   arma::vec alpha = arma::solve(arma::trimatu(arma::trans(L)),tmp);
 
   arma::vec result = mvrnormArmaQuick_TS(alpha, arma::trans(arma::inv(arma::trimatl(L))));
@@ -312,6 +447,91 @@ static arma::vec sample_beta_nocov_cpp_TS(arma::vec beta, arma::mat& X, arma::ve
   beta = sample_beta_cpp_TS(X, B, b, Omega, k);
 
   return(beta);
+}
+
+// Define the RcppParallel worker
+struct ZProbWorker : public Worker {
+  // Thread-safe wrappers for inputs
+  const RMatrix<double> w, psi, theta;
+  const RVector<double> theta0;
+  const RVector<int> M, sumM;
+  const int n;
+
+  // Output matrix for probabilities
+  RMatrix<double> p_mat;
+
+  // Constructor
+  ZProbWorker(const NumericMatrix& w, const NumericMatrix& psi,
+              const NumericMatrix& theta, const NumericVector& theta0,
+              const IntegerVector& M, const IntegerVector& sumM,
+              int n, NumericMatrix& p_mat)
+    : w(w), psi(psi), theta(theta), theta0(theta0),
+      M(M), sumM(sumM), n(n), p_mat(p_mat) {}
+
+  // Parallel loop
+  void operator()(std::size_t begin, std::size_t end) {
+    for (std::size_t s = begin; s < end; s++) {
+      for (int i = 0; i < n; i++) {
+
+        double log_p1 = 0.0;
+        double log_p0 = 0.0;
+
+        for (int m = 0; m < M[i]; m++) {
+          int idx = sumM[i] + m;
+          double w_val = w(idx, s);
+
+          // Pure C++ alternative to R::dbinom(..., size=1)
+          if (w_val == 1.0) {
+            log_p1 += std::log(theta(idx, s));
+            log_p0 += std::log(theta0[s]);
+          } else {
+            log_p1 += std::log(1.0 - theta(idx, s));
+            log_p0 += std::log(1.0 - theta0[s]);
+          }
+        }
+
+        // Add psi contribution
+        log_p1 += std::log(psi(i, s));
+        log_p0 += std::log(1.0 - psi(i, s));
+
+        // Log-sum-exp for numerical stability
+        double maxlog = std::max(log_p1, log_p0);
+        double p1 = std::exp(log_p1 - maxlog);
+        double p0 = std::exp(log_p0 - maxlog);
+
+        p_mat(i, s) = p1 / (p1 + p0);
+      }
+    }
+  }
+};
+
+// [[Rcpp::export]]
+NumericMatrix sample_z_cpp_parallel(const NumericMatrix& w,
+                           const NumericMatrix& psi,
+                           const NumericMatrix& theta,
+                           const NumericVector& theta0,
+                           const IntegerVector& M,
+                           const IntegerVector& sumM) {
+
+  int S = psi.ncol();
+  int n = psi.nrow();
+
+  // Allocate matrix to hold computed probabilities
+  NumericMatrix p_mat(n, S);
+
+  // Initialize and run the parallel worker
+  ZProbWorker worker(w, psi, theta, theta0, M, sumM, n, p_mat);
+  parallelFor(0, S, worker);
+
+  // Sequential sampling on the main thread using R's RNG
+  NumericMatrix z(n, S);
+  for (int s = 0; s < S; s++) {
+    for (int i = 0; i < n; i++) {
+      z(i, s) = R::rbinom(1.0, p_mat(i, s));
+    }
+  }
+
+  return z;
 }
 
 // [[Rcpp::export]]
@@ -434,6 +654,134 @@ NumericMatrix sample_w_cpp(const NumericMatrix& logy1,
         // sample w
         w(sumM[i] + m, s) = R::rbinom(1.0, p_ws1);
       }
+    }
+  }
+
+  return w;
+}
+
+// Define the RcppParallel worker
+struct ProbWorker : public Worker {
+  // Input matrices and vectors (wrapped for thread-safe access)
+  const RMatrix<double> y, y_NA, theta;
+  const RVector<double> theta0;
+  const RMatrix<double> log_p, log_1p, log_q, log_1q, z;
+
+  const RVector<int> M, K, sumL, sumM, sumK, P, primerId;
+  const int n;
+
+  // Output matrix to store the probabilities
+  RMatrix<double> p_mat;
+
+  // Constructor
+  ProbWorker(const NumericMatrix& y, const NumericMatrix& y_NA, const NumericMatrix& theta,
+             const NumericVector& theta0, const NumericMatrix& log_p, const NumericMatrix& log_1p,
+             const NumericMatrix& log_q, const NumericMatrix& log_1q, const NumericMatrix& z,
+             const IntegerVector& M, const IntegerVector& K, const IntegerVector& sumL,
+             const IntegerVector& sumM, const IntegerVector& sumK, const IntegerVector& P,
+             const IntegerVector& primerId, int n, NumericMatrix& p_mat)
+    : y(y), y_NA(y_NA), theta(theta), theta0(theta0),
+      log_p(log_p), log_1p(log_1p), log_q(log_q), log_1q(log_1q), z(z),
+      M(M), K(K), sumL(sumL), sumM(sumM), sumK(sumK), P(P), primerId(primerId),
+      n(n), p_mat(p_mat) {}
+
+  // Parallel loop over 's'
+  void operator()(std::size_t begin, std::size_t end) {
+    for (std::size_t s = begin; s < end; s++) {
+      for (int i = 0; i < n; i++) {
+        for (int m = 0; m < M[i]; m++) {
+
+          int nprimers = P[sumM[i] + m];
+
+          // compute log p(w = 1) and log p(w = 0) in one pass for efficiency
+          double log_p1 = 0.0;
+          double log_p0 = 0.0;
+
+          for (int l = 0; l < nprimers; l++) {
+            int idxL = sumL[sumM[i] + m] + l;
+            int primerRow = primerId[idxL] - 1; // 0-based global primer identity
+            for (int k = 0; k < K[idxL]; k++) {
+
+              int idxK = sumK[idxL] + k;
+
+              if(y_NA(idxK, s) == 0) {
+                log_p1 += y(idxK, s) * log_p(primerRow, s) + (1 - y(idxK, s)) * log_1p(primerRow, s);
+                log_p0 += y(idxK, s) * log_q(primerRow, s) + (1 - y(idxK, s)) * log_1q(primerRow, s);
+              }
+            }
+          }
+
+          // conditional on z[i, s]
+          if (z(i, s) == 1.0) {
+            log_p1 += std::log(theta(sumM[i] + m, s));
+            log_p0 += std::log(1 - theta(sumM[i] + m, s));
+          } else {
+            log_p1 += std::log(theta0[s]);
+            log_p0 += std::log(1 - theta0[s]);
+          }
+
+          // numerical stability
+          double maxlog = std::max(log_p1, log_p0);
+          double p1exp = std::exp(log_p1 - maxlog);
+          double p0exp = std::exp(log_p0 - maxlog);
+
+          // store the probability
+          p_mat(sumM[i] + m, s) = p1exp / (p1exp + p0exp);
+        }
+      }
+    }
+  }
+};
+
+
+// [[Rcpp::export]]
+NumericMatrix sample_w_cim_cipp_parallel(const NumericMatrix& y,
+                                const NumericMatrix& y_NA,
+                                const NumericMatrix& theta,
+                                const NumericVector& theta0,
+                                const NumericMatrix& p,
+                                const NumericMatrix& q,
+                                const IntegerVector& M,
+                                const IntegerVector& K,
+                                const IntegerVector& sumL,
+                                const IntegerVector& sumM,
+                                const IntegerVector& sumK,
+                                const IntegerVector& P,
+                                const IntegerVector& primerId,
+                                int maxL,
+                                const NumericMatrix& z) {
+
+  int S = theta.ncol();
+  int N = theta.nrow();
+  int n = M.size();
+
+  // Precompute logs sequentially (this is very fast and not worth parallelizing)
+  NumericMatrix log_p(maxL, S), log_1p(maxL, S);
+  NumericMatrix log_q(maxL, S), log_1q(maxL, S);
+
+  for(int s = 0; s < S; s++) {
+    for(int l = 0; l < maxL; l++) {
+      log_p(l, s) = std::log(p(l, s));
+      log_1p(l, s) = std::log(1.0 - p(l, s));
+      log_q(l, s) = std::log(q(l, s));
+      log_1q(l, s) = std::log(1.0 - q(l, s));
+    }
+  }
+
+  // Allocate a matrix to hold the calculated probabilities
+  NumericMatrix p_mat(N, S);
+
+  // Initialize the worker and run it in parallel
+  ProbWorker worker(y, y_NA, theta, theta0, log_p, log_1p, log_q, log_1q, z,
+                    M, K, sumL, sumM, sumK, P, primerId, n, p_mat);
+
+  parallelFor(0, S, worker);
+
+  // Sequentially sample from R's binomial distribution using the parallel-computed probabilities
+  NumericMatrix w(N, S);
+  for (int s = 0; s < S; s++) {
+    for (int i = 0; i < N; i++) {
+      w(i, s) = R::rbinom(1.0, p_mat(i, s));
     }
   }
 

@@ -12,7 +12,8 @@ predictNewSites(
   useSpatial = NULL,
   useBiotic = NULL,
   summarised = T,
-  confidence = 0.95
+  confidence = 0.95,
+  verbose = T
 )
 }
 \arguments{

@@ -147,7 +147,6 @@ ALEX: We don't care about reproducibility.
 
 Ten dead functions were moved to `deprecated/` on 30 July (section A item 1). What remains is below. A systematic scan found 38 dead R functions plus 8 unused `RcppExports` wrappers in total, so most of this is still outstanding.
 
-
 1.  **The remaining dead functions, once the above is settled.** Roughly 24 more in `R/jsdmfun.R` and `R/mcmcfun.R`, plus `computeMinESS()` in `R/diagnostics.R`, plus 8 unused wrappers in `RcppExports.R`.
 
     The wrappers need different handling: **do not edit `RcppExports.R`**, it is generated. Remove the `// [[Rcpp::export]]` tag in the C++ and re-run `Rcpp::compileAttributes()`.
