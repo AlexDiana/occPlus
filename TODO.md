@@ -213,6 +213,12 @@ Ten dead functions were moved to `deprecated/` on 30 July (section A item 1). Wh
 
 7.  **Performance of `runOccJSDM()`**
 
+ALEX NOTE: After manually comparing each MCMC step with microbenchmark(), the slowest step is definitely
+the sample_betatheta_cpp_parallel. There are few things to note, first the parallelisation does not seem to achieve much speed up, and 
+even in its current state, it is not macos compatible since it uses openMP (rather than RcppParallel).
+Moreover, the slowest step of the sampler seems to be the sample_Omega_cpp, which samples a very
+large number of PG variables (N x S). We could consider an alternative PG sampler to speed up the computation.
+
     Ordered by expected speedup per unit of effort. Nothing here has been profiled -- worth running `profvis::profvis()` on a vignette- sized fit first to confirm where the time actually goes.
 
     **Before profiling, check whether OpenMP is even on.** Measured 29 July 2026 on the macOS development machine: `R CMD config SHLIB_OPENMP_CXXFLAGS` is *empty*, so the `$(SHLIB_OPENMP_CXXFLAGS)` in `src/Makevars` expands to nothing, every `#pragma omp` compiles to a no-op, and `nm -u src/occJSDM.so | grep -c '__kmpc\|_GOMP'` returns 0. The package is running single-threaded here despite `libomp.dylib` appearing in `otool -L` (pulled in transitively by R's own libraries, not by us).
