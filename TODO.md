@@ -118,6 +118,12 @@ Every code change Claude made, newest first. None has had human review beyond Do
 
 ALEX RESPONSE: WE COULD ADD A SIMULATION STUDY ON THE ONE-STAGE MODEL ONLY, THAT WOULD REVEALE WHETHER THERE IS ANY ISSUE IN B0 (since there is no beta_theta). If there is no issue, we could delete this point and be sure that the issue is only beta_theta.
 
+    **Planned as `PLAN.md` 15, with two adjustments.** First, existing data already points hard at Alex's answer: `B0` bias separates perfectly on whether a cell estimates `beta_theta` at all. All nine cells that do have bias between -0.125 and -1.056; `binary`, the only cell that does not, is at **+0.012**. And 14.7 showed `B0`'s bias tracking `beta_theta`'s prior variance monotonically (-0.160 at variance 2, -0.044 at 0.1). Two independent lines, same direction.
+
+    Second, **"one-stage only" is not the sharp test**: the `occupancy` cell is already one-stage and still estimates `beta_theta`, with bias -0.151, indistinguishable from the two-stage cells. What makes `binary` different is not the number of stages but that it has **no collection covariates**.
+
+    So the designed arm is `base` with `ncov_theta = 0`: everything else held, only the `beta_theta` slopes removed. Verified feasible, and about 8 minutes at R = 50. If the bias vanishes, this item closes as downstream of item 4 and fixing `beta_theta` fixes both.
+
 ## **C. Crashes, unreachable code paths, and API bugs (Alex)**
 
 1.  **`thinOutput()`: two of the three original defects remain.** The crash is gone and `thin` is honoured, but (a) the 2-D branch thins **by row** (`R/output.R:57`), silently dropping *sites* from the `psi_output`/`w_output`/`theta_output` posterior-mean matrices, whose rows are sites and not iterations; and (b) the scalar `WAIC` falls through to `print("Dimension not recognised")` and becomes `NULL`.
@@ -223,7 +229,16 @@ Ten dead functions were moved to `deprecated/` on 30 July (section A item 1). Wh
 ALEX NOTE: After manually comparing each MCMC step with microbenchmark(), the slowest step is definitely the sample_betatheta_cpp_parallel. There are few things to note, first the parallelisation does not seem to achieve much speed up, and even in its current state, it is not macos compatible since it uses openMP (rather than RcppParallel). Moreover, the slowest step of the sampler seems to be the sample_Omega_cpp, which samples a very large number of PG variables (N x S). We could consider an alternative PG sampler to speed up the computation.
 
 ```         
-Ordered by expected speedup per unit of effort. Nothing here has been profiled -- worth running `profvis::profvis()` on a vignette- sized fit first to confirm where the time actually goes.
+**Profiled by Alex, 31 July 2026, which answers the "nothing here has been profiled" caveat this list used to carry.** Comparing each MCMC step with `microbenchmark()`:
+
+- **`sample_betatheta_cpp_parallel()` is the slowest step**, decisively.
+- **The parallelisation achieves little speedup**, and is inert on macOS because it uses OpenMP rather than RcppParallel. This independently corroborates the measurement below: `SHLIB_OPENMP_CXXFLAGS` is empty on Doug's machine, so every `#pragma omp` compiles to a no-op and the "parallel" samplers run serially. Alex has since moved two samplers to RcppParallel in `8f9f315` for this reason.
+- **Within that step, `sample_Omega_cpp()` dominates**: it draws `N x S` Polya-Gamma variables per iteration.
+- **Alex's suggestion: consider an alternative Polya-Gamma sampler.** That is the lever with the best expected return, and it is a different kind of work from the parallelisation items below, which redistribute the same cost rather than reducing it.
+
+**This reorders the list.** Items A and B parallelise around a step whose cost is dominated by PG sampling; making the PG draw cheaper would benefit every configuration, including single-core and macOS, where the parallelisation currently does nothing. Worth settling the PG question before investing in either.
+
+The items below are ordered by expected speedup per unit of effort as originally written.
 
 **Before profiling, check whether OpenMP is even on.** Measured 29 July 2026 on the macOS development machine: `R CMD config SHLIB_OPENMP_CXXFLAGS` is *empty*, so the `$(SHLIB_OPENMP_CXXFLAGS)` in `src/Makevars` expands to nothing, every `#pragma omp` compiles to a no-op, and `nm -u src/occJSDM.so | grep -c '__kmpc\|_GOMP'` returns 0. The package is running single-threaded here despite `libomp.dylib` appearing in `otool -L` (pulled in transitively by R's own libraries, not by us).
 

@@ -597,3 +597,54 @@ The detail worth keeping: bias falls (+0.0195 to +0.0063) while coverage falls f
 ### This is a trade-off, not a fix, and it is Alex's call
 
 Tightening `b_betatheta`'s slope variance helps `B0`'s bias and hurts `beta_theta`'s coverage. Those are two open items pulling in opposite directions on one knob. Setting it needs someone who knows what that prior is meant to encode, which is why this goes to Alex rather than being applied. See `TODO.md`.
+
+------------------------------------------------------------------------
+
+## 15. Is `B0`'s bias caused by `beta_theta`? Alex's discriminator, sharpened
+
+**Status: planned, not yet run.** Alex's suggestion on the `B0` item: "we could add a simulation study on the one-stage model only, that would reveal whether there is any issue in `B0` (since there is no `beta_theta`). If there is no issue, we could delete this point and be sure that the issue is only `beta_theta`."
+
+The logic is right and it is the cleanest discriminator anyone has proposed for this. Two adjustments below, one because existing data already answers most of it, and one because "one-stage" does not actually remove `beta_theta`.
+
+### 15.1 Existing data already points hard at his answer
+
+`B0` bias by cell, post-fix run, sorted:
+
+| cell | has `beta_theta`? | `B0` bias |
+|---|---|---|
+| `low_information` | yes | -1.056 |
+| `base` | yes | -0.208 |
+| `spatial_isolated` | yes | -0.204 |
+| `traits_isolated` | yes | -0.175 |
+| `d_overfit` | yes | -0.166 |
+| `occupancy` | yes | -0.151 |
+| `primers_3` | yes | -0.151 |
+| `species_20` | yes | -0.141 |
+| `d_underfit` | yes | -0.125 |
+| **`binary`** | **no** | **+0.012** |
+
+Perfect separation. Every cell that estimates `beta_theta` has a negative `B0` bias; the single cell that does not is the only one at zero, and the only positive one.
+
+A second, independent line agrees. 14.7 varied `b_betatheta`'s slope prior variance at `M = 2` and `B0`'s bias moved monotonically with it: -0.160 at variance 2, -0.106 at 0.5, -0.044 at 0.1. So `B0`'s bias tracks `beta_theta`'s prior as well as `beta_theta`'s presence.
+
+**Neither is conclusive on its own.** `binary` differs from the others in far more than `beta_theta`: no replicates at all, no latent `w`/`z` layer, no `p`/`q`/`theta0`, and much less data. It is a confounded comparison, which is exactly why a designed test is still worth running.
+
+### 15.2 "One-stage only" is not the sharp test
+
+The grid already has a one-stage cell. `occupancy` drops the PCR stage entirely and **still estimates `beta_theta`**, with `B0` bias -0.151, squarely among the two-stage cells. So removing a stage does not remove the collection-covariate coefficients, and running "one-stage only" would reproduce a result we already have.
+
+What distinguishes `binary` is not that it has one stage. It is that it has **no collection covariates**.
+
+### 15.3 The sharp test: hold everything, set `ncov_theta = 0`
+
+One arm, identical to `base` except that the Stage 1 design matrix has no covariate columns. That keeps the two-stage machinery, the latent `w`/`z`, and `p`/`q`/`theta0` all in play, and removes only the `beta_theta` **slopes**; the intercept row, `logit(theta_baseline)`, necessarily remains.
+
+- **`B0`'s bias vanishes** -> it is caused by the collection-covariate slopes. Combined with 14.7, that makes `beta_theta` the single upstream cause, and the `B0` item closes as downstream of it: fix `beta_theta` (group B item 4) and `B0` follows. This is the outcome Alex predicts, and the one the existing evidence favours.
+- **`B0`'s bias persists** -> it is the two-stage latent structure rather than `beta_theta`, and `binary`'s clean result was down to one of its other differences. The `B0` item stays open and needs a different line of attack.
+- **Bias shrinks but does not vanish** -> both contribute, and the split tells you how much of it fixing `beta_theta` would buy.
+
+**Feasibility, verified.** The simulator handles `ncov_theta = 0`: `beta_theta_true` becomes `1 x S` and no `X_theta` column is produced. One harness fix is needed first, because `simstudy_fit()` passes `collCovariates = "X_theta"` unconditionally and the fit errors with `Covariate names provided not in data$info`. Make that conditional on `ncov_theta > 0`.
+
+**Cost:** one arm at the `base` configuration, about 40 s per fit, so roughly 8 minutes at R = 50. Pair it against the existing `base` cell with `seed_label`, noting that pairing will be partial in the same way as the M ladder: `draw_truth()` consumes no RNG that depends on `ncov_theta`, so the drawn truths match, but the simulator's own stream diverges once it builds a differently-shaped `X_theta`.
+
+**Read it against bias, not coverage.** `B0` coverage sits at 0.94-0.96 in every cell including `binary`, so it will not distinguish anything here. This is the finding that only the bias column reveals, which is the whole reason it went unnoticed for two days.
