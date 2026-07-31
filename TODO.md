@@ -120,19 +120,21 @@ Every code change Claude made, newest first. None has had human review beyond Do
 
 ALEX RESPONSE: WE COULD ADD A SIMULATION STUDY ON THE ONE-STAGE MODEL ONLY, THAT WOULD REVEALE WHETHER THERE IS ANY ISSUE IN B0 (since there is no beta_theta). If there is no issue, we could delete this point and be sure that the issue is only beta_theta.
 
-    **Ran 31 July at R = 50 and confirmed at R = 200 (`PLAN.md` 15.4, 15.6). Alex's hypothesis holds in its main claim and fails in its strong form.** The designed arm was `base` with `ncov_theta = 0`, keeping the two-stage machinery, the latent `w`/`z` and `p`/`q`/`theta0`, removing only the `beta_theta` slopes. `B0` bias:
+```         
+**Ran 31 July at R = 50 and confirmed at R = 200 (`PLAN.md` 15.4, 15.6). Alex's hypothesis holds in its main claim and fails in its strong form.** The designed arm was `base` with `ncov_theta = 0`, keeping the two-stage machinery, the latent `w`/`z` and `p`/`q`/`theta0`, removing only the `beta_theta` slopes. `B0` bias:
 
-    - `base`, slopes present: -0.2078 (SE 0.0307), 6.8 SE from zero
-    - `nocollcov`, slopes removed: **-0.0633** (SE 0.0192), **3.3 SE from zero**
-    - `binary`, no `beta_theta` at all: +0.0122 (SE 0.0119), 1.0 SE from zero
+- `base`, slopes present: -0.2078 (SE 0.0307), 6.8 SE from zero
+- `nocollcov`, slopes removed: **-0.0633** (SE 0.0192), **3.3 SE from zero**
+- `binary`, no `beta_theta` at all: +0.0122 (SE 0.0119), 1.0 SE from zero
 
-    Removing the slopes removes **70%** of the bias, so fixing item 4 will recover most of `B0`. **But the residual is real**: 1.5 SE at R = 50, 3.3 SE at R = 200. `binary` at 1.0 SE is what no bias looks like by comparison.
+Removing the slopes removes **70%** of the bias, so fixing item 4 will recover most of `B0`. **But the residual is real**: 1.5 SE at R = 50, 3.3 SE at R = 200. `binary` at 1.0 SE is what no bias looks like by comparison.
 
-    **So this item stays open.** Alex proposed deleting it if the one-stage test showed no issue; the test shows a smaller issue, not none. The cause is now split: most is downstream of item 4, a measurable part is not, and `B0` coverage sits at 0.94-0.96 throughout so it will never surface there.
+**So this item stays open.** Alex proposed deleting it if the one-stage test showed no issue; the test shows a smaller issue, not none. The cause is now split: most is downstream of item 4, a measurable part is not, and `B0` coverage sits at 0.94-0.96 throughout so it will never surface there.
 
-    The R = 200 run also reproduced the R = 50 replicates bit-for-bit, which is how we know the two are the same experiment rather than two similar ones.
+The R = 200 run also reproduced the R = 50 replicates bit-for-bit, which is how we know the two are the same experiment rather than two similar ones.
 
-    ALEX: WHAT REMAINS AFTER ITEM 4 IS FIXED IS SMALL BUT NOT ZERO
+ALEX: WHAT REMAINS AFTER ITEM 4 IS FIXED IS SMALL BUT NOT ZERO
+```
 
 ## **C. Crashes, unreachable code paths, and API bugs (Alex)**
 
