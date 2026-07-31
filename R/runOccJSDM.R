@@ -350,7 +350,13 @@ create_waic_quantities <- function(n_obs){
 #' for the false positive
 #' lab stage rate, default \code{1}/\code{20})  and
 #' \code{a_theta0}/\code{b_theta0} (Beta prior shape parameters for the
-#' false positive field stage rate, default \code{1}/\code{20}).
+#' false positive field stage rate, default \code{1}/\code{20}), and
+#' \code{b_betatheta_slope_var} (prior variance on the collection-covariate
+#' slopes, default \code{2}). The last of these is provisional: it exists so
+#' the slope prior can be varied without editing the source, and the default
+#' reproduces the previous hard-coded behaviour exactly. Its value is still
+#' under review, so treat a non-default setting as a diagnostic rather than a
+#' recommended configuration.
 #'
 #' @return A list with:
 #' \describe{
