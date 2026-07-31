@@ -111,6 +111,10 @@ ALEX: We don't care about reproducibility.
 
     Cause is now most likely the `B_betatheta` widening; see item 5, where the decision lives. `B0` is a headline quantity for a JSDM, so this wants settling before the paper reports species intercepts.
 
+ALEX RESPONSE: WE COULD ADD A SIMULATION STUDY ON THE ONE-STAGE MODEL ONLY, THAT WOULD REVEALE
+WHETHER THERE IS ANY ISSUE IN B0 (since there is no beta_theta). If there is no issue, we could
+delete this point and be sure that the issue is only beta_theta.
+
 ## **C. Crashes, unreachable code paths, and API bugs (Alex)**
 
 1.  **`thinOutput()`: two of the three original defects remain.** The crash is gone and `thin` is honoured, but (a) the 2-D branch thins **by row** (`R/output.R:57`), silently dropping *sites* from the `psi_output`/`w_output`/`theta_output` posterior-mean matrices, whose rows are sites and not iterations; and (b) the scalar `WAIC` falls through to `print("Dimension not recognised")` and becomes `NULL`.
@@ -141,7 +145,7 @@ ALEX: We don't care about reproducibility.
 
     ALEX TO DECIDE AND FIX (touches `src/jsdm.cpp`)
     
-  Added a verbose argument
+  ALEX RESPONSE: Added a verbose argument
 
 ## **D. Dead and broken internal code (Alex)**
 
