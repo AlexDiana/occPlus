@@ -52,11 +52,19 @@ output: html_document
 
 Every code change Claude made, newest first. None has had human review beyond Doug asking for it. All are recoverable from git; revert or rework freely. Each says what to check. Full detail for each is in *Fixed bugs*, which is the record; this section is the queue.
 
-1.  **`set.seed()` did not control any C++ sampler.** 29 July, `src/rng.h` (new), `src/functions.cpp`, `src/jsdm.cpp`, `R/runOccJSDM.R`. Your fix for the OpenMP race was correct, but the replacement engines never read R's RNG state, so two fits under one seed differed by 5.09 on `B0_output`.
+1.  **`main` would not load at all, and two fixes were needed to restore it.** 31 July, `src/Makevars`, `src/Makevars.win`, `DESCRIPTION`, `NAMESPACE`, `R/occJSDM-package.R`, `R/runOccJSDM.R`. After `8f9f315` the test suite went from 167 passing to 25 passing, 3 failures and 33 errors, because the built `.so` had an undefined `RcppParallel::tbbParallelFor` and failed to load, taking every function in the package with it.
 
-    **To check:** the design in `src/rng.h`, which documents three traps worth knowing before touching it. Also two questions: (a) is thread-count invariance worth having? Reproducibility currently holds for a given thread count. (b) what does `R CMD config SHLIB_OPENMP_CXXFLAGS` return on your machine? It is empty on Doug's, so every `#pragma omp` compiles to a no-op there and the package runs single-threaded.
+    **Change 1, the linking.** `RcppParallel` was in `LinkingTo`, which makes the headers visible but does not link the libraries. Added the documented `RcppParallel::RcppParallelLibs()` call to both `Makevars` files, **and** added `RcppParallel` to `Imports` with an `importFrom`. **Both halves are needed**: the Makevars line alone fixes the missing symbol but the load still fails, because on macOS `libtbb` is referenced through `@rpath` and `devtools` copies the `.so` to a temp directory. Importing the package makes its namespace load first and set up the TBB paths. The reasoning is in a comment in `src/Makevars` so the next person does not stop at the first fix and conclude it did not work.
 
-ALEX: We don't care about reproducibility.
+    **To check:** whether you would rather solve this a different way, for instance an explicit `-Wl,-rpath`. The `Imports` addition is a new hard dependency in `DESCRIPTION`, which is your call.
+
+    **Change 2, your debugging scaffold at `R/runOccJSDM.R:404`.** It had live assignments overwriting every argument with values referencing `occ_data_effort`, a dataset not in the package, plus a live `summarisedLatentPresences`. That block was fully commented before `8f9f315`. **Re-commented rather than deleted**, since you evidently use it, with a note saying it must stay commented and what happened when it did not.
+
+    **To check:** nothing, unless you want it gone entirely.
+
+    **Two things left alone because they are your calls.** `verbose` in `computeNewOutputs()` defaults to `T`, so `predictNewSites()` still prints one line per species unless a caller opts out; it is suppressible now but the default is unchanged. And `sample_z_cpp_parallel` is exported but never called: `runOccJSDM` still uses `sample_z_cpp` at `:1101`, so only the `w` sampler is wired in.
+
+    ALEX TO REVIEW
 
 ## **B. Inference-affecting bugs (wrong numbers, silently) (Alex)**
 
@@ -395,6 +403,8 @@ Items 16 and 18 are marked **partially fixed**: the crash in each is gone, but p
     **Scope.** Reproducibility holds for a given thread count. Threads derive separate streams, so if the package is ever built with OpenMP actually enabled (it is not on the macOS dev machine -- see group D), changing the thread count changes which stream produces which element. Inherent to per-thread streams, not a defect.
 
     **Tests.** `test-regression-bugs.R` covers same-seed equality, different-seed inequality, and independence of consecutive fits. Verified separately that the simulation harness gives identical output for a repeated replicate and different output across replicates.
+
+    **Reviewed by Alex, 31 July 2026: "We don't care about reproducibility."** Taken as a decision not to invest further, not a request to revert, and the fix stays. Worth recording why: reproducibility here is **load-bearing internally even though it is not a user-facing priority**. The simulation study's paired design depends on it, and that pairing is what produced the strongest evidence in the whole study, that only 104 of 49,978 `resid_cor` coverage decisions flipped between the pre- and post-fix runs on identical truths. Remove the R-derived seeding and every future before/after comparison loses that power. The tier-1 test at `test-regression-bugs.R:243` guards it and should stay.
 
 29. **The sparse-GP knot default no longer floors at 30 or crashes below 31 sites.** Filed 27 July 2026 (then group B item 3) after the simulation study hit it; fixed by Alex in `42198d9`, unlogged. Verified 29 July: `getDefaultSupportPoints()` (`R/jsdmfun.R:875`) is now `min(floor(n * 0.2), n - 1)`. The old `max(30, floor(n * 0.2))` fed `kmeans(X_s, centers = ps)` and so was a constant 30 for any dataset below 150 sites -- roughly one knot per site at n = 31, defeating the point of a sparse GP -- and errored outright below 31. The `n - 1` cap is what removes the crash.
 
