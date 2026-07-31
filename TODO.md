@@ -62,7 +62,10 @@ Every code change Claude made, newest first. None has had human review beyond Do
 
     **To check:** nothing, unless you want it gone entirely.
 
-    **Two things left alone because they are your calls.** `verbose` in `computeNewOutputs()` defaults to `T`, so `predictNewSites()` still prints one line per species unless a caller opts out; it is suppressible now but the default is unchanged. And `sample_z_cpp_parallel` is exported but never called: `runOccJSDM` still uses `sample_z_cpp` at `:1101`, so only the `w` sampler is wired in.
+    **Two things left alone because they are your calls.**
+
+    - `verbose` in `computeNewOutputs()` defaults to `T`, so `predictNewSites()` still prints one line per species unless a caller opts out. It is suppressible now, which was the harder half, but the default behaviour, the test-output noise and the CRAN-reviewer exposure are all unchanged. Group C item 3 is therefore half closed rather than closed.
+    - **`sample_z_cpp_parallel()` is exported but never called.** `runOccJSDM` still uses `sample_z_cpp` at `R/runOccJSDM.R:1101`, so only `sample_w_cim_cipp_parallel()` is actually wired in and half the parallelisation work is unreachable. Most likely it simply has not been hooked up yet, in which case ignore this. Flagging it because it is otherwise invisible: it compiles, exports and tests clean, and it shows up only as three new entries in the dead-code scan, which went from 8 unused `RcppExports` wrappers to 11 with `8f9f315`. If it is deliberate, say so and it goes to `deprecated/` with the rest.
 
     ALEX TO REVIEW
 
@@ -170,15 +173,21 @@ ALEX RESPONSE: Added a verbose argument
 
 ## **D. Dead and broken internal code (Alex)**
 
-Ten dead functions were moved to `deprecated/` on 30 July (section A item 1). What remains is below. A systematic scan found 38 dead R functions plus 8 unused `RcppExports` wrappers in total, so most of this is still outstanding.
+Ten dead functions were moved to `deprecated/` on 30 July (section A item 1). What remains is below.
 
-1.  **The remaining dead functions, once the above is settled.** Roughly 24 more in `R/jsdmfun.R` and `R/mcmcfun.R`, plus `computeMinESS()` in `R/diagnostics.R`, plus 8 unused wrappers in `RcppExports.R`.
+**Re-scanned 31 July: 40 dead R functions, up from 38.** `mcmcfun.R` 14, `jsdmfun.R` 12, `RcppExports.R` 11, plus `computeMinESS()` in `R/diagnostics.R`, `thinOutput()` in `R/output.R`, and `.onLoad()` in `R/zzz.R`. The set **grew** because `8f9f315` added three more unused `RcppExports` wrappers, so this cleanup is chasing a moving target while the samplers are being rewritten.
+
+**Four functions are excluded from all of the below, by decision.** `computePredictiveProbs()`, `partition_r2()`, `returnSpatialEffectMean()` and `plotSpatialEffect()` are dead by the same test as the rest, and were previously listed as a question for Alex. He removed that question in `6722e22` without changing the code, in a commit where he did act on other items, which reads as a decision to keep them. Two have independent reasons to stay: `partition_r2()` relates to the live *MEE paper* item on site variance partitioning, and the `returnSpatialEffectMean()`/`plotSpatialEffect()` pair is the only spatial-field plotting anywhere in the package. `computePredictiveProbs()` looks straightforwardly superseded by `predictNewSites()` and could go whenever Alex says so. **If that reading is wrong, say so and they go with the rest.**
+
+**Timing: this is not urgent and is best done after the sampler rewrite lands.** The payoff is a `R CMD check` NOTE, not a WARNING, and CRAN accepts NOTEs with explanation. Meanwhile the `RcppExports` half needs `src/` edits and the `jsdmfun.R` half needs edits to a file being actively rewritten, so doing either now invites merge conflicts for a cosmetic gain. Alex's profiling note points at replacing the Polya-Gamma sampler, which will change this set again.
+
+1.  **Move the remaining dead functions to `deprecated/`.** About 26 across `R/jsdmfun.R` and `R/mcmcfun.R`, plus `computeMinESS()` in `R/diagnostics.R`, plus 11 unused wrappers in `RcppExports.R`. Excludes the four named above.
 
     The wrappers need different handling: **do not edit `RcppExports.R`**, it is generated. Remove the `// [[Rcpp::export]]` tag in the C++ and re-run `Rcpp::compileAttributes()`.
 
     Two things the scan flags that must **not** be deleted: `.onLoad()` (zero callers because R itself calls it; removing it would drop the `mc.cores` cap set for CRAN compliance) and `thinOutput()` (uncallable today, but group C item 1 and the CRAN plan depend on it).
 
-    CLAUDE TO CONTINUE AFTER THE ITEM 1 DECISION
+    CLAUDE TO DO AFTER THE SAMPLER REWRITE LANDS
 
 2.  **`globalVariables()` for the data-masked column names.** The `R CMD check` undefined-globals NOTE is down from 84 symbols to 65 as dead code has been removed. What will remain is `dplyr`/`ggplot2` NSE references (`x`, `y`, `Species`, `Min`, `2.5%` and so on), which are false positives and want one `utils::globalVariables()` call in `R/occJSDM-package.R`.
 
@@ -186,7 +195,7 @@ Ten dead functions were moved to `deprecated/` on 30 July (section A item 1). Wh
 
     **Done when** `devtools::check()` reports no NOTE under "checking R code for possible problems", not merely a shorter one.
 
-    CLAUDE TO DO AFTER ITEMS 1 AND 2
+    CLAUDE TO DO AFTER ITEM 1
 
 3.  **`sample_rnb()` cannot run as written** (`R/jsdmfun.R`). Groundwork for the count-data item, not yet called from anywhere, but it has a scoping bug that will bite when wired up: `r_current <- rnb[s]` reads `rnb` inside the `sapply()` whose result is being assigned to `rnb`, so lookup falls through to the namespace and fails. The current size vector needs to come in as an argument.
 
