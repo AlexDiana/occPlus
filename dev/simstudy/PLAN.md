@@ -4,9 +4,13 @@ Plan for the "extensive testing on simulated datasets" item under *MEE paper / D
 
 [Guide to the test suite](https://claude.ai/code/artifact/ad3d46eb-1fd4-49b5-b795-6b71474ef1d5 "Guide to the test suite")
 
-**Status as of 30 July 2026: the suite is built and the study has been run four times.** The pre-fix grid (27-28 July) found four defects. The post-fix re-run (29 July) is the current table in §12 and added two more findings. Two targeted experiments followed: the M ladder (§13) and the prior-variance arms (§14). Between them they disproved two hypotheses and identified the cause of a third finding. Sections marked *OPEN* still need a decision or a measurement.
+**Status as of 31 July 2026: the suite is built, and the grid plus four targeted experiments have been run.** The pre-fix grid (27-28 July) found four defects. The post-fix re-run (29 July) is the current table in §12 and added two more findings. Four targeted experiments followed: the M ladder (§13), the tighter-`beta_theta`-prior arms (§13.8), the prior-variance arms (§14), and the `ncov_theta = 0` discriminator (§15, run at R = 50 and confirmed at R = 200). Between them they disproved three hypotheses, narrowed one finding to a specific parameter row, and traced most of another. Sections marked *OPEN* still need a decision or a measurement.
 
-**Reading order if you are new to this:** §12 for the current results, then §13.7 and §14.7 for what the follow-up experiments established. §1-§9 are the design and are mostly settled.
+**Reading order if you are new to this:** §12 for the headline results, then §15.4-§15.6, which are the most recent and supersede parts of §12's attributions. §13.7 and §14.7 are the intermediate experiments. §1-§9 are the design and are mostly settled.
+
+**Two findings are open and both are now sharply localised.** `beta_theta` (the *slope overconfidence* item in `TODO.md` group B) undercovers only on the collection-covariate *slopes*; its intercept row covers at 0.968 (§15.5). `B0` (the *bias doubled* item) carries a bias of which 70% is downstream of those slopes and the rest is a real residual, 3.3 SE from zero at R = 200 (§15.6). Both now need a sampler-level look rather than more simulation.
+
+**A note on citing TODO items.** Group B items are cited here by *subject*, never by position. Positions have been renumbered four times and every numeric reference broke each time, in some cases silently repointing at an unrelated item. See "Cross-referencing TODO items" in `AGENTS.md`.
 
 | Stage | State |
 |----|----|
@@ -154,7 +158,7 @@ The latent-factor model is invariant to rotation and sign. `reparamFactorModel()
 - **NOT comparable, contrary to the original draft of this section:** `Bs`, `Gs`, `sigma_bs`. The simulator builds the spatial field directly from `sigma_s`/`l_s` and sets `Bst <- matrix(0, S, ps)` (`R/jsdmfun.R:557`), so on the truth side `Bs` is empty *regardless of `ds`* (re-checked at `ds = 2`) and `sigma_bs` generates nothing; the fit meanwhile represents the field as sparse-GP basis coefficients over `n_supportpoints` knots. Different parameterisations. Measured for `sigma_bs`: true 0.5 against a posterior mean of \~1.6, 0/8 coverage -- a meaningless comparison rather than a bug.
 - **Only as identified functions:** residual correlation matrix, `eta`/`psi`, variance partitioning
 - **Must NOT be checked element-wise:** `U`, `L`, `A`, `C` -- element-wise coverage would fail for reasons that are not bugs
-- **Excluded:** `sigma_h` -- it was not sampled when this was written (since fixed, *Fixed bugs* 24), but it remains excluded because `U` at training sites is drawn under a hard-coded unit-variance prior regardless, so the study cannot see it. **Also `l_s`** -- group B item 2: `sigma_s` is hard-coded to 1 at the `sample_ls()` call site, so the length-scale absorbs the amplitude misspecification and rails at the top of `l_s_grid` for every true value tried. Any coverage figure for `l_s` is meaningless until that is fixed. Exclude explicitly and with a comment, so a future reader does not "fix" the test.
+- **Excluded:** `sigma_h` -- it was not sampled when this was written (since fixed, *Fixed bugs* 24), but it remains excluded because `U` at training sites is drawn under a hard-coded unit-variance prior regardless, so the study cannot see it. **Also `l_s`** -- the `sample_ls()` item in group B: `sigma_s` is hard-coded to 1 at the `sample_ls()` call site, so the length-scale absorbs the amplitude misspecification and rails at the top of `l_s_grid` for every true value tried. Any coverage figure for `l_s` is meaningless until that is fixed. Exclude explicitly and with a comment, so a future reader does not "fix" the test.
 
 ### 5.4 The GP knot count must be pinned, not left to the default
 
@@ -264,7 +268,7 @@ Measured on `sampledata` (100 sites, 10 species, 2 chains): **0.039 s per iterat
 
 **Superseded by measurement**: the 29 July run did all 10 cells in 285 min on 5 cores, i.e. \~4.75 h. The earlier \~2.5–3 h figure assumed 8 cores, which this machine cannot usefully supply -- the M4 has only 4 performance cores, so workers past the fourth land on efficiency cores worth roughly a third to a half as much (see §5.5). Cells 9–10 are cheaper than the average; cell 8 (`species_20`) is dearer.
 
-Replicates are embarrassingly parallel at the *process* level -- independent datasets and fits -- so this needs no package changes, unlike the in-package chain parallelisation in `TODO.md` group D item 1.
+Replicates are embarrassingly parallel at the *process* level -- independent datasets and fits -- so this needs no package changes, unlike the in-package chain parallelisation proposed under *MEE paper / Alex to dos*, "Performance of `runOccJSDM()`", option A.
 
 **Do not buy replicates by shortening chains.** Each interval endpoint is a tail quantile; with 500 total draws only \~12 land below the 2.5% bound, so the endpoints are noisy and that noise feeds into coverage as bias, not just variance. Set chain length by an ESS target (\>= 400 on monitored parameters, which `returnConvergenceDiagnostics()` already reports) and let R take what is left.
 
@@ -295,15 +299,17 @@ Also: pooling coverage across species within a block buys precision, but those i
 
 ## 10. Open items
 
-0.  *OPEN, and it degrades the two spatial cells.* **The GP length-scale is never recovered** (`TODO.md` group B item 1). Needs a derivation, not a code tweak. Until then no cell says anything about spatial range.
+0.  *OPEN, and it degrades the two spatial cells.* **The GP length-scale is never recovered** (the `sample_ls()` item in `TODO.md` group B). Needs a derivation, not a code tweak. Until then no cell says anything about spatial range.
 
 1.  ~~Minimum `n` for spatial cells.~~ **RESOLVED 27 July.** The floor is **31 unique locations** with default settings.
 
 2.  ~~Tier 2 failing vs advisory.~~ **RESOLVED: it fails**, on thresholds measured across three seed sets (§6.3).
 
-3.  ~~`beta_theta` and `resid_cor` sit below nominal.~~ **RESOLVED and both traced.** `resid_cor` is `reparamFactorModel()` (`TODO.md` group B item 2), confirmed by a paired re-run in which only 104 of 49,978 coverage decisions flipped. `beta_theta` was partly the prior mean (*Fixed bugs* 25); the residue is group B item 4 and is now known **not** to be under-identification, prior width, or pseudo-replication (§13, §14).
+3.  ~~`beta_theta` and `resid_cor` sit below nominal.~~ **RESOLVED and both traced.** `resid_cor` is the `reparamFactorModel()` item in `TODO.md` group B, confirmed by a paired re-run in which only 104 of 49,978 coverage decisions flipped. `beta_theta` was partly the prior mean (*Fixed bugs* 25); the residue is the slope-overconfidence item in group B, and simulation has now taken it as far as it can go. Ruled out: under-identification, prior width, pseudo-replication (§13, §14). Established: the defect sits on the **slopes** only, since the intercept row covers at 0.968 with the slopes removed (§15.5). What is left is a sampler-level question about the Polya-Gamma update, filed for Alex.
 
 4.  *OPEN.* **Presentation of tier-3 results for the paper.** Still deferred. The summary object feeds either a short pkgdown article or the manuscript directly.
+
+7.  *OPEN.* **The `B0` residual** (the *bias doubled* item in `TODO.md` group B). Removing the collection-covariate slopes removes 70% of the bias, but a remainder survives at 3.3 SE from zero at R = 200 (§15.6). So fixing item 4 will recover most of `B0` but not all of it, and the item cannot be closed as purely downstream. Cause not identified.
 
 5.  *OPEN, and the case keeps strengthening.* **SBC** (§7). Three separate instances now of a fixed truth conflicting with an informative prior: `sigma_b` reading 1.000 because it is prior-dominated, `p` collapsing where the true value sits far into a `Beta(5, 1)` tail, and `theta0` overcovering. All are artefacts of choosing truth independently of the prior, and SBC cannot produce them by construction.
 
@@ -333,9 +339,94 @@ Also: pooling coverage across species within a block buys precision, but those i
 
 ------------------------------------------------------------------------
 
+## 12. Results of the full run (29 July 2026, post-fix)
+
+1000 replicates, 10 scenarios, 0 failures, **285 min** on 5 cores. 155,578 individual interval checks. Commit `8af22cd`. Coverage SE at R = 100 is 2.2 points, so treat anything in 0.93-0.97 as indistinguishable from nominal.
+
+**This is a paired comparison with the 28 July pre-fix run.** `draw_truth()` seeds on (scenario, replicate), so the simulated data and true values are *bit-identical* between the two runs -- verified, `max|truth difference| = 0`. Every difference below is attributable to the code, not to sampling variation between runs. That is a much stronger design than two independent runs would give, and it is worth preserving: **do not change `simstudy_seed()`**, or future runs lose comparability with these.
+
+**Read 12.1-12.3 alongside §14.7 and §15, which have since superseded parts of them.** The `beta_theta` finding in 12.1 has been narrowed to the collection-covariate *slopes* (§15.5), and the `B0` finding in 12.2 has been traced: 70% of the bias is downstream of those slopes, with a real residual confirmed at R = 200 (§15.6). The table itself stands; the attributions under it have moved on.
+
+| Block | base | spat | trait | prim3 | lowinfo | d-under | d-over | S=20 | occ | bin |
+|----|----|----|----|----|----|----|----|----|----|----|
+| `B0` | 0.948 | 0.943 | 0.942 | 0.954 | **0.862** | 0.958 | 0.950 | 0.951 | 0.953 | 0.962 |
+| `B` | 0.947 | **0.883** | 0.916 | 0.942 | **0.826** | 0.936 | 0.939 | 0.933 | 0.947 | 0.952 |
+| `G` | 0.948 | -- | 0.945 | *0.975* | **0.840** | 0.953 | 0.955 | 0.925 | *0.970* | 0.938 |
+| `beta_theta` | **0.763** | **0.762** | **0.771** | **0.718** | *0.983* | **0.750** | **0.752** | **0.727** | **0.709** | -- |
+| `theta0` | *0.983* | *0.983* | *0.978* | *0.985* | **0.602** | *0.980* | *0.981* | *0.982* | *0.985* | -- |
+| `p` | 0.902 | 0.911 | 0.900 | 0.925 | **0.109** | 0.913 | 0.919 | 0.908 | -- | -- |
+| `q` | 0.945 | 0.947 | 0.949 | 0.937 | 0.911 | 0.946 | 0.943 | 0.950 | -- | -- |
+| `resid_cor` | **0.763** | **0.758** | **0.758** | **0.768** | **0.764** | *0.980* | **0.755** | **0.752** | **0.761** | **0.752** |
+| `sigma_b` | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* |
+
+**Bold = undercovers. Italic = overcovers. `--` = not estimated in that cell.**
+
+Every figure above was re-derived from `dev/simstudy/results/simstudy-20260729-143756.csv` on 1 August 2026 and matches.
+
+### 12.1 What the fixes changed
+
+Averaged over all cells, pre-fix -> post-fix:
+
+| Block | Coverage | Bias | Verdict |
+|----|----|----|----|
+| `beta_theta` | 0.719 -> **0.766** | +0.112 -> **+0.038** | improved, not fixed |
+| `theta0` | 0.901 -> 0.944 | -0.020 -> -0.004 | moved, see 12.3 |
+| `resid_cor` | 0.775 -> 0.777 | +0.006 -> +0.002 | **unchanged** |
+| `p` | 0.821 -> 0.827 | +0.087 -> +0.086 | unchanged, as expected |
+| `B0` | 0.947 -> 0.943 | -0.135 -> **-0.228** | **bias doubled** |
+| `B`, `G`, `q` | \~0.92-0.94 | \~0 | stable |
+
+1.  **`beta_theta` improved but is not fixed.** Every cell gained 0.03-0.05, and two-thirds of the bias is gone. Alex's correction of the collection-covariate prior mean from 1 to 0 was a real cause -- but not the only one, because 0.766 against nominal 0.95 is still far out. Whatever remains is flat across model type, primer count, species count and factor misspecification, exactly as the pre-fix version was. **Since narrowed:** §15.5 shows the intercept row is perfectly calibrated at 0.968 once the slopes are removed, so the defect is in slope estimation specifically, not in the block. This is the slope-overconfidence item in `TODO.md` group B.
+
+2.  **`resid_cor` is untouched, and the paired design makes that conclusive.** Only **104 of 49,978** coverage decisions flipped. Identical data, identical truth, coverage unmoved at 0.777. This is `reparamFactorModel()` (the `reparamFactorModel()` item in `TODO.md` group B), which is unfixed and currently disputed. The `d_underfit` exception persists exactly as before: *over*covering at 0.980, because under-fitting the ordination widens intervals enough to mask the bias.
+
+3.  **`p` is unchanged, and that is the correct outcome.** `low_information` sits at 0.109. The informative `Beta(5, 1)` is load-bearing for identifiability -- `p` and `q` enter `sample_pq_cpp()` symmetrically, so the prior is what selects the mode. This cell measures the *cost of that constraint* when true `p` is 0.1-0.3. It is not a defect to be fixed by flattening the prior.
+
+### 12.2 New finding: `B0` bias roughly doubled
+
+Nine of ten cells moved more negative: base -0.113 -> -0.208, `occupancy` -0.024 -> -0.151, `primers_3` -0.031 -> -0.151, `low_information` -0.931 -> -1.056. Only `binary` moved the other way (-0.002 -> +0.012).
+
+**Coverage does not reveal this** -- it holds at 0.943 because the intervals are wide enough to absorb the shift. It is visible only in the bias column, which is the argument for tracking both.
+
+**Since diagnosed, and this entry's guess was wrong.** It attributed the shift to the 421-line `jsdmfun.R` rewrite in the same pull. §15.4 and §15.6 show otherwise: setting `ncov_theta = 0` removes 70% of the bias, so most of it is downstream of the collection-covariate slopes, with a genuine residual surviving at 3.3 SE. This is the `B0`-bias item in `TODO.md` group B, and it stays open on that residual.
+
+### 12.3 New finding: `theta0` now overcovers
+
+The all-cell average of 0.944 is misleading. Per cell it is **0.978-0.985 in nine cells** (was 0.938-0.959) and **0.602 in `low_information`** (was 0.477). So it moved from mildly under to distinctly over, except where information is thin.
+
+Overcoverage is the safe direction. This entry originally guessed the widened `diag(2)` prior variance had overshot; §14.7 disproved that directly, and the M ladder (§13.7) instead points at Stage 1 under-identification, which relaxes as M rises.
+
+### 12.4 What holds
+
+`q`, `B0`, `B` and `G` are at or near nominal in every cell except `low_information`. The quantities most likely to be reported in an ecology paper remain trustworthy -- with the `B0` bias caveat in 12.2, which affects the point estimate rather than the interval.
+
+`low_information` is still compromised across the board (`theta0` 0.602, `p` 0.109, `B` 0.826, `G` 0.840, `B0` bias -1.06). Users with small or low-detection datasets remain the most exposed.
+
+### 12.5 Caveats that travel with this table
+
+`l_s` and `sigma_h` are absent because neither is recoverable (the `sample_ls()` item in `TODO.md` group B), so **no cell says anything about spatial range**. `sigma_b` reads 1.000 everywhere because it is prior-dominated by construction (§5.3), not because it is well estimated. Differences below 2.2 points are noise.
+
+### 12.6 The superseded pre-fix table (28 July 2026)
+
+Kept because the *delta* is the evidence that the fixes worked, not the level. Run in two parts -- `base` on 27 July (100 fits, 22.9 min), the other 9 cells on 28 July (900 fits, 474 min wall, inflated by the laptop sleeping mid-run). Its replicates were not independent (see §8), so **never quote an SE against these figures**.
+
+| block | base | spat.isol | trait.isol | primers3 | low.info | d.under | d.over | sp20 | occ | binary |
+|----|----|----|----|----|----|----|----|----|----|----|
+| `B` | 0.943 | 0.876 | 0.913 | 0.931 | **0.854** | 0.937 | 0.947 | 0.935 | 0.943 | 0.948 |
+| `B0` | 0.945 | 0.953 | 0.948 | 0.955 | 0.892 | 0.954 | 0.955 | 0.956 | 0.956 | 0.942 |
+| `beta_theta` | **0.717** | **0.730** | **0.721** | **0.679** | **0.860** | **0.714** | **0.709** | **0.693** | **0.676** | -- |
+| `G` | 0.945 | -- | 0.953 | 0.963 | 0.880 | 0.943 | 0.958 | 0.925 | 0.963 | 0.958 |
+| `p` | **0.898** | **0.900** | **0.904** | 0.917 | **0.103** | 0.906 | 0.909 | 0.903 | -- | -- |
+| `q` | 0.948 | 0.942 | 0.944 | 0.935 | 0.904 | 0.946 | 0.945 | 0.947 | -- | -- |
+| `resid_cor` | **0.763** | **0.758** | **0.757** | **0.768** | **0.764** | *0.980* | **0.739** | **0.752** | **0.761** | **0.746** |
+| `sigma_b` | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* | *1.000* |
+| `theta0` | 0.941 | 0.947 | 0.941 | 0.954 | **0.477** | 0.959 | 0.938 | 0.949 | 0.959 | -- |
+
+------------------------------------------------------------------------
+
 ## 13. The M ladder: are B4-B6 defects, or Stage 1 under-identification?
 
-**Status: planned, not yet run.** Commissioned by Doug, 29 July 2026, as the next step on the `beta_theta`, `theta0` and `B0` findings (now `TODO.md` group B items 4, 6 and 5 respectively), each of which is annotated CLAUDE TO RUN SIMULATION STUDY WITH M \> 10 AND SEE IF IT FIXES IT.
+**Status: planned, not yet run.** Commissioned by Doug, 29 July 2026, as the next step on the `beta_theta`, `theta0` and `B0` findings (now the slope-overconfidence, `theta0`-overcoverage and `B0`-bias items in `TODO.md` group B), each of which is annotated CLAUDE TO RUN SIMULATION STUDY WITH M \> 10 AND SEE IF IT FIXES IT.
 
 ### 13.1 The hypothesis, and why one lever could explain three findings
 
@@ -471,7 +562,7 @@ Raising `M` also raises the number of latent `w` states being sampled, so mixing
 
 **Status: running.** Commissioned by Doug, 29 July 2026, directly off 13.7's finding that `beta_theta` coverage worsens with M -- the signature of an overconfident interval rather than insufficient data, which the write-up pointed at `B_betatheta`'s slope variance.
 
-**That variance was hard-coded**, with no `listPriors` hook, unlike `p`/`q`/`theta0`. Added one: `listPriors$b_betatheta_slope_var` (`R/runOccJSDM.R`), defaulting to 2 -- the existing value -- so nothing changes unless a caller sets it. `ALEX TO REVIEW` before treating a non-default value as a real fix rather than a diagnostic; see `TODO.md` group B item 4.
+**That variance was hard-coded**, with no `listPriors` hook, unlike `p`/`q`/`theta0`. Added one: `listPriors$b_betatheta_slope_var` (`R/runOccJSDM.R`), defaulting to 2 -- the existing value -- so nothing changes unless a caller sets it. `ALEX TO REVIEW` before treating a non-default value as a real fix rather than a diagnostic; see the `b_betatheta` variance-decision item in `TODO.md` group B.
 
 **Design:** two arms, `M10_tightprior` and `M20_tightprior`, repeating the worst two points on the ladder with `b_betatheta_slope_var = 0.5` (SD 0.71, against the default's 1.41). Same `seed_label = "mladder"` as the original ladder, so these pair not only against each other but against the *already-collected* `M10`/`M20` results -- no need to re-run the default-prior arms.
 
@@ -639,7 +730,7 @@ What distinguishes `binary` is not that it has one stage. It is that it has **no
 
 One arm, identical to `base` except that the Stage 1 design matrix has no covariate columns. That keeps the two-stage machinery, the latent `w`/`z`, and `p`/`q`/`theta0` all in play, and removes only the `beta_theta` **slopes**; the intercept row, `logit(theta_baseline)`, necessarily remains.
 
-- **`B0`'s bias vanishes** -> it is caused by the collection-covariate slopes. Combined with 14.7, that makes `beta_theta` the single upstream cause, and the `B0` item closes as downstream of it: fix `beta_theta` (group B item 4) and `B0` follows. This is the outcome Alex predicts, and the one the existing evidence favours.
+- **`B0`'s bias vanishes** -> it is caused by the collection-covariate slopes. Combined with 14.7, that makes `beta_theta` the single upstream cause, and the `B0` item closes as downstream of it: fix the `beta_theta` slope defect and `B0` follows. This is the outcome Alex predicts, and the one the existing evidence favours.
 - **`B0`'s bias persists** -> it is the two-stage latent structure rather than `beta_theta`, and `binary`'s clean result was down to one of its other differences. The `B0` item stays open and needs a different line of attack.
 - **Bias shrinks but does not vanish** -> both contribute, and the split tells you how much of it fixing `beta_theta` would buy.
 
@@ -676,7 +767,7 @@ Worth stating plainly because the temptation is to round 73% up to "solved": if 
 | `base` | 20 (intercept + slope, x 10 species) | 0.763 |
 | `nocollcov` | 10 (intercept only) | **0.966** |
 
-**With the slopes removed, `beta_theta`'s intercept row is perfectly calibrated.** So the overconfidence tracked as `TODO.md` group B item 4 is not a property of `beta_theta` as a parameter block: it is specific to the **slope** estimation.
+**With the slopes removed, `beta_theta`'s intercept row is perfectly calibrated.** So the overconfidence tracked in `TODO.md` group B is not a property of `beta_theta` as a parameter block: it is specific to the **slope** estimation.
 
 This narrows that investigation considerably. Four candidate causes are now ruled out:
 
@@ -701,7 +792,7 @@ What remains is whatever handles the covariate columns specifically in the Polya
 | **`nocollcov`** | **absent** | **-0.0633** | 0.0192 | **3.3 SE** |
 | `binary` | none at all | +0.0122 | 0.0119 | 1.0 SE |
 
-**The residual is real.** At R = 50 it was 1.5 SE and 15.4 called it suggestive; at R = 200 it is 3.3 SE. Removing the slopes removes 70% of the bias, so fixing group B item 4 will recover most of `B0`, but a genuine remainder survives. `binary` at 1.0 SE from zero is what "no bias" looks like for comparison.
+**The residual is real.** At R = 50 it was 1.5 SE and 15.4 called it suggestive; at R = 200 it is 3.3 SE. Removing the slopes removes 70% of the bias, so fixing the `beta_theta` slope defect will recover most of `B0`, but a genuine remainder survives. `binary` at 1.0 SE from zero is what "no bias" looks like for comparison.
 
 **Consequence for the `B0` item: it cannot be closed.** Alex proposed deleting it if the one-stage test showed no issue. The test, in its sharpened form, shows a smaller issue rather than none. The item stays open with its cause now split: most of it is downstream of `beta_theta`, and a measurable part is not.
 

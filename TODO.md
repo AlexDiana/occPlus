@@ -111,33 +111,47 @@ Every code change Claude made, newest first. None has had human review beyond Do
     - variance 0.5: `B0` bias -0.106, `beta_theta` coverage 0.707
     - variance 0.1: `B0` bias -0.044, `beta_theta` coverage 0.653
 
-    **This identified the cause of item 6 below.** `42198d9` widened `B_betatheta` from `diag(1)` to `diag(2)`, which is exactly when `B0`'s bias doubled. Turning it back down moves the bias back, monotonically.
+    **This identified the cause of the `B0` item below.** `42198d9` widened `B_betatheta` from `diag(1)` to `diag(2)`, which is exactly when `B0`'s bias doubled. Turning it back down moves the bias back, monotonically.
 
-    **But it is a trade, not a fix:** tightening helps `B0` and hurts `beta_theta`. Items 4 and 6 pull opposite ways on one knob. Not known: whether an intermediate value beats both endpoints, whether the trade holds at `M > 2`, and whether fixing item 4 at its source would dissolve it entirely.
+    **But it is a trade, not a fix:** tightening helps `B0` and hurts `beta_theta`. The `beta_theta` item and the `B0` item pull opposite ways on one knob. Not known: whether an intermediate value beats both endpoints, whether the trade holds at `M > 2`, and whether fixing the `beta_theta` slope defect at its source would dissolve it entirely.
 
-    ALEX TO DECIDE THE VALUE (or that item 4 supersedes this)
+    ALEX TO DECIDE THE VALUE (or that fixing the slope defect supersedes this)
 
 5.  **`B0`'s bias doubled, and coverage does not show it.** Between the pre- and post-fix runs on identical data, nine of ten scenarios moved more negative: overall -0.135 to -0.228. Coverage held at 0.943 throughout, because the intervals are wide enough to absorb the shift, so this is invisible in the headline table and shows only in the bias column.
 
-    Cause is now most likely the `B_betatheta` widening; see item 5, where the decision lives. `B0` is a headline quantity for a JSDM, so this wants settling before the paper reports species intercepts.
+    Cause is mostly the `beta_theta` slopes, per the run below. The `B_betatheta` variance decision above is the associated knob. `B0` is a headline quantity for a JSDM, so this wants settling before the paper reports species intercepts.
 
-ALEX RESPONSE: WE COULD ADD A SIMULATION STUDY ON THE ONE-STAGE MODEL ONLY, THAT WOULD REVEALE WHETHER THERE IS ANY ISSUE IN B0 (since there is no beta_theta). If there is no issue, we could delete this point and be sure that the issue is only beta_theta.
+    ALEX RESPONSE: WE COULD ADD A SIMULATION STUDY ON THE ONE-STAGE MODEL ONLY, THAT WOULD REVEALE WHETHER THERE IS ANY ISSUE IN B0 (since there is no beta_theta). If there is no issue, we could delete this point and be sure that the issue is only beta_theta.
 
-```         
-**Ran 31 July at R = 50 and confirmed at R = 200 (`PLAN.md` 15.4, 15.6). Alex's hypothesis holds in its main claim and fails in its strong form.** The designed arm was `base` with `ncov_theta = 0`, keeping the two-stage machinery, the latent `w`/`z` and `p`/`q`/`theta0`, removing only the `beta_theta` slopes. `B0` bias:
+    **Ran 31 July at R = 50 and confirmed at R = 200 (`PLAN.md` 15.4, 15.6). Alex's hypothesis holds in its main claim and fails in its strong form.** The designed arm was `base` with `ncov_theta = 0`, keeping the two-stage machinery, the latent `w`/`z` and `p`/`q`/`theta0`, removing only the `beta_theta` slopes. `B0` bias:
 
-- `base`, slopes present: -0.2078 (SE 0.0307), 6.8 SE from zero
-- `nocollcov`, slopes removed: **-0.0633** (SE 0.0192), **3.3 SE from zero**
-- `binary`, no `beta_theta` at all: +0.0122 (SE 0.0119), 1.0 SE from zero
+    - `base`, slopes present: -0.2078 (SE 0.0307), 6.8 SE from zero
+    - `nocollcov`, slopes removed: **-0.0633** (SE 0.0192), **3.3 SE from zero**
+    - `binary`, no `beta_theta` at all: +0.0122 (SE 0.0119), 1.0 SE from zero
 
-Removing the slopes removes **70%** of the bias, so fixing item 4 will recover most of `B0`. **But the residual is real**: 1.5 SE at R = 50, 3.3 SE at R = 200. `binary` at 1.0 SE is what no bias looks like by comparison.
+    Removing the slopes removes **70%** of the bias, so fixing the `beta_theta` slope defect will recover most of `B0`. **But the residual is real**: 1.5 SE at R = 50, 3.3 SE at R = 200. `binary` at 1.0 SE is what no bias looks like by comparison.
 
-**So this item stays open.** Alex proposed deleting it if the one-stage test showed no issue; the test shows a smaller issue, not none. The cause is now split: most is downstream of item 4, a measurable part is not, and `B0` coverage sits at 0.94-0.96 throughout so it will never surface there.
+    **So this item stays open.** Alex proposed deleting it if the one-stage test showed no issue; the test shows a smaller issue, not none. The cause is now split: most is downstream of the slope defect, a measurable part is not, and `B0` coverage sits at 0.94-0.96 throughout so it will never surface there.
 
-The R = 200 run also reproduced the R = 50 replicates bit-for-bit, which is how we know the two are the same experiment rather than two similar ones.
+    The R = 200 run also reproduced the R = 50 replicates bit-for-bit, which is how we know the two are the same experiment rather than two similar ones.
 
-ALEX: WHAT REMAINS AFTER ITEM 4 IS FIXED IS SMALL BUT NOT ZERO
-```
+    ALEX: WHAT REMAINS AFTER THE SLOPE DEFECT IS FIXED IS SMALL BUT NOT ZERO
+
+6.  **`theta0` overcovers at 0.978-0.985, having been near nominal before the fixes.** Measured by the post-fix re-run (`PLAN.md` 12.3); pre-fix it sat at 0.938-0.959. The all-cell average of 0.944 hides this, because `low_information` pulls it down at 0.602.
+
+    **Two candidate causes ruled out.** The M ladder showed overcoverage falling toward nominal as M rises (0.986 at `M2`, 0.944 at `M10`) while the matched `K30` control makes it worse at 0.996, which reads as Stage 1 under-identification (`PLAN.md` 13.7). But that reading has a hole: pre-fix, `theta0` was fine at the *same* M = 2. And the coupling hypothesis, that `b_betatheta`'s widened variance propagates through `w` into `sample_theta0()`, was tested directly and disproved: a 20-fold reduction moved coverage by 0.006 (`PLAN.md` 14.7).
+
+    **Priority: lowest of the open findings, and it should stay there.** Overcoverage is the safe direction; it costs power, not correctness. The only untested candidate is `theta0`'s own `Beta(1, 20)` prior, which already has `listPriors$a_theta0`/`b_theta0` hooks and needs no code change.
+
+    CLAUDE TO PIGGYBACK A theta0-PRIOR ARM ON THE NEXT RUN, NOT TO RUN ONE FOR THIS ALONE
+
+7.  **`q` (Stage 2 false positives) degrades hard as `K` rises.** Found 29 July 2026 as a side effect of the M-ladder run (`PLAN.md` 13.7), which was not built to look for it. Never investigated beyond the measurement.
+
+    Coverage falls from 0.945 at `M2` (K = 3) to **0.614 at `K30`** (K = 30, same total rows as `M20`). `M20` itself, which holds K = 3 and raises M instead, sits at 0.742. So more PCR replicates make `q` *less* well calibrated, and the effect is larger than the M-driven change in any other item here.
+
+    **Hypothesis, untested:** the same cost-of-identifiability pattern as `beta_theta`. More PCR replicates sharpen the posterior, so if the informative `Beta(1, 20)` prior holds `q` a fixed distance from the truth, sharper intervals show it as worse coverage. If that is what this is, it is not a new bug but a known trade extended to K, and it belongs with the prior-choice decision rather than in the sampler.
+
+    ALEX TO DIAGNOSE THE CAUSE AND DECIDE WHAT TO DO ABOUT THIS
 
 ## **C. Crashes, unreachable code paths, and API bugs (Alex)**
 
@@ -185,7 +199,7 @@ Ten dead functions were moved to `deprecated/` on 30 July (section A item 1). Wh
 
     The wrappers need different handling: **do not edit `RcppExports.R`**, it is generated. Remove the `// [[Rcpp::export]]` tag in the C++ and re-run `Rcpp::compileAttributes()`.
 
-    Two things the scan flags that must **not** be deleted: `.onLoad()` (zero callers because R itself calls it; removing it would drop the `mc.cores` cap set for CRAN compliance) and `thinOutput()` (uncallable today, but group C item 1 and the CRAN plan depend on it).
+    Two things the scan flags that must **not** be deleted: `.onLoad()` (zero callers because R itself calls it; removing it would drop the `mc.cores` cap set for CRAN compliance) and `thinOutput()` (uncallable today, but the `thinOutput()` item in group C and the CRAN plan depend on it).
 
     CLAUDE TO DO AFTER THE SAMPLER REWRITE LANDS
 
@@ -294,7 +308,7 @@ H.  **Reduce the repeated `arma::inv()` calls in the samplers.** `sample_beta_cp
 
 2.  **extensive testing on simulated datasets** -- **suite built and the R = 100 study run; three things remain.** What exists is summarised under *Completed* below; the authoritative specification and the results table are in `dev/simstudy/PLAN.md`.
 
-    (a) **Re-run once group B items 1, 2 and 4 are fixed.** This is the evidence the fixes worked. Without it they rest on the same code-reading that this exercise showed to be unreliable, and the R = 100 table in `PLAN.md` §12 is already partly stale -- it predates Alex's `42198d9`, which corrected the collection-covariate prior, so `beta_theta` should improve markedly. One command, a few hours:
+    (a) **Re-run once the `sample_ls()`, `reparamFactorModel()` and `beta_theta` slope items in group B are fixed.** This is the evidence the fixes worked. Without it they rest on the same code-reading that this exercise showed to be unreliable, and the R = 100 table in `PLAN.md` §12 is already partly stale -- it predates Alex's `42198d9`, which corrected the collection-covariate prior, so `beta_theta` should improve markedly. One command, a few hours:
 
         ```         
         Rscript dev/simstudy/run_study.R --cores=5 --caffeinate
@@ -304,7 +318,7 @@ H.  **Reduce the repeated `arma::inv()` calls in the samplers.** `sample_beta_cp
 
     (c) **Decide how the results are presented** (`PLAN.md` open item 4). Currently a private Claude artifact (<https://claude.ai/code/artifact/ad3d46eb-1fd4-49b5-b795-6b71474ef1d5>), updated 29 July 2026 with the post-fix re-run and the before/after comparison; a pkgdown article is the obvious home -- see item 3.
 
-    **One constraint carried from the bug list:** `l_s` is excluded from coverage checks because it is not recoverable while group B item 1 is open, so no cell of the study speaks to spatial range. Two earlier constraints have since lapsed -- `sigma_h` is now sampled (Fixed bugs 24) and the OpenMP RNG race is closed (Fixed bugs 26), so tier 1's "structural assertions only" rule can be revisited once reproducibility is confirmed on a multi-threaded platform.
+    **One constraint carried from the bug list:** `l_s` is excluded from coverage checks because it is not recoverable while the `sample_ls()` item in group B is open, so no cell of the study speaks to spatial range. Two earlier constraints have since lapsed -- `sigma_h` is now sampled (Fixed bugs 24) and the OpenMP RNG race is closed (Fixed bugs 26), so tier 1's "structural assertions only" rule can be revisited once reproducibility is confirmed on a multi-threaded platform.
 
 3.  **Stand up a pkgdown site.** Discussed 28 July; not started.
 
@@ -322,7 +336,7 @@ H.  **Reduce the repeated `arma::inv()` calls in the samplers.** `sample_beta_cp
 
     And pkgdown builds every `@examples` block, so the **first build will fail on the group B functions that error unconditionally** (`predictNewSites()` among them). That is the same exposure `\donttest{}` creates under `R CMD check`, which is exactly why the CRAN plan sequences item 8 after the group B fixes. So do this after group B, or expect to `@examples`-guard several functions first.
 
-    **Sequencing caveat:** consider whether to publish a site while group B items 2, 4 and 5 are open. The site would document functions whose credible intervals are currently overconfident, without saying so anywhere a reader would see.
+    **Sequencing caveat:** consider whether to publish a site while the `reparamFactorModel()`, `beta_theta` slope and `B0` bias items in group B are open. The site would document functions whose credible intervals are currently overconfident, without saying so anywhere a reader would see.
 
 # **Future versions**
 
@@ -358,7 +372,7 @@ Items 16 and 18 are marked **partially fixed**: the crash in each is gone, but p
 
 9.  ~~**WAIC running means divide by the raw iteration counter.**~~ **FIXED.** A dedicated `currentWAICiter` counter is initialised to 1 (`R/runOccJSDM.R:831`) and incremented only inside the WAIC block (`:1200`), so the running means now divide by the number of WAIC accumulations rather than by the raw MCMC iteration index. A guard, `if (numIters != (currentWAICiter - 1)) stop("Current wAIC iter wrong")` (`:1251`), asserts the two agree. Confirmed introduced by `b7b6aa2` via `git log -S currentWAICiter`. *(This fix was not recorded when the other `b7b6aa2` fixes were logged; recovered on 27 July while reconciling cross-references.)*
 
-10. ~~**Non-thread-safe RNG inside the OpenMP loops.**~~ **PARTIALLY FIXED.** `sample_beta_nocov_cpp_TS()` (`src/functions.cpp:308`) now calls the thread-safe `sample_beta_cpp_TS()` rather than the non-TS `sample_beta_cpp()`, which closes the race in `sample_betatheta_cpp_parallel()` (`src/functions.cpp:607`) -- the thread-safe path the audit described as "half-finished" is now wired up on that side. **The `samplePGvariables()` path (`src/jsdm.cpp:398`) is still affected** via `randinvg()`'s `R::rnorm` call; that residual is tracked as **group B item 5** above. *(Also not recorded at the time; recovered 27 July.)*
+10. ~~**Non-thread-safe RNG inside the OpenMP loops.**~~ **PARTIALLY FIXED.** `sample_beta_nocov_cpp_TS()` (`src/functions.cpp:308`) now calls the thread-safe `sample_beta_cpp_TS()` rather than the non-TS `sample_beta_cpp()`, which closes the race in `sample_betatheta_cpp_parallel()` (`src/functions.cpp:607`) -- the thread-safe path the audit described as "half-finished" is now wired up on that side. **The `samplePGvariables()` path (`src/jsdm.cpp:398`) is still affected** via `randinvg()`'s `R::rnorm` call; that residual was tracked as a group B item and is now closed as *Fixed bugs* 28. *(Also not recorded at the time; recovered 27 July.)*
 
 **Post-audit fixes:**
 
@@ -372,11 +386,11 @@ Items 16 and 18 are marked **partially fixed**: the crash in each is gone, but p
 
 15. ~~**`summarisedLatentPresences = FALSE` errors on two-stage models.**~~ **FIXED.** Now correctly allocates and writes `w_output_chain` and `theta_output_chain`. `R/runOccJSDM.R:1152`.
 
-16. ~~**`thinOutput()` cannot run at all.**~~ **PARTIALLY FIXED.** The function still exists (`R/output.R:18`) and now runs: `niter` is read from `fitModel$results_output$jsdm_output$B0_output` instead of the long-gone `beta_ord_output`, and the `thin` argument is honoured rather than hard-coding `by = 5`. **Two of the three original defects remain** -- the 2-D branch still thins by row, and the scalar `WAIC` still falls through to `print("Dimension not recognised")`. Tracked as **group B item 2** above.
+16. ~~**`thinOutput()` cannot run at all.**~~ **PARTIALLY FIXED.** The function still exists (`R/output.R:18`) and now runs: `niter` is read from `fitModel$results_output$jsdm_output$B0_output` instead of the long-gone `beta_ord_output`, and the `thin` argument is honoured rather than hard-coding `by = 5`. **Two of the three original defects remain** -- the 2-D branch still thins by row, and the scalar `WAIC` still falls through to `print("Dimension not recognised")`. Tracked as **the `thinOutput()` item in group C** above.
 
 17. ~~**`computeDiagnostics()` runs on `psi_output`.**~~ **FIXED.** Added `psi_output` to the skip list to avoid meaningless diagnostics. `R/diagnostics.R:403-404`.
 
-18. ~~**`predictNewSites()` does not honour its documented no-op behaviour.**~~ **PARTIALLY FIXED -- this entry previously overstated what landed; corrected 27 July 2026.** The gating on the presence of covariates was done (`R/output.R:1457,1470`). The **`NULL` defaults were not**: `formals(predictNewSites)` shows `X_psi` and `X_s` still have no defaults at all, so `predictNewSites(fit, X_psi = X)` still fails on the missing `X_s` promise even when `useSpatial = FALSE`. Residual tracked as **group B item 3**.
+18. ~~**`predictNewSites()` does not honour its documented no-op behaviour.**~~ **PARTIALLY FIXED -- this entry previously overstated what landed; corrected 27 July 2026.** The gating on the presence of covariates was done (`R/output.R:1457,1470`). The **`NULL` defaults were not**: `formals(predictNewSites)` shows `X_psi` and `X_s` still have no defaults at all, so `predictNewSites(fit, X_psi = X)` still fails on the missing `X_s` promise even when `useSpatial = FALSE`. **That residual is now closed: see *Fixed bugs* 34.**
 
     Third entry in this list found to overstate a fix (with 16 and 20), which is the argument for the test suite: every one of these was recorded from reading a diff rather than from running the code.
 
@@ -412,7 +426,7 @@ Items 16 and 18 are marked **partially fixed**: the crash in each is gone, but p
 
     This was the most clearly evidenced item in the whole audit: at R = 100 the intercept -- the one coefficient whose prior mean *was* overridden -- covered at 0.937, while the slopes covered at 0.496 with bias +0.113, against true slopes averaging +0.01. Across the full grid `beta_theta` undercovered in **every** cell (0.676-0.730).
 
-    **Confirmed by the 29 July re-run**: `beta_theta` improved in every cell, to 0.709-0.771, with two-thirds of the bias removed. It is still well short of nominal, so a second cause remains -- tracked as group B item 4.
+    **Confirmed by the 29 July re-run**: `beta_theta` improved in every cell, to 0.709-0.771, with two-thirds of the bias removed. It is still well short of nominal, so a second cause remains -- tracked as the slope-overconfidence item in group B, and since narrowed to the collection-covariate slopes.
 
 26. ~~**Non-thread-safe RNG in the hottest OpenMP loop.**~~ **FIXED.** `randinvg()` (`src/jsdm.cpp:86`) now draws from the `thread_local` `rnorm()` rather than `R::rnorm`; the old line is commented out beside it. That closes the last hole on the `samplePGvariables()` path, whose Polya-Gamma helpers were already converted in `53c38f1`.
 
@@ -420,7 +434,7 @@ Items 16 and 18 are marked **partially fixed**: the crash in each is gone, but p
 
 27. ~~**Stage 2 hyperparameters documented as settable but never read.**~~ **FIXED.** `a_p`, `b_p`, `a_q` and `b_q` now read from `listPriors` (`R/runOccJSDM.R:751-754`), matching the behaviour `@param listPriors` already claimed, and the documented defaults were corrected to match the code (5/1 and 1/20). A user running a low-detection study can now override the prior without editing the package.
 
-    **Only the wiring is closed.** What the default *should be* remains open and is a design decision, not a defect -- see group B item 3.
+    **Only the wiring is closed.** What the default *should be* remains open and is a design decision, not a defect. It was tracked as a group B item until Alex removed it in `093f2bb`; if that removal meant the decision is made, the chosen values should be recorded here, and if not the item needs restoring.
 
 28. **`set.seed()` did not control any of the C++ samplers, so `runOccJSDM()` was not reproducible.** Found 29 July 2026 while writing the regression test for Fixed bugs 26; fixed the same day.
 
@@ -508,6 +522,16 @@ Items 16 and 18 are marked **partially fixed**: the crash in each is gone, but p
 
     **The lesson worth keeping**: a stale shipped dataset presents as a bug in whatever function touches it first, and moves to the next function each time one is fixed. Two functions were investigated and one was needlessly suspected before the data was. When an example object fails and a fresh fit does not, suspect the object.
 
+36. **Both exported GAM functions failed for any user with a categorical occupancy covariate.** **FIXED 30 July 2026** (Claude; `R/occJSDM-package.R`, `NAMESPACE`, commit `032dcff`). Logged here on 1 August: it was completed but never given a *Fixed bugs* entry, so it was invisible in this file.
+
+    **The defect.** `tidyr::pivot_longer()` was called but never imported, and `tidyr` was in `DESCRIPTION` `Imports:` with nothing imported from it in `NAMESPACE`. It is reached in the categorical-covariate branch of `returnCovariateEffect()` and `plotCovariateEffect()`, so both would fail with "could not find function" from a properly installed namespace. `stats::setNames` and `stats::rnbinom` were missing the same way.
+
+    **Why it survived the test suite.** `devtools::load_all()` resolves unimported symbols through the global environment, so a functional test passes whether or not the import exists. The regression test therefore asserts on the imports environment directly, which holds under both `load_all()` and `R CMD check`.
+
+    **Not cosmetic, despite arriving as an `R CMD check` NOTE.** The "checking dependencies in R code" NOTE is now gone entirely, 3 notes to 2. `dnbinom` and `bs` remain on the undefined-globals list, correctly: they are reached only by dead code, and importing `bs` would add `splines` to `DESCRIPTION` to support code that should not ship.
+
+    ALEX TO CHECK
+
 # **Completed work**
 
 Finished work, kept for context rather than as tasks. Bug fixes live under *Fixed bugs* above; this is everything else.
@@ -530,4 +554,4 @@ Finished work, kept for context rather than as tasks. Bug fixes live under *Fixe
 
     - **It is a paired comparison, and that is worth protecting.** `draw_truth()` seeds on (scenario, replicate), so the simulated data and true values are bit-identical between the pre- and post-fix runs -- verified, `max|truth difference| = 0`. Every difference is therefore attributable to the code rather than to sampling variation, which is what makes statements like "only 104 of 49,978 `resid_cor` decisions flipped" possible. **Do not change `simstudy_seed()`**, or future runs lose comparability with these two.
 
-    It found six defects -- three while the tests were being written, three from the run -- none of which the static audit had caught. Four of the six are now fixed (Fixed bugs 24-27 and group B); the rest are group B items 1, 2 and 4.
+    It found six defects -- three while the tests were being written, three from the run -- none of which the static audit had caught. Four of the six are now fixed (Fixed bugs 24-27 and group B); the rest are the `sample_ls()`, `reparamFactorModel()` and `beta_theta` slope items in group B.

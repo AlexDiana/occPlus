@@ -775,7 +775,8 @@ runOccJSDM <- function(data,
       b_betatheta <- rep(0, ncov_theta)
 
       # Slope prior variance, previously hard-coded. Exposed here so it can be
-      # tuned/tested (see TODO.md group B item 4, PLAN.md 13.8) without a
+      # tuned/tested (see the b_betatheta variance-decision item in
+      # TODO.md group B, and PLAN.md 13.8) without a
       # source edit each time. Default of 2 is unchanged from before this
       # override existed. ALEX TO REVIEW before treating a non-default value
       # as a real fix rather than a diagnostic.
