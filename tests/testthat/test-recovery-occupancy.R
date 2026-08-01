@@ -70,6 +70,31 @@ occrec_scenario <- function() {
 
 occrec_mcmc <- list(nchain = 2, nburn = 500, niter = 500, nthin = 1)
 
+# The floors, in one place, so the printed report and the expectations below
+# cannot drift apart. `swept` is the min-to-max range observed over the eight
+# seed sets described in the header; it is text because it is a record of a
+# measurement, not something recomputed at run time.
+OCCREC_SPECIES_CUT <- 0.30   # per-species psi_cor threshold that the count uses
+OCCREC_AUC_CUT <- 0.60       # per-species auc threshold, flagged but not counted
+
+OCCREC_FLOORS <- list(
+  mean_psi_cor = list(floor = 0.30, swept = "0.498 - 0.753",
+    what = "mean per-species correlation of estimated psi with the truth",
+    why  = "The stable summary. Varied by 0.017 across four repeats of one seed, so a failure here is not noise. Catches recovery degrading across every species at once."),
+  n_species_ok = list(floor = NULL, swept = "7 - 10 of 10",
+    what = "species whose psi correlation clears 0.30",
+    why  = "Floor is half the species. Catches several species collapsing while the mean is held up by the rest, which is the blind spot a pooled check has by construction."),
+  mean_auc = list(floor = 0.60, swept = "0.748 - 0.855",
+    what = "mean per-species discrimination of the true occupancy states",
+    why  = "Pooled only. Correlates with psi_cor at 0.94 over 80 species-fits, so it adds little independently, but a site-order or species-order transposition would drive it to its 0.5 null outright."),
+  drv_cov = list(floor = 0.55, swept = "0.800 - 1.000",
+    what = "fraction of B0 and B elements inside their 95% interval",
+    why  = "Nominal is 0.95. Loose floor because 30 elements from one fit is a small sample, but a wrong truth-to-posterior mapping drives this to near 0 rather than merely degrading it."),
+  drv_cor = list(floor = 0.30, swept = "0.647 - 0.900",
+    what = "correlation of B0 and B posterior means with their truths",
+    why  = "Complements coverage the same way test-recovery.R item 3 does: an interval can contain the truth while the point estimate says nothing.")
+)
+
 #' Probability a random occupied site outranks a random unoccupied one.
 #'
 #' The rank form of the Mann-Whitney U, so ties contribute 0.5 rather than
@@ -146,22 +171,84 @@ occrec_drivers <- function() {
   .occrec_cache$drv
 }
 
+#' The five asserted quantities, computed once.
+#'
+#' Both the printed report and the expectations read this, so a floor cannot be
+#' explained one way and tested another.
+occrec_checks <- function() {
+  if (!is.null(.occrec_cache$chk)) return(.occrec_cache$chk)
+  tbl <- occrec_table()
+  drv <- occrec_drivers()
+
+  .occrec_cache$chk <- list(
+    mean_psi_cor = mean(tbl$psi_cor),
+    n_species_ok = sum(tbl$psi_cor >= OCCREC_SPECIES_CUT),
+    n_species_floor = ceiling(occrec_scenario()$S / 2),
+    mean_auc = mean(tbl$auc),
+    drv_cov = mean(drv$covered),
+    drv_cor = stats::cor(drv$post_mean, drv$truth)
+  )
+  .occrec_cache$chk
+}
+
 #' Emit the table so it is visible when the suite runs.
 #'
 #' message() rather than print(): it goes to stderr and survives testthat's
-#' reporters, which is the point of the file.
+#' reporters, which is the point of the file. The legend and the flags are here
+#' so that a row can be read without opening this source file.
 occrec_show <- function(tbl) {
-  txt <- utils::capture.output(print(tbl, digits = 3, row.names = FALSE))
-  message("\nper-species occupancy recovery ",
-          "(psi_cor null 0, auc null 0.5, drv_cov nominal 0.95)\n",
-          paste(txt, collapse = "\n"), "\n")
+  sc <- occrec_scenario()
+
+  flag <- ifelse(tbl$psi_cor < OCCREC_SPECIES_CUT,
+                 sprintf("<- psi_cor below %.2f", OCCREC_SPECIES_CUT),
+                 ifelse(tbl$auc < OCCREC_AUC_CUT,
+                        sprintf("<- auc below %.2f", OCCREC_AUC_CUT), ""))
+  shown <- cbind(tbl, ` ` = format(flag, justify = "left"))
+  txt <- utils::capture.output(print(shown, digits = 3, row.names = FALSE))
+
+  message(sprintf(
+"
+per-species occupancy recovery -- %s scenario, n = %d sites, S = %d species, %d chains x %d iter
+
+  occ_true  fraction of sites where the species is truly present
+  occ_est   fraction estimated present (posterior mean of the latent z)
+  psi_cor   correlation of estimated psi with plogis(eta) across sites (null 0)
+  auc       P(occupied site ranked above unoccupied site) (null 0.5)
+  drv_cov   fraction of this species' B0 and B inside their 95%% interval (nominal 0.95)
+  drv_err   mean |posterior mean - truth| for those same %d coefficients
+
+%s
+",
+    sc$label, sc$n, sc$S, occrec_mcmc$nchain, occrec_mcmc$niter,
+    1L + sc$ncov_psi, paste(txt, collapse = "\n")))
+}
+
+#' Emit what the assertions check, what they caught, and why they are shaped
+#' the way they are.
+occrec_show_checks <- function(which) {
+  chk <- occrec_checks()
+  lines <- vapply(which, function(nm) {
+    f <- OCCREC_FLOORS[[nm]]
+    floor_val <- if (is.null(f$floor)) chk$n_species_floor else f$floor
+    op <- if (is.null(f$floor)) ">=" else ">"
+    fmt <- if (is.null(f$floor)) "%s%9.0f  %s %-6.0f  swept %s\n      %s\n      %s"
+           else "%s%9.3f  %s %-6.2f  swept %s\n      %s\n      %s"
+    sprintf(fmt, formatC(nm, width = -24), chk[[nm]], op, floor_val,
+            f$swept, f$what, f$why)
+  }, character(1))
+
+  message("\nassertions (floors set below the worst of eight seed sets; ",
+          "'swept' is the range seen there)\n\n  ",
+          paste(lines, collapse = "\n\n  "), "\n")
 }
 
 test_that("occupancy is recovered per species (tier 2)", {
   skip_on_cran()
 
   tbl <- occrec_table()
+  chk <- occrec_checks()
   occrec_show(tbl)
+  occrec_show_checks(c("mean_psi_cor", "n_species_ok", "mean_auc"))
 
   expect_equal(nrow(tbl), occrec_scenario()$S)
   # A NA here means a species was entirely occupied or entirely absent, which
@@ -169,20 +256,11 @@ test_that("occupancy is recovered per species (tier 2)", {
   expect_true(all(is.finite(tbl$psi_cor)))
   expect_true(all(is.finite(tbl$auc)))
 
-  # 1. Pooled. The stable summary: measured 0.498-0.753 across eight seeds and
-  #    0.642-0.659 across four repeats of one seed. This is what catches
-  #    recovery degrading across the board.
-  expect_gt(mean(tbl$psi_cor), 0.30)
-
-  # 2. Counted. Measured 7-10 of 10; the floor is half the species. This is
-  #    what catches several species collapsing while the mean is held up by the
-  #    rest -- the blind spot a pooled check has by construction.
-  expect_gte(sum(tbl$psi_cor >= 0.30), ceiling(occrec_scenario()$S / 2))
-
-  # 3. Discrimination is printed, not asserted per species, for the reason in
-  #    the header. One pooled check that it is above its null, which a
-  #    site-order or species-order transposition would break outright.
-  expect_gt(mean(tbl$auc), 0.60)
+  # The three checks printed above. Rationale lives in OCCREC_FLOORS so that
+  # the run explains itself; keep it there rather than duplicating it here.
+  expect_gt(chk$mean_psi_cor, OCCREC_FLOORS$mean_psi_cor$floor)
+  expect_gte(chk$n_species_ok, chk$n_species_floor)
+  expect_gt(chk$mean_auc, OCCREC_FLOORS$mean_auc$floor)
 })
 
 test_that("the coefficients driving occupancy are recovered per species (tier 2)", {
@@ -190,6 +268,8 @@ test_that("the coefficients driving occupancy are recovered per species (tier 2)
 
   tbl <- occrec_table()
   drv <- occrec_drivers()
+  chk <- occrec_checks()
+  occrec_show_checks(c("drv_cov", "drv_cor"))
 
   # B0 plus ncov_psi slopes per species, so 3 elements here. Three Bernoulli
   # draws cannot support a per-species coverage assertion: the only values
@@ -201,13 +281,7 @@ test_that("the coefficients driving occupancy are recovered per species (tier 2)
   expect_equal(nrow(drv), occrec_scenario()$S * (1L + occrec_scenario()$ncov_psi))
   expect_true(all(is.finite(tbl$drv_err)))
 
-  # Coverage of the occupancy-driver elements. Nominal 0.95, measured
-  # 0.800-1.000 over eight seeds. The floor is loose because 30 elements from
-  # one fit is a small sample, but a mapping error would drive this to near 0.
-  expect_gt(mean(drv$covered), 0.55)
-
-  # Point estimates track truth. Measured 0.647-0.900. Complements coverage in
-  # the same way as test-recovery.R item 3: an interval can contain the truth
-  # while the point estimate says nothing.
-  expect_gt(stats::cor(drv$post_mean, drv$truth), 0.30)
+  # The two checks printed above; see OCCREC_FLOORS for what each one catches.
+  expect_gt(chk$drv_cov, OCCREC_FLOORS$drv_cov$floor)
+  expect_gt(chk$drv_cor, OCCREC_FLOORS$drv_cor$floor)
 })
