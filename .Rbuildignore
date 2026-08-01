@@ -10,3 +10,4 @@
 ^data/.*_highp_highthetabaseline\.rda$
 ^PARALLELISATION$
 ^\.claude$
+^CLAUDE\.md$
