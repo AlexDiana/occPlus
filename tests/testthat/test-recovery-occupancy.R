@@ -78,21 +78,31 @@ OCCREC_SPECIES_CUT <- 0.30   # per-species psi_cor threshold that the count uses
 OCCREC_AUC_CUT <- 0.60       # per-species auc threshold, flagged but not counted
 
 OCCREC_FLOORS <- list(
-  mean_psi_cor = list(floor = 0.30, swept = "0.498 - 0.753",
-    what = "mean per-species correlation of estimated psi with the truth",
-    why  = "The stable summary. Varied by 0.017 across four repeats of one seed, so a failure here is not noise. Catches recovery degrading across every species at once."),
-  n_species_ok = list(floor = NULL, swept = "7 - 10 of 10",
-    what = "species whose psi correlation clears 0.30",
-    why  = "Floor is half the species. Catches several species collapsing while the mean is held up by the rest, which is the blind spot a pooled check has by construction."),
-  mean_auc = list(floor = 0.60, swept = "0.748 - 0.855",
-    what = "mean per-species discrimination of the true occupancy states",
-    why  = "Pooled only. Correlates with psi_cor at 0.94 over 80 species-fits, so it adds little independently, but a site-order or species-order transposition would drive it to its 0.5 null outright."),
-  drv_cov = list(floor = 0.55, swept = "0.800 - 1.000",
-    what = "fraction of B0 and B elements inside their 95% interval",
-    why  = "Nominal is 0.95. Loose floor because 30 elements from one fit is a small sample, but a wrong truth-to-posterior mapping drives this to near 0 rather than merely degrading it."),
-  drv_cor = list(floor = 0.30, swept = "0.647 - 0.900",
-    what = "correlation of B0 and B posterior means with their truths",
-    why  = "Complements coverage the same way test-recovery.R item 3 does: an interval can contain the truth while the point estimate says nothing.")
+
+  mean_psi_cor = list(
+    floor = 0.30, digits = 3, swept = "0.498 to 0.753",
+    what = "For each species, how closely the estimated chance of being present tracks the true chance across the 100 sites, then averaged over the 10 species. A value of 0 would mean the estimates carry no information about where the species really is.",
+    why  = "This is the steadiest number in the file. Refitting the same dataset four times moved it by only 0.017, so when it drops, the cause is the model and not chance. It is the check that notices the model getting worse at all ten species at once, which is the kind of failure that no single species would make obvious."),
+
+  n_species_ok = list(
+    floor = NULL, digits = 0, swept = "7 to 10 out of 10",
+    what = "How many of the 10 species had that same tracking measure reach 0.30 or better. The floor is half the species.",
+    why  = "An average can stay healthy while one or two species are recovered badly, because the good species pull it back up. This check looks at the species one at a time so that kind of failure cannot hide. It counts species rather than demanding that every species pass, because a single species is a noisy thing to measure: across the eight test datasets the worst species ranged from -0.401 to 0.913, so any threshold strict enough to be meaningful would fail on ordinary data."),
+
+  mean_auc = list(
+    floor = 0.60, digits = 3, swept = "0.748 to 0.855",
+    what = "The chance that the model rates a site where the species really is present above a site where it really is absent, averaged over the 10 species. A coin flip would score 0.5.",
+    why  = "It measures much the same thing as the tracking check above, and the two agreed closely when measured over 80 species (0.94), so it is not doing independent work. It is here because it is easy to read on its own, and because it would fall to a coin flip outright if sites or species were ever accidentally shuffled out of order."),
+
+  drv_cov = list(
+    floor = 0.55, digits = 3, swept = "0.800 to 1.000",
+    what = "Each species has 3 coefficients that determine where it is likely to be found: a baseline and two environmental effects. The model reports a range of plausible values for each. This is the share of all 30 such ranges that actually contain the true value.",
+    why  = "The ranges are built to contain the truth 95% of the time, so this should sit near 0.95. The floor is much lower because 30 values from one fit is a small sample and will bounce around. It is still worth checking, because if the true values were ever lined up against the wrong coefficients this number would collapse towards 0 rather than merely drift."),
+
+  drv_cor = list(
+    floor = 0.30, digits = 3, swept = "0.647 to 0.900",
+    what = "How closely the model's best guess at those same 30 coefficients tracks their true values.",
+    why  = "The check above asks whether the truth falls inside the model's stated range. This one asks whether the model's actual answer is close. Both are needed: a range wide enough to contain almost anything will pass the first check while telling you nothing, and only this one would notice.")
 )
 
 #' Probability a random occupied site outranks a random unoccupied one.
@@ -191,6 +201,29 @@ occrec_checks <- function() {
   .occrec_cache$chk
 }
 
+OCCREC_WIDTH <- 78L
+
+#' Wrap a paragraph to the report width at a fixed indent.
+occrec_para <- function(txt, indent = 6L) {
+  paste(strwrap(txt, width = OCCREC_WIDTH, indent = indent, exdent = indent),
+        collapse = "\n")
+}
+
+#' A wrapped paragraph with a short label in a hanging left column.
+#'
+#' Wrapped first and labelled after, because strwrap() collapses runs of
+#' spaces and would eat the padding if the label went in ahead of it.
+occrec_labelled <- function(label, txt, lab_w = 10L, indent = 2L) {
+  body <- strwrap(txt, width = OCCREC_WIDTH - lab_w - indent)
+  out <- paste0(strrep(" ", indent), formatC(label, width = -lab_w), body[1])
+  # Guard the one-line case: paste0() recycles a zero-length vector to "",
+  # which would emit a line of nothing but padding.
+  if (length(body) > 1L) {
+    out <- c(out, paste0(strrep(" ", lab_w + indent), body[-1]))
+  }
+  paste(out, collapse = "\n")
+}
+
 #' Emit the table so it is visible when the suite runs.
 #'
 #' message() rather than print(): it goes to stderr and survives testthat's
@@ -198,48 +231,74 @@ occrec_checks <- function() {
 #' so that a row can be read without opening this source file.
 occrec_show <- function(tbl) {
   sc <- occrec_scenario()
+  n_drv <- 1L + sc$ncov_psi
 
   flag <- ifelse(tbl$psi_cor < OCCREC_SPECIES_CUT,
                  sprintf("<- psi_cor below %.2f", OCCREC_SPECIES_CUT),
                  ifelse(tbl$auc < OCCREC_AUC_CUT,
                         sprintf("<- auc below %.2f", OCCREC_AUC_CUT), ""))
   shown <- cbind(tbl, ` ` = format(flag, justify = "left"))
-  txt <- utils::capture.output(print(shown, digits = 3, row.names = FALSE))
+  txt <- sub("\\s+$", "",
+             utils::capture.output(print(shown, digits = 3, row.names = FALSE)))
+
+  legend <- c(
+    occrec_labelled("occ_true",
+      sprintf("Fraction of the %d sites where the species really is present.", sc$n)),
+    occrec_labelled("occ_est",
+      "Fraction of sites where the model thinks it is present."),
+    occrec_labelled("psi_cor",
+      "How closely the estimated chance of being present tracks the true chance, across sites. Runs from -1 to 1; 0 means the estimates say nothing about where the species is."),
+    occrec_labelled("auc",
+      "Chance that the model rates a site where the species really is present above one where it really is absent. A coin flip scores 0.5."),
+    occrec_labelled("drv_cov",
+      sprintf("This species has %d coefficients setting where it is likely to be found: a baseline and %d environmental effects. The model gives a plausible range for each. This is the share of those %d ranges that contain the true value; it should be near 0.95.",
+              n_drv, sc$ncov_psi, n_drv)),
+    occrec_labelled("drv_err",
+      sprintf("Average distance between the model's best guess and the true value, over those same %d coefficients. Smaller is better; it is on the scale of the coefficients themselves, so there is no fixed good value.",
+              n_drv)))
 
   message(sprintf(
-"
-per-species occupancy recovery -- %s scenario, n = %d sites, S = %d species, %d chains x %d iter
-
-  occ_true  fraction of sites where the species is truly present
-  occ_est   fraction estimated present (posterior mean of the latent z)
-  psi_cor   correlation of estimated psi with plogis(eta) across sites (null 0)
-  auc       P(occupied site ranked above unoccupied site) (null 0.5)
-  drv_cov   fraction of this species' B0 and B inside their 95%% interval (nominal 0.95)
-  drv_err   mean |posterior mean - truth| for those same %d coefficients
-
-%s
-",
-    sc$label, sc$n, sc$S, occrec_mcmc$nchain, occrec_mcmc$niter,
-    1L + sc$ncov_psi, paste(txt, collapse = "\n")))
+    "\nper-species occupancy recovery\n\n%s\n\n%s\n\n%s\n",
+    occrec_para(sprintf(
+      "One row per species from a single fit of the '%s' scenario: %d sites, %d species, %d chains of %d iterations after %d burn-in. A row is flagged when it falls below a threshold one of the checks below uses.",
+      sc$label, sc$n, sc$S, occrec_mcmc$nchain, occrec_mcmc$niter,
+      occrec_mcmc$nburn), indent = 2L),
+    paste(legend, collapse = "\n"),
+    paste(txt, collapse = "\n")))
 }
 
-#' Emit what the assertions check, what they caught, and why they are shaped
-#' the way they are.
+#' Emit what each assertion measures, what it produced, and why it is shaped
+#' the way it is.
 occrec_show_checks <- function(which) {
   chk <- occrec_checks()
-  lines <- vapply(which, function(nm) {
+
+  blocks <- vapply(which, function(nm) {
     f <- OCCREC_FLOORS[[nm]]
-    floor_val <- if (is.null(f$floor)) chk$n_species_floor else f$floor
-    op <- if (is.null(f$floor)) ">=" else ">"
-    fmt <- if (is.null(f$floor)) "%s%9.0f  %s %-6.0f  swept %s\n      %s\n      %s"
-           else "%s%9.3f  %s %-6.2f  swept %s\n      %s\n      %s"
-    sprintf(fmt, formatC(nm, width = -24), chk[[nm]], op, floor_val,
-            f$swept, f$what, f$why)
+    is_count <- is.null(f$floor)
+    floor_val <- if (is_count) chk$n_species_floor else f$floor
+    rule <- sprintf(if (is_count) "must be at least %.0f" else "must exceed %.2f",
+                    floor_val)
+    head <- sprintf("  %s%s   %-20s   swept %s",
+                    formatC(nm, width = -16),
+                    formatC(chk[[nm]], format = "f", digits = f$digits, width = 7),
+                    rule, f$swept)
+    paste(head,
+          occrec_para(paste("What it measures:", f$what)),
+          occrec_para(paste("Why it is here:", f$why)),
+          sep = "\n\n")
   }, character(1))
 
-  message("\nassertions (floors set below the worst of eight seed sets; ",
-          "'swept' is the range seen there)\n\n  ",
-          paste(lines, collapse = "\n\n  "), "\n")
+  message(sprintf("\nchecks\n\n%s\n\n%s\n",
+    occrec_para(paste(
+      "Each check below shows the value this run produced, the floor it has to",
+      "clear, and a range labelled 'swept'. Swept means the whole simulate-and-fit",
+      "was repeated on eight separately generated datasets before these floors",
+      "were chosen, and that range is the smallest and largest value seen across",
+      "those eight runs. Every floor sits below the smallest of them, so passing",
+      "is not luck and failing is not ordinary random variation. If the model or",
+      "the settings above change, sweep again and reset the floors rather than",
+      "nudging one until the suite goes green."), indent = 2L),
+    paste(blocks, collapse = "\n\n")))
 }
 
 test_that("occupancy is recovered per species (tier 2)", {
