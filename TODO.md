@@ -69,6 +69,30 @@ Every code change Claude made, newest first. None has had human review beyond Do
 
     ALEX TO REVIEW
 
+2.  **Both exported GAM functions failed for any user with a categorical occupancy covariate.** **FIXED 30 July 2026** (Claude; `R/occJSDM-package.R`, `NAMESPACE`, commit `032dcff`). Logged here on 1 August: it was completed but never given a *Fixed bugs* entry, so it was invisible in this file.
+
+    **The defect.** `tidyr::pivot_longer()` was called but never imported, and `tidyr` was in `DESCRIPTION` `Imports:` with nothing imported from it in `NAMESPACE`. It is reached in the categorical-covariate branch of `returnCovariateEffect()` and `plotCovariateEffect()`, so both would fail with "could not find function" from a properly installed namespace. `stats::setNames` and `stats::rnbinom` were missing the same way.
+
+    **Why it survived the test suite.** `devtools::load_all()` resolves unimported symbols through the global environment, so a functional test passes whether or not the import exists. The regression test therefore asserts on the imports environment directly, which holds under both `load_all()` and `R CMD check`.
+
+    **Not cosmetic, despite arriving as an `R CMD check` NOTE.** The "checking dependencies in R code" NOTE is now gone entirely, 3 notes to 2. `dnbinom` and `bs` remain on the undefined-globals list, correctly: they are reached only by dead code, and importing `bs` would add `splines` to `DESCRIPTION` to support code that should not ship.
+
+    ALEX TO CHECK
+
+3.  **Ten dead functions moved to `deprecated/`.** **DONE 30 July 2026** (Claude; commits `7bae018`, `f2e2701`). Logged here on 1 August so the deprecation has a stable anchor; it was previously cited only by section-A position, which has since been reused.
+
+    `sample_z`, `sample_w`, `sample_cimk`, `sample_betatheta` from `R/jsdmfun.R`, plus six dead samplers and plots from `R/mcmcfun.R` and `R/output.R`. All were unreachable from any exported entry point. Roughly 26 more remain, tracked in group D, deliberately deferred until the sampler rewrite lands so the two do not collide.
+
+4.  **`listPriors$b_betatheta_slope_var`, a new prior hook.** **ADDED 29 July 2026** (Claude; `R/runOccJSDM.R:783-785`, commit `cd64e8b`). Logged here on 1 August: this had **no entry anywhere in this file**, having been removed from the review queue before it was recorded, so a new user-facing argument existed with nothing tracking it.
+
+    **What it does.** `B_betatheta`'s slope variance was hard-coded, with no override, unlike `p`/`q`/`theta0`. The hook defaults to 2, the previous hard-coded value, so nothing changes unless a caller sets it. Verified to reach the sampler before it was trusted: refitting one dataset under both settings with data and seed held fixed shrank the slope posterior spread under the tighter prior.
+
+    **Documented 1 August**, in the `@param listPriors` roxygen block, which had listed only the three original priors. Until then the hook was reachable but undiscoverable.
+
+    **This is not a fix, and the value is still open.** It was built as a diagnostic for the `beta_theta` slope defect, and the tighter-prior arms it enabled came back null (`PLAN.md` 13.9). The `b_betatheta` variance decision in group B is where the choice lives.
+
+    ALEX TO CHECK, AND TO DECIDE WHETHER THE HOOK SHOULD SHIP AT ALL
+
 ## **B. Inference-affecting bugs (wrong numbers, silently) (Alex)**
 
 1.  **`sample_ls()` scores the wrong density, so the GP length-scale is never recovered.** `R/jsdmfun.R:1054`. Under the SoR approximation the fitted field `SE = Ks(l_s) %*% Bs` is a deterministic function of `Bs` and `l_s`, but `sample_ls()` treats `SE` as a GP draw and scores it under `N(0, sigma_s^2 K(l_s))` with `SE` held fixed. That is not the conditional posterior, and it is self-defeating: `SE` was already smoothed at the current `l_s`, so it scores better under ever-smoother covariances.
@@ -521,30 +545,6 @@ Items 16 and 18 are marked **partially fixed**: the crash in each is gone, but p
     **Confirmed after the refit:** `X0_psi` is present (100 x 2), `list_X_psi_mat` carries `bs_info`/`target_spline_vars`, both vignette chunks run, and `devtools::check()` completes with **0 errors** for the first time. Remaining status: 2 warnings, 3 notes, tracked separately.
 
     **The lesson worth keeping**: a stale shipped dataset presents as a bug in whatever function touches it first, and moves to the next function each time one is fixed. Two functions were investigated and one was needlessly suspected before the data was. When an example object fails and a fresh fit does not, suspect the object.
-
-36. **Both exported GAM functions failed for any user with a categorical occupancy covariate.** **FIXED 30 July 2026** (Claude; `R/occJSDM-package.R`, `NAMESPACE`, commit `032dcff`). Logged here on 1 August: it was completed but never given a *Fixed bugs* entry, so it was invisible in this file.
-
-    **The defect.** `tidyr::pivot_longer()` was called but never imported, and `tidyr` was in `DESCRIPTION` `Imports:` with nothing imported from it in `NAMESPACE`. It is reached in the categorical-covariate branch of `returnCovariateEffect()` and `plotCovariateEffect()`, so both would fail with "could not find function" from a properly installed namespace. `stats::setNames` and `stats::rnbinom` were missing the same way.
-
-    **Why it survived the test suite.** `devtools::load_all()` resolves unimported symbols through the global environment, so a functional test passes whether or not the import exists. The regression test therefore asserts on the imports environment directly, which holds under both `load_all()` and `R CMD check`.
-
-    **Not cosmetic, despite arriving as an `R CMD check` NOTE.** The "checking dependencies in R code" NOTE is now gone entirely, 3 notes to 2. `dnbinom` and `bs` remain on the undefined-globals list, correctly: they are reached only by dead code, and importing `bs` would add `splines` to `DESCRIPTION` to support code that should not ship.
-
-    ALEX TO CHECK
-
-37. **Ten dead functions moved to `deprecated/`.** **DONE 30 July 2026** (Claude; commits `7bae018`, `f2e2701`). Logged here on 1 August so the deprecation has a stable anchor; it was previously cited only by section-A position, which has since been reused.
-
-    `sample_z`, `sample_w`, `sample_cimk`, `sample_betatheta` from `R/jsdmfun.R`, plus six dead samplers and plots from `R/mcmcfun.R` and `R/output.R`. All were unreachable from any exported entry point. Roughly 26 more remain, tracked in group D, deliberately deferred until the sampler rewrite lands so the two do not collide.
-
-38. **`listPriors$b_betatheta_slope_var`, a new prior hook.** **ADDED 29 July 2026** (Claude; `R/runOccJSDM.R:783-785`, commit `cd64e8b`). Logged here on 1 August: this had **no entry anywhere in this file**, having been removed from the review queue before it was recorded, so a new user-facing argument existed with nothing tracking it.
-
-    **What it does.** `B_betatheta`'s slope variance was hard-coded, with no override, unlike `p`/`q`/`theta0`. The hook defaults to 2, the previous hard-coded value, so nothing changes unless a caller sets it. Verified to reach the sampler before it was trusted: refitting one dataset under both settings with data and seed held fixed shrank the slope posterior spread under the tighter prior.
-
-    **Documented 1 August**, in the `@param listPriors` roxygen block, which had listed only the three original priors. Until then the hook was reachable but undiscoverable.
-
-    **This is not a fix, and the value is still open.** It was built as a diagnostic for the `beta_theta` slope defect, and the tighter-prior arms it enabled came back null (`PLAN.md` 13.9). The `b_betatheta` variance decision in group B is where the choice lives.
-
-    ALEX TO CHECK, AND TO DECIDE WHETHER THE HOOK SHOULD SHIP AT ALL
 
 # **Completed work**
 
