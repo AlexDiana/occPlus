@@ -405,7 +405,9 @@ H.  **Reduce the repeated `arma::inv()` calls in the samplers.** `sample_beta_cp
 
 2.  model selection of environmental, spatial covariates via regularisation/shrinkage, which would be useful with e.g. geospatial foundation model embeddings as env covariates
 
-3.  parallelisation for speedup
+3.  Let `simulateOccJSDMData()` generate nonlinear responses to environmental covariates, so the GAM/spline fitting path can be checked against a known truth as well as compared against a linear fit. The capability already exists and is simply unreachable: `simulateData()` takes a `usingSplines` argument and spline-expands the covariate matrix when it is true, but `R/simulateData.R:86` hard-codes `usingSplines = F` and no element of the three parameter lists reaches it. By analogy with `useSpatField`, the switch belongs in `list_jsdmParams`. Demonstrate it afterwards in `vignettes/simulateOccJSDMData.Rmd`. Two things to know before scoping this: `listParams$splineVars` is live on the fitting side (`R/runOccJSDM.R:683`) but appears nowhere in the roxygen or `man/runOccJSDM.Rd`, so the feature currently ships undiscoverable as well as unvalidated; and "known truth" for a spline is the fitted response *curve*, not the basis coefficients, so this cannot join the coverage study element-wise the way `B0` and `B` do until a statistic is defined for it.
+
+4.  parallelisation for speedup
 
 # **Fixed bugs**
 
