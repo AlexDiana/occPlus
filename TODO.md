@@ -373,7 +373,7 @@ H.  **Reduce the repeated `arma::inv()` calls in the samplers.** `sample_beta_cp
 
     **Two things it also unblocks.** `test-regression-bugs.R` currently pins its reproducibility test to one thread and carries a skipping test naming this gap; both can go when this lands. And tier 1's "structural assertions only" rule can finally be revisited, which the testing item under *Doug to dos* already flags as waiting on reproducibility being confirmed on a multi-threaded platform.
 
-    ALEX TO DECIDE AND IMPLEMENT (touches `src/jsdm.cpp` and `src/rng.h`)
+    ALEX TO DECIDE AND CLAUDE TO IMPLEMENT (touches `src/jsdm.cpp` and `src/rng.h`)
 
 ## B. Doug to dos
 
