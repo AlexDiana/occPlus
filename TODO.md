@@ -173,7 +173,7 @@ Every code change Claude made, newest first. None has had human review beyond Do
 
     **Priority: still the lowest of the open findings.** Overcoverage costs power, not correctness, and the parameter is now unbiased, which is the half that matters for a paper.
 
-    IF THIS IS EVER REVISITED, RUN A `b_betatheta` PRIOR **MEAN** ARM, NOT A `theta0` PRIOR ARM. It tests the untested half and would account for the bias improvement and the width increase together.
+    IF THIS IS EVER REVISITED, CLAUDE TO RUN A `b_betatheta` PRIOR **MEAN** ARM, NOT A `theta0` PRIOR ARM. It tests the untested half and would account for the bias improvement and the width increase together.
 
 7.  **`q` (Stage 2 false positives) degrades hard as `K` rises.** Found 29 July 2026 as a side effect of the M-ladder run (`PLAN.md` 13.7), which was not built to look for it. Never investigated beyond the measurement.
 
@@ -242,6 +242,18 @@ Ten dead functions were moved to `deprecated/` on 30 July (*Fixed bugs* 37). Wha
     Two more to settle while there: `tune_sd = 5` is a random-walk SD on the *log* scale, so proposals land a factor of `exp(+/-10)` away and acceptance will be near zero (0.1 to 1 is the usual starting range); and the prior terms are stubbed to `0` with the intended `dgamma()` commented out, referencing `prior_shape`/`prior_rate`, which are not defined anywhere. The Metropolis step itself looks right: the `log(r_star) - log(r_current)` Jacobian is the correct correction for a log-scale random walk under a flat prior on `r`.
 
     ALEX's WORK IN PROGRESS FOR THE COUNTS
+
+4.  **Two `list_jsdmParams` entries do not affect the simulated data, and one of them affects nothing anywhere.** Found 2 August 2026 while commenting that list in `vignettes/simulateOccJSDMData.Rmd`. Both are user-facing: `simulateOccJSDMData()` asks callers to supply them, and the vignette does.
+
+    **`sigma_ts` is wholly inert.** Four occurrences in the whole package, every one of them plumbing: documented in the `@param` at `R/simulateData.R:20`, read into a local at `:59`, passed on at `:85`, received in the signature at `R/jsdmfun.R:909`. No function body references it. It is read, passed, received and discarded.
+
+    **`sigma_bs` generates nothing, but is not simply dead.** In the simulator it appears only in the signature and in the returned `trueParams`; the residual spatial term it would scale is set to an exact zero matrix (`Bst <- matrix(0, S, ps)`), so no draw ever uses it. It *is* live on the fitting side, where `sigma_bs^2` sets a prior variance block. So a caller supplies it as a true value, it generates none of the data, and the sampler then estimates a quantity by that name -- which is exactly why the simulation study excludes `sigma_bs` from its coverage checks (`PLAN.md` 5.3, measured true 0.5 against a posterior mean of \~1.6, 0/8 coverage).
+
+    **Why this is worth a decision rather than a deletion.** These are arguments in an exported function's interface, so removing them is a breaking change, and `sigma_bs` at least has a real meaning on the fitting side that a future simulator could honour by drawing `Bst` properly. The options are: drop `sigma_ts` outright, since nothing anywhere reads it; and for `sigma_bs` either make the simulator use it, or keep it and document in `@param` that it is a fitting-side prior rather than a generating parameter.
+
+    Also stale as a result: `R/simulateData.R:20`'s `@param` lists `sigma_ts` as though it were live, and the vignette prose above the code chunk groups both with the real variance components. The vignette's code comments now say what each one actually does; the roxygen does not.
+
+    ALEX TO REVIEW
 
 ## **E. Draft of beta version listserv announcement (Doug)**
 
