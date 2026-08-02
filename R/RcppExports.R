@@ -17,10 +17,6 @@ sample_z_cpp_parallel <- function(w, psi, theta, theta0, M, sumM) {
     .Call(`_occJSDM_sample_z_cpp_parallel`, w, psi, theta, theta0, M, sumM)
 }
 
-sample_z_cpp <- function(w, psi, theta, theta0, M, sumM) {
-    .Call(`_occJSDM_sample_z_cpp`, w, psi, theta, theta0, M, sumM)
-}
-
 sample_w_cpp <- function(logy1, mu0, sigma0, mu1, sigma1, theta, theta0, p, q, M, K, sumL, sumM, sumK, maxL, z) {
     .Call(`_occJSDM_sample_w_cpp`, logy1, mu0, sigma0, mu1, sigma1, theta, theta0, p, q, M, K, sumL, sumM, sumK, maxL, z)
 }

@@ -571,7 +571,14 @@ NumericMatrix sample_z_cpp_parallel(const NumericMatrix& w,
   return z;
 }
 
-// [[Rcpp::export]]
+// De-exported 2 August 2026: superseded by sample_z_cpp_parallel(), which
+// runOccJSDM() has called since 41abe69. Nothing in R/ or src/ referenced this
+// any longer, so it was reaching R only as an unused RcppExports wrapper.
+// The body is kept rather than deleted, as the serial reference implementation
+// of what the parallel version computes. Do not restore the export tag without
+// a caller: the dead-wrapper count is what TODO.md group D tracks.
+//
+// [[Rcpp::export]] -- removed, see above
 NumericMatrix sample_z_cpp(const NumericMatrix& w,
                            const NumericMatrix& psi,
                            const NumericMatrix& theta,

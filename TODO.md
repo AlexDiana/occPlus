@@ -52,11 +52,7 @@ output: html_document
 
 Every code change Claude made, newest first. None has had human review beyond Doug asking for it. All are recoverable from git; revert or rework freely. Each says what to check. Full detail for each is in *Fixed bugs*, which is the record; this section is the queue.
 
-1.  **Should `sample_z_cpp()` be deprecated?** `sample_z_cpp_parallel()` is now the one actually wired in (`R/runOccJSDM.R:1113`, since Alex's `41abe69`, "More parallelisation"), which leaves `sample_z_cpp()` itself with no callers anywhere in `R/`, though it is still compiled and exported like any other `RcppExports` wrapper. If that's deliberate, it belongs with the rest of the dead-code cleanup in group D (which covers the mechanics for `RcppExports` wrappers specifically); if it's meant to come back, say why it should stay.
-
-    ALEX TO CHECK
-
-2.  **`listPriors$b_betatheta_slope_var`, a new prior hook.** **ADDED 29 July 2026** (Claude; `R/runOccJSDM.R:783-785`, commit `cd64e8b`). Logged here on 1 August: this had **no entry anywhere in this file**, having been removed from the review queue before it was recorded, so a new user-facing argument existed with nothing tracking it.
+1.  **`listPriors$b_betatheta_slope_var`, a new prior hook.** **ADDED 29 July 2026** (Claude; `R/runOccJSDM.R:783-785`, commit `cd64e8b`). Logged here on 1 August: this had **no entry anywhere in this file**, having been removed from the review queue before it was recorded, so a new user-facing argument existed with nothing tracking it.
 
     **What it does.** `B_betatheta`'s slope variance was hard-coded, with no override, unlike `p`/`q`/`theta0`. The hook defaults to 2, the previous hard-coded value, so nothing changes unless a caller sets it. Verified to reach the sampler before it was trusted: refitting one dataset under both settings with data and seed held fixed shrank the slope posterior spread under the tighter prior.
 
@@ -218,6 +214,8 @@ Every code change Claude made, newest first. None has had human review beyond Do
 Ten dead functions were moved to `deprecated/` on 30 July (*Fixed bugs* 37). What remains is below.
 
 **Re-scanned 31 July: 40 dead R functions, up from 38.** `mcmcfun.R` 14, `jsdmfun.R` 12, `RcppExports.R` 11, plus `computeMinESS()` in `R/diagnostics.R`, `thinOutput()` in `R/output.R`, and `.onLoad()` in `R/zzz.R`. The set **grew** because `8f9f315` added three more unused `RcppExports` wrappers, so this cleanup is chasing a moving target while the samplers are being rewritten.
+
+**The `RcppExports` count re-measured 2 August: 12 of 36 wrappers have no caller in `R/`.** It went 11 to 13 as `41abe69` and `46d8804` landed, then to 12 when `sample_z_cpp()` was de-exported (*Fixed bugs* 40). The moving-target point above is therefore not hypothetical: two commits in one night added two more than this whole item has ever removed. The current 12 are `sample_w_cpp`, `sample_w_cim_cipp`, `sample_betatheta_cpp`, `findClosestPoint`, `dist_matrix`, `gpCovMatrix`, `samplePGvariables`, `convert_to_correlation`, `XsBs`, `XtOmegaX_SoR`, `sampleB_SoR_TS` and `sample_BBsL_cpp`. Two are worth noting rather than batch-deleting: `samplePGvariables` went dead only because `46d8804` replaced it with the parallel version, so it is the serial reference for it; and `sampleB_SoR_TS` is the thread-safe variant the `BBSL_Worker` item in group B needs, so it should stay whatever else goes.
 
 **Four functions are excluded from all of the below, by decision.** `computePredictiveProbs()`, `partition_r2()`, `returnSpatialEffectMean()` and `plotSpatialEffect()` are dead by the same test as the rest, and were previously listed as a question for Alex. He removed that question in `6722e22` without changing the code, in a commit where he did act on other items, which reads as a decision to keep them. Two have independent reasons to stay: `partition_r2()` relates to the live *MEE paper* item on site variance partitioning, and the `returnSpatialEffectMean()`/`plotSpatialEffect()` pair is the only spatial-field plotting anywhere in the package. `computePredictiveProbs()` looks straightforwardly superseded by `predictNewSites()` and could go whenever Alex says so. **If that reading is wrong, say so and they go with the rest.**
 
@@ -609,6 +607,16 @@ Items 16 and 18 are marked **partially fixed**: the crash in each is gone, but p
     **Verified live, not just from the response.** `verbose` reaches the C++ `if(verbose)` gate around the `Rcout` call (`src/jsdm.cpp:482`) via `computeNewOutputs()` (`R/output.R:1683`). Ran both ways on a fitted model: `verbose = FALSE` suppresses all four per-species lines; `suppressMessages()` alone, with `verbose` left at its default, still lets all four through -- expected, not a gap, given the default chosen below.
 
     **The item's fix spec asked for a default of `FALSE`; Alex chose `T` instead, deliberately.** `predictNewSites()` still prints by default unless a caller opts out, which is not what was originally asked for -- but it is a design decision, not an unfinished fix. Same decision already recorded under *Fixed bugs* 38 (the RcppParallel-linking fix): **"We can leave verbose on, people won't think of turning it on."** **Closed by decision, not by elimination.**
+
+40. ~~**`sample_z_cpp()` was exported but had no callers.**~~ **DE-EXPORTED 2 August 2026** (Claude; `src/functions.cpp`, `R/RcppExports.R`, `src/RcppExports.cpp`).
+
+    `41abe69` wired `sample_z_cpp_parallel()` into `runOccJSDM()` at `R/runOccJSDM.R:1113`, which left the serial `sample_z_cpp()` reaching R only as an unused `RcppExports` wrapper -- nothing in `R/` or `src/` referenced it. Confirmed before changing anything.
+
+    Done by the mechanism group D specifies for wrappers rather than by moving code: the `// [[Rcpp::export]]` tag was removed and `Rcpp::compileAttributes()` re-run, since `RcppExports.R` is generated and must not be hand-edited. **The C++ body is kept**, as the serial reference implementation of what the parallel version computes, with a comment at the definition saying why and warning against restoring the tag without a caller.
+
+    Verified: the package compiles and loads, `sample_z_cpp` is no longer reachable from R, `sample_z_cpp_parallel` still is. The unused-wrapper count group D tracks goes from 13 to 12. **Not verified: the test suite**, which cannot run while the debugging scaffold at `R/runOccJSDM.R:416` is live (see below) -- every `runOccJSDM()` call errors with `object 'occ_data_effort' not found`.
+
+    **Decision provenance:** Doug approved this; Alex had marked the item "ALEX TO CHECK" and had not yet answered. Recorded because he may still want a view, and because the group D timing note argues against doing this cleanup while the samplers are under active rewrite -- that argument was overridden here, not refuted.
 
 # **Completed work**
 

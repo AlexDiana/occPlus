@@ -37,22 +37,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// sample_z_cpp
-NumericMatrix sample_z_cpp(const NumericMatrix& w, const NumericMatrix& psi, const NumericMatrix& theta, const NumericVector& theta0, const IntegerVector& M, const IntegerVector& sumM);
-RcppExport SEXP _occJSDM_sample_z_cpp(SEXP wSEXP, SEXP psiSEXP, SEXP thetaSEXP, SEXP theta0SEXP, SEXP MSEXP, SEXP sumMSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const NumericMatrix& >::type w(wSEXP);
-    Rcpp::traits::input_parameter< const NumericMatrix& >::type psi(psiSEXP);
-    Rcpp::traits::input_parameter< const NumericMatrix& >::type theta(thetaSEXP);
-    Rcpp::traits::input_parameter< const NumericVector& >::type theta0(theta0SEXP);
-    Rcpp::traits::input_parameter< const IntegerVector& >::type M(MSEXP);
-    Rcpp::traits::input_parameter< const IntegerVector& >::type sumM(sumMSEXP);
-    rcpp_result_gen = Rcpp::wrap(sample_z_cpp(w, psi, theta, theta0, M, sumM));
-    return rcpp_result_gen;
-END_RCPP
-}
 // sample_w_cpp
 NumericMatrix sample_w_cpp(const NumericMatrix& logy1, double mu0, double sigma0, double mu1, double sigma1, const NumericMatrix& theta, const NumericVector& theta0, const NumericMatrix& p, const NumericMatrix& q, const IntegerVector& M, const IntegerVector& K, const IntegerVector& sumL, const IntegerVector& sumM, const IntegerVector& sumK, int maxL, const NumericMatrix& z);
 RcppExport SEXP _occJSDM_sample_w_cpp(SEXP logy1SEXP, SEXP mu0SEXP, SEXP sigma0SEXP, SEXP mu1SEXP, SEXP sigma1SEXP, SEXP thetaSEXP, SEXP theta0SEXP, SEXP pSEXP, SEXP qSEXP, SEXP MSEXP, SEXP KSEXP, SEXP sumLSEXP, SEXP sumMSEXP, SEXP sumKSEXP, SEXP maxLSEXP, SEXP zSEXP) {
@@ -617,7 +601,6 @@ END_RCPP
 static const R_CallMethodDef CallEntries[] = {
     {"_occJSDM_setOccJSDMSeed", (DL_FUNC) &_occJSDM_setOccJSDMSeed, 1},
     {"_occJSDM_sample_z_cpp_parallel", (DL_FUNC) &_occJSDM_sample_z_cpp_parallel, 6},
-    {"_occJSDM_sample_z_cpp", (DL_FUNC) &_occJSDM_sample_z_cpp, 6},
     {"_occJSDM_sample_w_cpp", (DL_FUNC) &_occJSDM_sample_w_cpp, 16},
     {"_occJSDM_sample_w_cim_cipp_parallel", (DL_FUNC) &_occJSDM_sample_w_cim_cipp_parallel, 15},
     {"_occJSDM_sample_w_cim_cipp", (DL_FUNC) &_occJSDM_sample_w_cim_cipp, 15},
