@@ -434,3 +434,19 @@ test_that("listPriors$b_betatheta_slope_var actually reaches the sampler", {
   slope_tight <- fit_tight$results_output$beta_theta_output[2, , , , drop = FALSE]
   expect_lt(sd(slope_tight), sd(slope_default))
 })
+
+
+test_that("Fixed bugs 38: the debugging scaffold in runOccJSDM() stays commented out", {
+  # This exact defect has recurred four times now (8f9f315, 46d8804, once more
+  # between e5d0105 and 11981a1, then 522b89e), always the same way: a block
+  # of argument overrides referencing occ_data_effort, a dataset outside the
+  # package, gets left or made live, and every runOccJSDM() call then fails
+  # with "object 'occ_data_effort' not found" before reaching any model code.
+  #
+  # A static check on the source text, not a fit -- the whole point is to
+  # catch this before spending the time to fit anything.
+  f <- test_path("..", "..", "R", "runOccJSDM.R")
+  skip_if_not(file.exists(f), "package source not reachable (installed-package check)")
+  live <- grep("^\\s*data\\s*=\\s*occ_data_effort", readLines(f, warn = FALSE), value = TRUE)
+  expect_length(live, 0)
+})
