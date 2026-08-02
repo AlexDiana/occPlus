@@ -1165,6 +1165,8 @@ runOccJSDM <- function(data,
 
       # sample theta
       if(model %in% c("occupancy","two_stage")){
+        # beta_theta <- sample_betatheta_cpp(w, z, beta_theta, idx_z_w, X_theta,
+        #                                    b_betatheta, B_betatheta)
         beta_theta <- sample_betatheta_cpp_parallel(w, z, beta_theta, idx_z_w, X_theta,
                                            b_betatheta, B_betatheta)
         theta <- computeTheta(X_theta, beta_theta)
@@ -1172,7 +1174,7 @@ runOccJSDM <- function(data,
 
       # sample pq
       if(model == "two_stage"){
-        list_pq <- sample_pq_cpp(c_imk, y_NA, w, idx_p_k, idx_w_k, maxP, a_p, b_p, a_q, b_q)
+        list_pq <- sample_pq_cpp_parallel(c_imk, y_NA, w, idx_p_k, idx_w_k, maxP, a_p, b_p, a_q, b_q)
         p <- list_pq$p
         q <- list_pq$q
       }

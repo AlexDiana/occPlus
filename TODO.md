@@ -272,19 +272,8 @@ Ten dead functions were moved to `deprecated/` on 30 July (*Fixed bugs* 37). Wha
 
 7.  **Performance of `runOccJSDM()`**
 
-ALEX NOTE: After manually comparing each MCMC step with microbenchmark(), the slowest step is definitely the sample_betatheta_cpp_parallel. There are few things to note, first the parallelisation does not seem to achieve much speed up, and even in its current state, it is not macos compatible since it uses openMP (rather than RcppParallel). Moreover, the slowest step of the sampler seems to be the sample_Omega_cpp, which samples a very large number of PG variables (N x S). We could consider an alternative PG sampler to speed up the computation.
-
-```         
-ALEX: Several changes made to imrpvoe performances:
-- Parallelise Polya-gamma sampler in the sample_betatheta_cpp_parallel function using RcppParallel,
-which makes it macos compatible
-- Parallelise the sample_BBsl function in update_jsdmcoef, which is the most computationally heavy function in the
-whole JSDM machinery, using RcppParallel (so macos compatible again)
-
-Still investinating a way to parallelise 
-sample_U_cpp, which are now the heaviest calculations left.
-
-Also worth investigating a faster to compute the variancePartitioning or the WAIC.
+ALEX NOTE: Most of the MCMC steps have now been parallelised, with the only exception of sample_U_cpp. 
+The rest is mostly stuff. It would also worth investigating a faster to compute the variancePartitioning or the WAIC.
 
 **Profiled by Alex, 31 July 2026, which answers the "nothing here has been profiled" caveat this list used to carry.** Comparing each MCMC step with `microbenchmark()`:
 

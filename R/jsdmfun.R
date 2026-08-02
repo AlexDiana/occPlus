@@ -1547,14 +1547,20 @@ update_jSDMcoef <- function(list_data,
     Omega <- matrix(1 / tau^2, nrow(z), ncol(z), byrow = T)
   } else if(model == "binary"){
     Omega <- samplePGvariables_parallel(psiCoef)
+    # Omega <- samplePGvariables(psiCoef)
   }
 
   # sample fixed effects, spatial trait loadings and factor loadings
-  list_BBsL <- sample_BBsL_parallel(k, X, Tr, U,
+  list_BBsL <- sample_BBsL_cpp(k, X, Tr, U,
                            G, A, C, sigma_b,
                            Gs, As, Cs, sigma_bs,
                            Ks, list_Xs$Xs_centers,
                            Omega, model)
+  # list_BBsL <- sample_BBsL_parallel(k, X, Tr, U,
+  #                          G, A, C, sigma_b,
+  #                          Gs, As, Cs, sigma_bs,
+  #                          Ks, list_Xs$Xs_centers,
+  #                          Omega, model)
   B <- list_BBsL$B
   Bt <- list_BBsL$Bt
   Bs <- list_BBsL$Bs

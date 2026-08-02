@@ -481,10 +481,15 @@ static arma::vec sample_beta_nocov_cpp_TS(arma::vec beta, arma::mat& X, arma::ve
   arma::vec Omega = sample_Omega_cpp(X, beta, n);
   // arma::vec Omega = sample_Omega_parallel(X, beta, n);
 
-  beta = sample_beta_cpp_TS(X, B, b, Omega, k);
+  beta = sample_beta_cpp(X, B, b, Omega, k);
 
   return(beta);
 }
+
+/////////////////////////////////////////////////
+/////////  Z SAMPLER
+/////////////////////////////////////////////////
+
 
 // Define the RcppParallel worker
 struct ZProbWorker : public Worker {
@@ -621,6 +626,10 @@ NumericMatrix sample_z_cpp(const NumericMatrix& w,
   }
   return z;
 }
+
+/////////////////////////////////////////////////
+/////////  W SAMPLER
+/////////////////////////////////////////////////
 
 // [[Rcpp::export]]
 NumericMatrix sample_w_cpp(const NumericMatrix& logy1,
@@ -939,6 +948,10 @@ NumericMatrix sample_w_cim_cipp(const NumericMatrix& y,
   return w;
 }
 
+
+///////////////////////////////
+///// BETA THETA
+//////////////////////////////
 
 // [[Rcpp::export]]
 arma::mat sample_betatheta_cpp(const arma::mat& w,
