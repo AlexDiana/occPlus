@@ -94,14 +94,58 @@ list_datasettings <- list(
   )
 
 list_jsdmParams <- list(
-  gt = gt, d = d, ds = ds,
-  sigma_b = 0.5, sigma_bs = 0.5, sigma_ts = 0.5,
-  sigma_h = 1, sigma_s = .5, l_s = 0.3,
+  gt = gt,
+  # gt is the number of *unobserved* (latent) trait dimensions, on top of the
+  # g observed traits. These let species' environmental responses be partly
+  # explained by traits the study never measured.
+  d = d,
+  # d is the number of latent factor dimensions. Factor scores U (n x d) and
+  # loadings L (d x S) together generate residual co-occurrence -- correlation
+  # between species left over once the environmental covariates are accounted
+  # for. At d = 0 species would be conditionally independent.
+  ds = ds,
+  # ds is the rank of the *cross-species* spatial correlation, used only when
+  # useSpatField = TRUE. At ds > 0 each species gets its own spatial field,
+  # correlated across species at rank ds. At ds = 0 a single field is drawn
+  # and shared identically by every species.
+  sigma_b = 0.5,
+  # sigma_b is the SD of the residual environmental coefficients: the part of
+  # each species' response to the ncov_psi covariates that its traits do not
+  # explain (drawn Normal(0, sigma_b^2)). Larger values make species respond
+  # more idiosyncratically relative to their traits.
+  sigma_bs = 0.5,
+  # sigma_bs is the equivalent residual SD for the *spatial* coefficients.
+  # Note it has no effect on the simulated data: the simulator sets the
+  # residual spatial term to an exact zero matrix, so nothing is ever drawn
+  # with this SD. It is carried in the returned true parameters and read by
+  # the fitting side only. Supplied here for completeness.
+  sigma_ts = 0.5,
+  # sigma_ts is accepted by the simulator and never referenced in its body,
+  # so it affects nothing at all. Supplied only because the argument exists.
+  sigma_h = 1,
+  # sigma_h is the SD of the latent factor scores (U drawn Normal(0,
+  # sigma_h^2), iid across sites and factors). With the loadings L fixed by
+  # construction, this is what sets the strength of the residual
+  # co-occurrence signal.
+  sigma_s = .5,
+  # sigma_s is the amplitude of the spatial Gaussian process. The kernel is
+  # sigma_s * exp(-dist^2 / (2 * l_s^2)), which equals sigma_s at zero
+  # distance, so this is the *marginal variance* of the spatial field rather
+  # than its SD: at 0.5 a site's field value has SD sqrt(0.5), about 0.71.
+  # Used only when useSpatField = TRUE.
+  l_s = 0.3,
+  # l_s is the length scale of that same kernel, in the units of the site
+  # coordinates. Xs is drawn Uniform(0, 1) on each axis, so the domain is the
+  # unit square and l_s = 0.3 correlates occupancy over roughly a third of
+  # it -- wide enough to give visible spatial structure at n = 100 sites,
+  # without making the field so smooth it is effectively constant.
   useSpatField = TRUE
+  # useSpatField switches the spatial term on. As noted above, Xs is
+  # simulated either way; at FALSE the field is replaced by an exact zero
+  # matrix and has no influence on occupancy.
   )
 
 # add splinevars to list_params
-# add comments to list_jsdmParams
 
 list_params <- list(
   p = matrix(runif(P * S, 0.3, 0.6), P, S),   
