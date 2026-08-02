@@ -60,7 +60,7 @@ Every code change Claude made, newest first. None has had human review beyond Do
 
     **This is not a fix, and the value is still open.** It was built as a diagnostic for the `beta_theta` slope defect, and the tighter-prior arms it enabled came back null (`PLAN.md` 13.9). The `b_betatheta` variance decision in group B is where the choice lives.
 
-    ALEX TO CHECK, AND TO DECIDE WHETHER THE HOOK SHOULD SHIP AT ALL
+    ALEX RESPONSE: Happy with the new fix
 
 ## **B. Inference-affecting bugs (wrong numbers, silently) (Alex)**
 
@@ -88,13 +88,22 @@ Every code change Claude made, newest first. None has had human review beyond Do
 
     ALEX TO MAKE A DECISION
 
-3.  **`beta_theta` intervals are overconfident, and it gets worse with more data.** Coverage 0.77 at the production `M = 2`, falling monotonically to 0.58 at `M = 20`, while bias stays small and flat. Shrinking intervals around a bias that is not shrinking is the signature of a real defect being exposed by more information, not fixed by it.
+3.  **`beta_theta` intervals are overconfident, and it gets worse with more data.** Coverage 0.77 at the production `M = 2`, falling 
+monotonically to 0.58 at `M = 20`, while bias stays small and flat. Shrinking intervals around a bias that is not shrinking is the 
+signature of a real defect being exposed by more information, not fixed by it.
 
-    **Narrowed 31 July: the defect is in the *slopes*, not in `beta_theta` as a block.** Refitting `base` with `ncov_theta = 0`, so only the intercept row remains, gives `beta_theta` coverage of **0.968** (SE 0.013, R = 200), i.e. nominal, against 0.763 with the slopes present (`PLAN.md` 15.5, 15.6). Whatever is wrong is specific to the covariate columns.
+    **Narrowed 31 July: the defect is in the *slopes*, not in `beta_theta` as a block.** Refitting `base` with `ncov_theta = 0`, so only 
+    the intercept row remains, gives `beta_theta` coverage of **0.968** (SE 0.013, R = 200), i.e. nominal, against 0.763 with the slopes 
+    present (`PLAN.md` 15.5, 15.6). Whatever is wrong is specific to the covariate columns.
 
-    **Four candidate causes now ruled out**, each by measurement: Stage 1 under-identification (more data makes it worse, not better); the slope prior's width (tightening it 20-fold at `M = 2` moves coverage the wrong way); pseudo-replication in `X_theta` (it is drawn per sample, not per site); and the intercept path (nominal once the slopes are gone).
+    **Four candidate causes now ruled out**, each by measurement: Stage 1 under-identification (more data makes it worse, not better); 
+    the slope prior's width (tightening it 20-fold at `M = 2` moves coverage the wrong way); pseudo-replication in `X_theta` 
+    (it is drawn per sample, not per site); and the intercept path (nominal once the slopes are gone).
 
-    **So the cause is in whatever handles the covariate columns in the Polya-Gamma update**, in `sample_beta_cpp_TS`/`sample_betatheta_cpp_parallel`. Note this is the same step Alex's `microbenchmark()` profiling identified as the slowest in the sampler, so the calibration problem and the performance bottleneck sit in the same code. This needs someone who knows it; it is not another prior experiment. Evidence in `PLAN.md` 13, 14 and 15.5.
+    **So the cause is in whatever handles the covariate columns in the Polya-Gamma update**, in 
+    `sample_beta_cpp_TS`/`sample_betatheta_cpp_parallel`. Note this is the same step Alex's `microbenchmark()` profiling
+    identified as the slowest in the sampler, so the calibration problem and the performance bottleneck sit in the same code. 
+    This needs someone who knows it; it is not another prior experiment. Evidence in `PLAN.md` 13, 14 and 15.5.
 
     ALEX TO INVESTIGATE THE SAMPLER
 
@@ -149,11 +158,13 @@ Every code change Claude made, newest first. None has had human review beyond Do
 
     **All four rows are race-free; no re-run is pending.** The `nocollcov` R = 200 run was written 31 July 18:11 and the `BBSL_Worker` race arrived on 2 August 01:08, so those figures predate it by about 31 hours; `base` and `binary` are older still. `continuous` was run at one thread, which eliminates the race rather than working around it. An earlier version of this entry said the first three rows needed re-running once the race was fixed, which was wrong twice over: they were never affected, and one thread does not require the fix in any case.
 
-    **The one thing not established:** confounding is a mechanism, not a measurement. Nothing here shows it produces a bias of exactly -0.0633. What is shown is that `B0` is unbiased wherever `beta_theta` is absent entirely, which removes the only evidence for an independent `B0` defect without quantitatively accounting for the residual.
+    **The one thing not established:** confounding is a mechanism, not a measurement. Nothing here shows it produces a
+    bias of exactly -0.0633. What is shown is that `B0` is unbiased wherever `beta_theta` is absent entirely, 
+    which removes the only evidence for an independent `B0` defect without quantitatively accounting for the residual.
 
     **Separate observation, not filed as its own item yet** (`PLAN.md` 16.5): `B0` *coverage* in the `continuous` arm is 0.879 against nominal 0.95, about 4.7 SE low and the lowest of any cell measured (grid range 0.892-0.956, `binary` 0.942). Bias is zero, so the interval is too narrow rather than the estimate wrong. `continuous` is the only model type that also estimates `tau`, which itself covers at 0.921 with bias +0.0370. One arm, one configuration, found while looking for something else -- wants confirming before it is called a defect.
 
-    ALEX TO CHECK
+    ALEX RESPONSE: in that case, we can close the point on B0 and assume that the bias is only due to the confounding with beta_theta
 
 6.  **`theta0`'s intervals are \~25% wider than they need to be, and that is the price of its bias being fixed.** Coverage 0.978-0.985 post-fix against 0.938-0.959 pre-fix (`PLAN.md` 12.3). The all-cell average of 0.944 hides it, because `low_information` pulls it down at 0.602.
 

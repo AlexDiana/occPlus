@@ -478,8 +478,8 @@ static arma::vec sample_beta_nocov_cpp(arma::vec beta, arma::mat& X, arma::vec b
 static arma::vec sample_beta_nocov_cpp_TS(arma::vec beta, arma::mat& X, arma::vec b,
                                 arma::mat B, arma::vec n, arma::vec k){
 
-  // arma::vec Omega = sample_Omega_cpp(X, beta, n);
-  arma::vec Omega = sample_Omega_parallel(X, beta, n);
+  arma::vec Omega = sample_Omega_cpp(X, beta, n);
+  // arma::vec Omega = sample_Omega_parallel(X, beta, n);
 
   beta = sample_beta_cpp_TS(X, B, b, Omega, k);
 
@@ -989,7 +989,7 @@ arma::mat sample_betatheta_cpp(const arma::mat& w,
 }
 
 // [[Rcpp::export]]
-arma::mat sample_betatheta_cpp_parallel(const arma::mat& w,
+arma::mat sample_betatheta_cpp_parallel_old(const arma::mat& w,
                                         const arma::mat& z,
                                         arma::mat beta_theta, // Passed by value from R, safe to modify locally
                                         const arma::uvec& idx_z,
@@ -1028,6 +1028,78 @@ arma::mat sample_betatheta_cpp_parallel(const arma::mat& w,
     beta_theta.col(s) = sample_beta_nocov_cpp_TS(beta_sub, X_thetasubset, b_betatheta, B_betatheta, n, k);
 
   }
+
+  return beta_theta;
+}
+
+// 1. Define the RcppParallel Worker
+struct BetaThetaWorker : public Worker {
+  // Inputs (Read-only references to Armadillo objects)
+  const arma::mat& w;
+  const arma::mat& z_all;
+  const arma::mat& X_theta;
+  const arma::vec& b_betatheta;
+  const arma::mat& B_betatheta;
+
+  // Output (Passed by reference so we can modify it in place)
+  arma::mat& beta_theta;
+
+  // Constructor
+  BetaThetaWorker(const arma::mat& w, const arma::mat& z_all,
+                  const arma::mat& X_theta, const arma::vec& b_betatheta,
+                  const arma::mat& B_betatheta, arma::mat& beta_theta)
+    : w(w), z_all(z_all), X_theta(X_theta), b_betatheta(b_betatheta),
+      B_betatheta(B_betatheta), beta_theta(beta_theta) {}
+
+  // Work function executed by multiple threads
+  void operator()(std::size_t begin, std::size_t end) {
+
+    for (std::size_t s = begin; s < end; ++s) {
+
+      // All Armadillo allocations inside this loop are thread-local
+      arma::vec z_col = z_all.col(s);
+      arma::uvec find_ones = arma::find(z_col == 1);
+
+      if (!find_ones.is_empty()) {
+
+        // Extract the column subset
+        arma::vec w_sub = w.elem(find_ones + s * w.n_rows);
+        arma::vec k = w_sub - 0.5;
+
+        arma::vec n = arma::ones<arma::vec>(k.n_elem);
+        arma::mat X_thetasubset = X_theta.rows(find_ones);
+
+        // arma::vec beta_sub = ;
+
+        beta_theta.col(s) = sample_beta_nocov_cpp_TS(beta_theta.col(s), X_thetasubset,
+                       b_betatheta, B_betatheta, n, k);
+      }
+    }
+  }
+};
+
+
+// 2. Main exported function
+// [[Rcpp::export]]
+arma::mat sample_betatheta_cpp_parallel(const arma::mat& w,
+                                        const arma::mat& z,
+                                        arma::mat beta_theta,
+                                        const arma::uvec& idx_z,
+                                        const arma::mat& X_theta,
+                                        const arma::vec& b_betatheta,
+                                        const arma::mat& B_betatheta) {
+
+  int S = beta_theta.n_cols;
+
+  // Do these main thread pre-computations first to avoid parallel race conditions
+  arma::uvec idx_z_cpp = idx_z - 1;
+  arma::mat z_all = z.rows(idx_z_cpp);
+
+  // Instantiate the worker
+  BetaThetaWorker worker(w, z_all, X_theta, b_betatheta, B_betatheta, beta_theta);
+
+  // Run the parallel loop
+  parallelFor(0, S, worker);
 
   return beta_theta;
 }
@@ -1078,6 +1150,116 @@ List sample_pq_cpp(NumericMatrix& c_imk,
 
       p(l, s) = R::rbeta(a_p + w1_primerl_cases_1, b_p + w1_primerl_cases_0);
       q(l, s) = R::rbeta(a_q + w0_primerl_cases_1, b_q + w0_primerl_cases_0);
+    }
+  }
+
+  return List::create(
+    _["p"] = p,
+    _["q"] = q
+  );
+}
+
+// 1. Define the RcppParallel Worker to compute Beta parameters
+struct BetaParamWorker : public Worker {
+  // Inputs (Read-only, mapped for thread safety)
+  const RMatrix<double> c_imk;
+  const RMatrix<int> y_NA;
+  const RMatrix<double> w;
+  const RVector<int> idx_p_k;
+  const RVector<int> idx_w_k;
+
+  int maxP;
+  double a_p, b_p, a_q, b_q;
+
+  // Outputs (Shape parameters for the Beta distributions)
+  RMatrix<double> alpha_p;
+  RMatrix<double> beta_p;
+  RMatrix<double> alpha_q;
+  RMatrix<double> beta_q;
+
+  // Constructor to initialise matrices/vectors
+  BetaParamWorker(const NumericMatrix& c_imk, const IntegerMatrix& y_NA,
+                  const NumericMatrix& w, const IntegerVector& idx_p_k,
+                  const IntegerVector& idx_w_k, int maxP,
+                  double a_p, double b_p, double a_q, double b_q,
+                  NumericMatrix& alpha_p, NumericMatrix& beta_p,
+                  NumericMatrix& alpha_q, NumericMatrix& beta_q)
+    : c_imk(c_imk), y_NA(y_NA), w(w), idx_p_k(idx_p_k), idx_w_k(idx_w_k),
+      maxP(maxP), a_p(a_p), b_p(b_p), a_q(a_q), b_q(b_q),
+      alpha_p(alpha_p), beta_p(beta_p), alpha_q(alpha_q), beta_q(beta_q) {}
+
+  // Work function executing the parallel loop
+  void operator()(std::size_t begin, std::size_t end) {
+    int n_k = idx_w_k.size();
+
+    // Iterate over columns 's' assigned to this thread
+    for (std::size_t s = begin; s < end; ++s) {
+      for (int l = 0; l < maxP; ++l) {
+
+        int w1_primerl_cases_1 = 0;
+        int w1_primerl_cases_0 = 0;
+        int w0_primerl_cases_1 = 0;
+        int w0_primerl_cases_0 = 0;
+
+        for (int i = 0; i < n_k; ++i) {
+          int idx_ki = idx_w_k[i] - 1;
+
+          if(y_NA(i,s) == 0){
+            if(idx_p_k[i] == (l+1) && w(idx_ki, s) == 1 && c_imk(i,s) == 1){
+              w1_primerl_cases_1 += 1;
+            } else if(idx_p_k[i] == (l+1) && w(idx_ki, s) == 1 && c_imk(i,s) == 0){
+              w1_primerl_cases_0 += 1;
+            } else if(idx_p_k[i] == (l+1) && w(idx_ki, s) == 0 && c_imk(i,s) == 2){
+              w0_primerl_cases_1 += 1;
+            } else if(idx_p_k[i] == (l+1) && w(idx_ki, s) == 0 && c_imk(i,s) == 0){
+              w0_primerl_cases_0 += 1;
+            }
+          }
+        }
+
+        // Store parameters directly in the thread-safe RMatrix
+        alpha_p(l, s) = a_p + w1_primerl_cases_1;
+        beta_p(l, s)  = b_p + w1_primerl_cases_0;
+        alpha_q(l, s) = a_q + w0_primerl_cases_1;
+        beta_q(l, s)  = b_q + w0_primerl_cases_0;
+      }
+    }
+  }
+};
+
+// 2. Main exported function
+// [[Rcpp::export]]
+List sample_pq_cpp_parallel(NumericMatrix& c_imk,
+                            IntegerMatrix& y_NA,
+                            NumericMatrix w,
+                            IntegerVector idx_p_k, IntegerVector idx_w_k,
+                            int maxP, double a_p, double b_p,
+                            double a_q, double b_q) {
+
+  int S = w.ncol();
+
+  // Allocate matrices for the Beta shape parameters
+  NumericMatrix alpha_p(maxP, S);
+  NumericMatrix beta_p(maxP, S);
+  NumericMatrix alpha_q(maxP, S);
+  NumericMatrix beta_q(maxP, S);
+
+  // Instantiate and run the worker
+  BetaParamWorker worker(c_imk, y_NA, w, idx_p_k, idx_w_k, maxP,
+                         a_p, b_p, a_q, b_q,
+                         alpha_p, beta_p, alpha_q, beta_q);
+
+  parallelFor(0, S, worker);
+
+  // Allocate output matrices
+  NumericMatrix p(maxP, S);
+  NumericMatrix q(maxP, S);
+
+  // Quickly generate the random numbers on the main thread using computed parameters
+  for (int s = 0; s < S; ++s) {
+    for (int l = 0; l < maxP; ++l) {
+      p(l, s) = R::rbeta(alpha_p(l, s), beta_p(l, s));
+      q(l, s) = R::rbeta(alpha_q(l, s), beta_q(l, s));
     }
   }
 

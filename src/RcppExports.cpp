@@ -130,6 +130,23 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// sample_betatheta_cpp_parallel_old
+arma::mat sample_betatheta_cpp_parallel_old(const arma::mat& w, const arma::mat& z, arma::mat beta_theta, const arma::uvec& idx_z, const arma::mat& X_theta, const arma::vec& b_betatheta, const arma::mat& B_betatheta);
+RcppExport SEXP _occJSDM_sample_betatheta_cpp_parallel_old(SEXP wSEXP, SEXP zSEXP, SEXP beta_thetaSEXP, SEXP idx_zSEXP, SEXP X_thetaSEXP, SEXP b_betathetaSEXP, SEXP B_betathetaSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type w(wSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type z(zSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type beta_theta(beta_thetaSEXP);
+    Rcpp::traits::input_parameter< const arma::uvec& >::type idx_z(idx_zSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type X_theta(X_thetaSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type b_betatheta(b_betathetaSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type B_betatheta(B_betathetaSEXP);
+    rcpp_result_gen = Rcpp::wrap(sample_betatheta_cpp_parallel_old(w, z, beta_theta, idx_z, X_theta, b_betatheta, B_betatheta));
+    return rcpp_result_gen;
+END_RCPP
+}
 // sample_betatheta_cpp_parallel
 arma::mat sample_betatheta_cpp_parallel(const arma::mat& w, const arma::mat& z, arma::mat beta_theta, const arma::uvec& idx_z, const arma::mat& X_theta, const arma::vec& b_betatheta, const arma::mat& B_betatheta);
 RcppExport SEXP _occJSDM_sample_betatheta_cpp_parallel(SEXP wSEXP, SEXP zSEXP, SEXP beta_thetaSEXP, SEXP idx_zSEXP, SEXP X_thetaSEXP, SEXP b_betathetaSEXP, SEXP B_betathetaSEXP) {
@@ -164,6 +181,26 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type a_q(a_qSEXP);
     Rcpp::traits::input_parameter< double >::type b_q(b_qSEXP);
     rcpp_result_gen = Rcpp::wrap(sample_pq_cpp(c_imk, y_NA, w, idx_p_k, idx_w_k, maxP, a_p, b_p, a_q, b_q));
+    return rcpp_result_gen;
+END_RCPP
+}
+// sample_pq_cpp_parallel
+List sample_pq_cpp_parallel(NumericMatrix& c_imk, IntegerMatrix& y_NA, NumericMatrix w, IntegerVector idx_p_k, IntegerVector idx_w_k, int maxP, double a_p, double b_p, double a_q, double b_q);
+RcppExport SEXP _occJSDM_sample_pq_cpp_parallel(SEXP c_imkSEXP, SEXP y_NASEXP, SEXP wSEXP, SEXP idx_p_kSEXP, SEXP idx_w_kSEXP, SEXP maxPSEXP, SEXP a_pSEXP, SEXP b_pSEXP, SEXP a_qSEXP, SEXP b_qSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix& >::type c_imk(c_imkSEXP);
+    Rcpp::traits::input_parameter< IntegerMatrix& >::type y_NA(y_NASEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type w(wSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type idx_p_k(idx_p_kSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type idx_w_k(idx_w_kSEXP);
+    Rcpp::traits::input_parameter< int >::type maxP(maxPSEXP);
+    Rcpp::traits::input_parameter< double >::type a_p(a_pSEXP);
+    Rcpp::traits::input_parameter< double >::type b_p(b_pSEXP);
+    Rcpp::traits::input_parameter< double >::type a_q(a_qSEXP);
+    Rcpp::traits::input_parameter< double >::type b_q(b_qSEXP);
+    rcpp_result_gen = Rcpp::wrap(sample_pq_cpp_parallel(c_imk, y_NA, w, idx_p_k, idx_w_k, maxP, a_p, b_p, a_q, b_q));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -587,8 +624,10 @@ static const R_CallMethodDef CallEntries[] = {
     {"_occJSDM_sample_w_cim_cipp_parallel", (DL_FUNC) &_occJSDM_sample_w_cim_cipp_parallel, 15},
     {"_occJSDM_sample_w_cim_cipp", (DL_FUNC) &_occJSDM_sample_w_cim_cipp, 15},
     {"_occJSDM_sample_betatheta_cpp", (DL_FUNC) &_occJSDM_sample_betatheta_cpp, 7},
+    {"_occJSDM_sample_betatheta_cpp_parallel_old", (DL_FUNC) &_occJSDM_sample_betatheta_cpp_parallel_old, 7},
     {"_occJSDM_sample_betatheta_cpp_parallel", (DL_FUNC) &_occJSDM_sample_betatheta_cpp_parallel, 7},
     {"_occJSDM_sample_pq_cpp", (DL_FUNC) &_occJSDM_sample_pq_cpp, 10},
+    {"_occJSDM_sample_pq_cpp_parallel", (DL_FUNC) &_occJSDM_sample_pq_cpp_parallel, 10},
     {"_occJSDM_computeModelLoglikJSDM_cpp", (DL_FUNC) &_occJSDM_computeModelLoglikJSDM_cpp, 4},
     {"_occJSDM_computeModelLoglikFirstStage_cpp", (DL_FUNC) &_occJSDM_computeModelLoglikFirstStage_cpp, 5},
     {"_occJSDM_computeModelLoglikSecondStage_cpp", (DL_FUNC) &_occJSDM_computeModelLoglikSecondStage_cpp, 6},
