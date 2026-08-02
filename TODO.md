@@ -565,15 +565,15 @@ Items 16 and 18 are marked **partially fixed**: the crash in each is gone, but p
     - `verbose` in `computeNewOutputs()` defaults to `T`, so `predictNewSites()` still prints one line per species unless a caller opts out. It is suppressible now, which was the harder half, but the default behaviour, the test-output noise and the CRAN-reviewer exposure are all unchanged. **Alex: "We can leave verbose on, people won't think of turning it on."**
     - `sample_z_cpp_parallel()` was exported but not yet called at the time; `runOccJSDM` still used `sample_z_cpp`, so only `sample_w_cim_cipp_parallel()` was wired in and half the parallelisation work was unreachable. **Alex: "sample_z_cpp_parallel now used."** Confirmed: it is called at `R/runOccJSDM.R:1113` as of `41abe69`, which leaves `sample_z_cpp()` itself with no callers -- whether *that* should now be deprecated is a new open item in group A.
 
-    The `verbose`-default residual noted above is the same one closed separately as *Fixed bugs* 39.
+    The `verbose`-default choice noted above is the same decision closed separately as *Fixed bugs* 39.
 
-39. ~~**`computeNewOutputs()` prints to stdout on every call and cannot be silenced.**~~ **PARTIALLY FIXED** (Alex added a `verbose` argument to `predictNewSites()`, threaded through to the `Rcout` call in `src/jsdm.cpp`). Closed 2 August 2026.
+39. ~~**`computeNewOutputs()` prints to stdout on every call and cannot be silenced.**~~ **FIXED** (Alex added a `verbose` argument to `predictNewSites()`, threaded through to the `Rcout` call in `src/jsdm.cpp`). Closed 2 August 2026.
 
     **The original defect.** `src/jsdm.cpp` ran `Rcout << "Computing species ..."` inside the species loop unconditionally, so every `predictNewSites()` call printed one line per species, and `suppressMessages()` did not catch it because `Rcout` is stdout rather than R's condition system.
 
-    **Verified live, not just from the response.** `verbose` reaches the C++ `if(verbose)` gate around the `Rcout` call (`src/jsdm.cpp:482`) via `computeNewOutputs()` (`R/output.R:1683`). Ran both ways on a fitted model: `verbose = FALSE` suppresses all four per-species lines; `suppressMessages()` alone, with `verbose` left at its default, still lets all four through -- confirming the original complaint still holds when nothing is passed explicitly.
+    **Verified live, not just from the response.** `verbose` reaches the C++ `if(verbose)` gate around the `Rcout` call (`src/jsdm.cpp:482`) via `computeNewOutputs()` (`R/output.R:1683`). Ran both ways on a fitted model: `verbose = FALSE` suppresses all four per-species lines; `suppressMessages()` alone, with `verbose` left at its default, still lets all four through -- expected, not a gap, given the default chosen below.
 
-    **The fix specified a default of `FALSE`; Alex shipped `T`.** So the two concerns the item was filed for -- polluting any script, vignette chunk or app that predicts in a loop, and unconditional console output being the kind of thing CRAN reviewers pick up -- are only addressed for a caller who already knows to override the default. This is the same residual already recorded under *Fixed bugs* 38 (the RcppParallel-linking fix), with Alex's decision already given there: **"We can leave verbose on, people won't think of turning it on."** Closed on that basis rather than as a full fix.
+    **The item's fix spec asked for a default of `FALSE`; Alex chose `T` instead, deliberately.** `predictNewSites()` still prints by default unless a caller opts out, which is not what was originally asked for -- but it is a design decision, not an unfinished fix. Same decision already recorded under *Fixed bugs* 38 (the RcppParallel-linking fix): **"We can leave verbose on, people won't think of turning it on."** **Closed by decision, not by elimination.**
 
 # **Completed work**
 
