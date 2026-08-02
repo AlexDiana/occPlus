@@ -11,3 +11,4 @@
 ^PARALLELISATION$
 ^\.claude$
 ^CLAUDE\.md$
+^_config\.yml$

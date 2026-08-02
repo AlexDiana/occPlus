@@ -1,0 +1,29 @@
+# Jekyll configuration for the GitHub Pages site.
+#
+# Pages is configured to build from the main branch root (Settings > Pages,
+# source: main, path: /), which runs Jekyll over the whole repository and
+# renders every markdown file it finds. That published these maintainer-facing
+# working notes as pages on the public site, e.g.
+# https://alexdiana.github.io/occJSDM/TODO.html.
+#
+# Excluding them keeps them out of the generated site only. They stay tracked
+# in git and readable in the repository, which is public regardless.
+#
+# Keep this list in sync with any new file that is written for agents or
+# maintainers rather than for package users.
+#
+# dev/, PARALLELISATION/ and deprecated/ are excluded as whole directories
+# rather than by naming their markdown, since everything in all three is
+# working notes or dead code: dev/ is PLAN.md plus run_study.R,
+# PARALLELISATION/ is four guides plus the DOCUMENTATION_MANIFEST.txt and
+# DOCUMENTATION_SUMMARY.txt that describe them, and deprecated/ is superseded
+# code kept for reference and already excluded from the package build via
+# .Rbuildignore. Excluding the directories also means a file added later is
+# covered by default rather than silently published.
+exclude:
+  - TODO.md
+  - AGENTS.md
+  - CLAUDE.md
+  - dev/
+  - PARALLELISATION/
+  - deprecated/
