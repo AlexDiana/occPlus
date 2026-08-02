@@ -363,6 +363,18 @@ G.  **Do not allocate posterior arrays that are never filled.** The `summarisedL
 H.  **Reduce the repeated `arma::inv()` calls in the samplers.** `sample_beta_cpp()` (`src/functions.cpp:249-253`), `sampleB()` and `sampleBuniv()` (`src/jsdm.cpp:579-583`, `:600-604`) each call `arma::inv(B)` twice plus `arma::inv(arma::trimatl(L))`, executed `S` or `n` times per iteration. In every caller `B` is diagonal, so this is a dense general inverse of a diagonal matrix. `sampleB_SoR()` (`src/jsdm.cpp:817-839`) already shows the right pattern: take the precision directly as an argument, and draw via a triangular solve against a standard normal instead of forming the inverse Cholesky factor explicitly.
 ```
 
+8.  **Make the parallel sampler reproducible at any thread count, by keying the draws on species rather than on thread.** This is a design change in your sampler, which is why it is here rather than being applied.
+
+    **Where it stands now.** `sampleB_SoR()` is thread-safe and R-seeded (*Fixed bugs* 41): it draws from `rnorm()` in `src/rng.h`, whose per-thread `mt19937` derives from the base seed `runOccJSDM()` hands the sampler via `setOccJSDMSeed()`. The data race is gone and results are statistically valid. What is not fixed is bit-reproducibility: `BBSL_Worker` runs species across TBB threads, TBB work-steals, so which thread handles which species varies between runs *even at a fixed thread count*, and each thread draws from a different stream. Measured 2 August 2026: max difference 0.126 on `B0` at 10 threads, exactly 0 at one.
+
+    **The change.** Build a generator inside `BBSL_Worker::operator()` seeded from `(base_seed, s)` for species `s`, and thread it into `sampleB_SoR()` as an argument instead of having that function reach for a thread-local engine. Species `s` then gets the same draws whichever thread runs it, so the result is reproducible at any thread count and stays race-free. `src/rng.h` already has the pieces -- the base seed and the `seed_seq` construction -- and the generation-counter and `dist.reset()` traps documented at the top of that file apply unchanged.
+
+    **Why it is worth doing rather than living with.** The simulation study's paired design depends on it. The single strongest result in the study -- that only 104 of 49,978 `resid_cor` coverage decisions flipped between the pre- and post-fix runs on identical truths -- was only computable because a fit reproduced exactly. Every future before/after comparison loses that power without it, and the workaround, running everything at one thread, gives up the parallelisation you have just added.
+
+    **Two things it also unblocks.** `test-regression-bugs.R` currently pins its reproducibility test to one thread and carries a skipping test naming this gap; both can go when this lands. And tier 1's "structural assertions only" rule can finally be revisited, which the testing item under *Doug to dos* already flags as waiting on reproducibility being confirmed on a multi-threaded platform.
+
+    ALEX TO DECIDE AND IMPLEMENT (touches `src/jsdm.cpp` and `src/rng.h`)
+
 ## B. Doug to dos
 
 1.  **reproduce all Ecoletts results as a test of the package and decide whether to include in repo**
