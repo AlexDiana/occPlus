@@ -23,6 +23,8 @@ Description: Fits an occupancy and joint species distribution model (JSDM)
     fit by Markov chain Monte Carlo. See Ji et al. (2025)
     <doi:10.1111/ele.70302> for methodological details.
 License: Apache License (>= 2)
+URL: https://alexdiana.github.io/occJSDM/, https://github.com/AlexDiana/occJSDM
+BugReports: https://github.com/AlexDiana/occJSDM/issues
 Encoding: UTF-8
 Imports: 
     ggplot2 (>= 3.4.0),
@@ -60,3 +62,4 @@ RoxygenNote: 8.0.0
 Config/testthat/edition: 3
 Depends: 
     R (>= 4.1.0)
+Config/Needs/website: rmarkdown

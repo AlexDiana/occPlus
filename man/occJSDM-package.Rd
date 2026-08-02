@@ -21,6 +21,15 @@ fitting a model is \code{\link{runOccJSDM}}; \code{\link{simulateOccJSDMData}}
 simulates data in the format it expects. See Ji et al. (2025)
 \doi{10.1111/ele.70302} for methodological details.
 }
+\seealso{
+Useful links:
+\itemize{
+  \item \url{https://alexdiana.github.io/occJSDM/}
+  \item \url{https://github.com/AlexDiana/occJSDM}
+  \item Report bugs at \url{https://github.com/AlexDiana/occJSDM/issues}
+}
+
+}
 \author{
 \strong{Maintainer}: Alex Diana \email{Alex.diana92@yahoo.it}
 

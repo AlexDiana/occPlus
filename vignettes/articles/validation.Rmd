@@ -1,0 +1,696 @@
+---
+title: "Checking whether the model's uncertainty is honest"
+description: >
+  A plain-language guide to the occJSDM test suite: what "coverage" means,
+  what the three test tiers check, and what happened when the R = 100
+  coverage study was re-run after the first round of fixes.
+---
+
+```{=html}
+<div class="occjsdm-report">
+<style>
+.occjsdm-report {
+  --ground:      #F5F6F4;
+  --ground-sunk: #ECEEEA;
+  --rule:        #D3D8D2;
+  --ink:         #15202B;
+  --ink-soft:    #4E5B62;
+  --ink-faint:   #7C878C;
+  --accent:      #1F5F6B;
+  --good:        #3E7D5A;
+  --warn:        #A06A1B;
+  --bad:         #9E3A2E;
+  --good-fill:   #C5D8C9;
+  --bad-fill:    #E3C0B8;
+
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --sans:  system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  --mono:  ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 17px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  border-radius: 8px;
+}
+
+/* Synced to pkgdown's own light/dark toggle (data-bs-theme on <html>)
+   rather than the OS preference, so this block always matches the rest
+   of the page regardless of which one the reader has set. */
+html[data-bs-theme="dark"] .occjsdm-report {
+  --ground:      #12181C;
+  --ground-sunk: #1A2126;
+  --rule:        #2C3740;
+  --ink:         #E4E9E7;
+  --ink-soft:    #A6B2B6;
+  --ink-faint:   #77848A;
+  --accent:      #6BB3BF;
+  --good:        #74B48C;
+  --warn:        #D3A245;
+  --bad:         #DC8371;
+  --good-fill:   #2E4638;
+  --bad-fill:    #4E2E29;
+}
+
+.occjsdm-report .wrap {
+  max-width: 45rem;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 3.25rem;
+}
+
+.occjsdm-report .eyebrow {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.occjsdm-report h1 {
+  font-family: var(--serif);
+  font-size: clamp(2.1rem, 5.5vw, 3rem);
+  line-height: 1.1;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+  margin: 0.5rem 0 0;
+}
+
+.occjsdm-report .standfirst {
+  font-family: var(--serif);
+  font-size: 1.2rem;
+  line-height: 1.55;
+  color: var(--ink-soft);
+  margin: 1rem 0 0;
+  max-width: 34rem;
+}
+
+.occjsdm-report h2 {
+  font-family: var(--serif);
+  font-size: 1.6rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+  margin: 0;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--rule);
+}
+
+.occjsdm-report h3 {
+  font-size: 0.95rem;
+  font-weight: 650;
+  margin: 0;
+  letter-spacing: 0.005em;
+}
+
+.occjsdm-report section { display: flex; flex-direction: column; gap: 1.1rem; }
+.occjsdm-report p { margin: 0; max-width: 40rem; }
+.occjsdm-report strong { font-weight: 650; }
+.occjsdm-report code {
+  font-family: var(--mono);
+  font-size: 0.86em;
+  background: var(--ground-sunk);
+  padding: 0.1em 0.34em;
+  border-radius: 2px;
+}
+
+/* ---- the tally: coverage made visible ---- */
+.occjsdm-report .tally-set { display: flex; flex-direction: column; gap: 2rem; }
+.occjsdm-report .tally { display: flex; flex-direction: column; gap: 0.75rem; }
+
+.occjsdm-report .tally-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.occjsdm-report .tally-label { font-size: 0.92rem; color: var(--ink-soft); }
+.occjsdm-report .tally-label b { color: var(--ink); font-weight: 650; }
+
+.occjsdm-report .tally-delta {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.78rem;
+  color: var(--ink-faint);
+  letter-spacing: 0.02em;
+}
+
+.occjsdm-report .tally-row {
+  display: grid;
+  grid-template-columns: 3.6rem 1fr 3.2rem;
+  gap: 0 0.9rem;
+  align-items: center;
+}
+
+.occjsdm-report .tally-when {
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--ink-faint);
+}
+
+.occjsdm-report .tally-score {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-align: right;
+}
+.occjsdm-report .tally-score.is-good { color: var(--good); }
+.occjsdm-report .tally-score.is-warn { color: var(--warn); }
+.occjsdm-report .tally-score.is-bad  { color: var(--bad); }
+
+.occjsdm-report .marks {
+  display: grid;
+  grid-template-columns: repeat(25, 1fr);
+  gap: 3px;
+}
+@media (max-width: 34rem) { .occjsdm-report .marks { grid-template-columns: repeat(20, 1fr); } }
+
+.occjsdm-report .marks.is-before { opacity: 0.42; }
+.occjsdm-report .mark { aspect-ratio: 1; border-radius: 1px; }
+.occjsdm-report .mark.hit  { background: var(--good-fill); }
+.occjsdm-report .mark.miss { background: var(--bad); }
+
+.occjsdm-report .tally-note { font-size: 0.85rem; color: var(--ink-faint); margin: 0; }
+
+/* ---- tiers ---- */
+.occjsdm-report .tiers { display: flex; flex-direction: column; gap: 0; }
+
+.occjsdm-report .tier {
+  display: grid;
+  grid-template-columns: 4.5rem 1fr;
+  gap: 0 1.25rem;
+  padding: 1.15rem 0;
+  border-bottom: 1px solid var(--rule);
+  align-items: start;
+}
+.occjsdm-report .tier:first-child { border-top: 1px solid var(--rule); }
+
+.occjsdm-report .tier-when {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--accent);
+  letter-spacing: 0.03em;
+  padding-top: 0.15rem;
+}
+.occjsdm-report .tier-body { display: flex; flex-direction: column; gap: 0.35rem; }
+.occjsdm-report .tier-body p { font-size: 0.92rem; color: var(--ink-soft); }
+
+/* ---- tables ---- */
+.occjsdm-report .scroller { overflow-x: auto; }
+.occjsdm-report table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+.occjsdm-report caption {
+  text-align: left;
+  font-size: 0.85rem;
+  color: var(--ink-faint);
+  padding-bottom: 0.6rem;
+}
+.occjsdm-report th, .occjsdm-report td {
+  text-align: left;
+  padding: 0.55rem 0.9rem 0.55rem 0;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+.occjsdm-report th {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-faint);
+  font-weight: 600;
+  border-bottom-color: var(--ink-faint);
+}
+.occjsdm-report td.name { font-family: var(--mono); font-size: 0.82rem; white-space: nowrap; }
+.occjsdm-report td.num  { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+.occjsdm-report tr.flag td { background: var(--ground-sunk); }
+.occjsdm-report td.num.lo { color: var(--bad);  font-weight: 650; }
+.occjsdm-report td.num.hi { color: var(--accent); font-weight: 650; }
+
+/* ---- callouts ---- */
+.occjsdm-report .pending {
+  border-left: 3px solid var(--accent);
+  padding: 0.9rem 0 0.9rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.occjsdm-report .pending p { font-size: 0.92rem; color: var(--ink-soft); }
+
+.occjsdm-report .finding {
+  border-left: 3px solid var(--warn);
+  padding: 0.9rem 0 0.9rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.occjsdm-report .finding p { font-size: 0.92rem; color: var(--ink-soft); }
+.occjsdm-report .finding h3 { color: var(--ink); }
+
+.occjsdm-report footer {
+  border-top: 1px solid var(--rule);
+  padding-top: 1.25rem;
+  font-size: 0.82rem;
+  color: var(--ink-faint);
+}
+</style>
+
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">occJSDM &middot; validation &middot; 29 July 2026</div>
+    <h1>Checking whether the model&rsquo;s uncertainty is honest</h1>
+    <p class="standfirst">
+      A plain-language guide to the test suite: what it does, what
+      &ldquo;coverage&rdquo; means, and what happened when the study was re-run
+      after the first round of fixes.
+    </p>
+  </header>
+
+  <section>
+    <h2>The trick behind every test</h2>
+    <p>
+      All of it rests on one idea: <strong>make fake data where we already know the
+      right answer.</strong> <code>simulateOccJSDMData()</code> lets us choose the true
+      species coefficients, the true detection rates, the true everything &mdash; then
+      generate a dataset from them.
+    </p>
+    <p>
+      We hand that dataset to <code>runOccJSDM()</code>, which knows none of it, and
+      check whether it finds its way back. Real data can never do this. You never know
+      the true occupancy of a species at a site, so you can never tell whether the model
+      got it right.
+    </p>
+  </section>
+
+  <section>
+    <h2>What &ldquo;coverage&rdquo; means</h2>
+    <p>
+      The model doesn&rsquo;t just report a number for, say, species 3&rsquo;s response
+      to elevation. It reports a <strong>95% credible interval</strong> &mdash; a range,
+      with the claim <em>&ldquo;I&rsquo;m 95% sure the true value is in here.&rdquo;</em>
+    </p>
+    <p>
+      That claim is testable. Simulate 100 datasets where the truth is known, fit all
+      100, and for each ask one question: did the interval contain the truth? Then count.
+      That count is <strong>coverage</strong>. Falling short of the advertised rate is
+      <strong>undercoverage</strong> &mdash; intervals that contain the truth less often
+      than they promise, because they are too narrow or sitting off-centre.
+    </p>
+    <p>
+      It matters in print. Report a 95% interval for a parameter that covers at 72%, and
+      you are overstating your confidence to a reader who has no way to check.
+      Overcoverage &mdash; intervals wider than they need to be &mdash; is the opposite
+      problem: safer, but you are discarding power you actually had.
+    </p>
+  </section>
+
+  <section>
+    <h2>The study has now been run twice</h2>
+    <p>
+      The first run, in late July, found several parameters whose intervals were not
+      honest. Those results were traced to specific lines of code, some of which have
+      since been fixed. The study was then re-run to find out whether the fixes worked.
+    </p>
+    <p>
+      <strong>The two runs used identical simulated data.</strong> Each dataset is
+      generated from a seed derived from its scenario and replicate number, so the
+      second run recreated the first run&rsquo;s 1000 datasets exactly &mdash; verified,
+      not assumed. Every difference below is therefore caused by the change in code, not
+      by the luck of a different draw. Each square is one dataset; the faded row is
+      before, the solid row after.
+    </p>
+
+    <div class="tally-set">
+
+      <figure class="tally">
+        <div class="tally-head">
+          <div class="tally-label">
+            <b>Collection covariates</b> &mdash; moved, but nowhere near far enough
+          </div>
+          <div class="tally-delta">72 &rarr; 76 of 100</div>
+        </div>
+        <div class="tally-row">
+          <div class="tally-when">before</div>
+          <div class="marks is-before" data-hits="72"></div>
+          <div class="tally-score is-bad">0.717</div>
+        </div>
+        <div class="tally-row">
+          <div class="tally-when">after</div>
+          <div class="marks" data-hits="76"></div>
+          <div class="tally-score is-bad">0.763</div>
+        </div>
+        <figcaption class="tally-note">
+          The fix was real &mdash; two-thirds of the bias is gone &mdash; but a
+          &ldquo;95%&rdquo; interval that behaves like a 76% one is still not honest.
+          Something else is wrong.
+        </figcaption>
+      </figure>
+
+      <figure class="tally">
+        <div class="tally-head">
+          <div class="tally-label">
+            <b>Species correlations</b> &mdash; did not move at all
+          </div>
+          <div class="tally-delta">76 &rarr; 76 of 100</div>
+        </div>
+        <div class="tally-row">
+          <div class="tally-when">before</div>
+          <div class="marks is-before" data-hits="76"></div>
+          <div class="tally-score is-bad">0.763</div>
+        </div>
+        <div class="tally-row">
+          <div class="tally-when">after</div>
+          <div class="marks" data-hits="76"></div>
+          <div class="tally-score is-bad">0.763</div>
+        </div>
+        <figcaption class="tally-note">
+          Across the whole study, only 104 of 49,978 individual checks changed their
+          answer. The cause of this one has not been fixed, and the identical result on
+          identical data says so unambiguously.
+        </figcaption>
+      </figure>
+
+      <figure class="tally">
+        <div class="tally-head">
+          <div class="tally-label">
+            <b>Environmental effects</b> &mdash; what an honest interval looks like
+          </div>
+          <div class="tally-delta">94 &rarr; 95 of 100</div>
+        </div>
+        <div class="tally-row">
+          <div class="tally-when">before</div>
+          <div class="marks is-before" data-hits="94"></div>
+          <div class="tally-score is-good">0.943</div>
+        </div>
+        <div class="tally-row">
+          <div class="tally-when">after</div>
+          <div class="marks" data-hits="95"></div>
+          <div class="tally-score is-good">0.947</div>
+        </div>
+        <figcaption class="tally-note">
+          Close to the promised 95 both times. The interval means what it says, and the
+          fixes did not disturb it.
+        </figcaption>
+      </figure>
+
+    </div>
+  </section>
+
+  <section>
+    <h2>Why exactly 100 datasets</h2>
+    <p>
+      Coverage is a proportion, so it carries sampling error like any other estimate.
+      With 100 datasets the standard error is about <strong>2.2 percentage
+      points</strong>. So a gap of 0.94 against 0.95 is noise and means nothing; a gap
+      of 0.72 against 0.95 is ten standard errors and means a great deal.
+    </p>
+    <p>
+      With only five datasets the error is nearer eight points, and 0.78 cannot be
+      distinguished from 0.95 at all. That is precisely why the quick daily check
+      can&rsquo;t answer this question and the long run can.
+    </p>
+  </section>
+
+  <section>
+    <h2>Three tiers, by what they cost</h2>
+    <div class="tiers">
+      <div class="tier">
+        <div class="tier-when">7&nbsp;sec<br>every&nbsp;run</div>
+        <div class="tier-body">
+          <h3>Does it work at all?</h3>
+          <p>
+            Fits every configuration the package offers &mdash; two-stage, occupancy-only,
+            pure JSDM, with and without traits or spatial structure &mdash; and checks each
+            completes and returns sensibly shaped output. Also one test per bug already
+            fixed, named after it, so none comes back unnoticed.
+          </p>
+          <p>
+            Checks <em>shape</em> rather than exact numbers. That rule was originally
+            forced: a threading bug meant the same seed gave different answers on
+            different machines. That is now fixed &mdash; the model reproduces exactly
+            from a seed &mdash; but the rule stays, for a better reason. Any legitimate
+            change to the sampler moves every number, and a suite full of stored values
+            would turn each such change into a wall of failures that says nothing about
+            whether anything is actually broken.
+          </p>
+        </div>
+      </div>
+
+      <div class="tier">
+        <div class="tier-when">30&nbsp;sec<br>local&nbsp;only</div>
+        <div class="tier-body">
+          <h3>Has anything obviously broken?</h3>
+          <p>
+            Five simulated datasets, fitted and compared against their known truth. Too
+            few to measure coverage &mdash; it&rsquo;s a canary. Its real job is catching a
+            broken connection between &ldquo;true value&rdquo; and &ldquo;estimated
+            value&rdquo;, which would show up as coverage near zero rather than merely low.
+          </p>
+        </div>
+      </div>
+
+      <div class="tier">
+        <div class="tier-when">4.75&nbsp;hr<br>on&nbsp;demand</div>
+        <div class="tier-body">
+          <h3>Is the model&rsquo;s uncertainty honest?</h3>
+          <p>
+            One hundred simulated datasets for each of ten scenarios. This is the coverage
+            study, and the only tier that can answer the question above. The most recent
+            run took 285 minutes across five processor cores and fitted the model 1000
+            times without a single failure.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>The ten scenarios</h2>
+    <p>
+      One is the reference design; the other nine each change <strong>exactly one
+      thing</strong> about it. When a cell misbehaves, you know which feature caused it.
+    </p>
+    <p>
+      The reference is a mid-sized survey: 100 sites, 10 species, 2 water samples per
+      site, 2 primers, 3 PCR replicates each, two environmental covariates, one
+      collection covariate, two measured traits, two ordination axes, spatial field on.
+      It exercises every feature at once.
+    </p>
+
+    <div class="scroller">
+      <table>
+        <caption>Each variant differs from the reference in one respect only.</caption>
+        <thead>
+          <tr><th>Scenario</th><th>What changes</th><th>What it asks</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="name">spatial_isolated</td><td>traits off</td><td>Does the spatial term work with trait effects out of the way?</td></tr>
+          <tr><td class="name">traits_isolated</td><td>spatial off</td><td>Does the trait&times;environment term work without the spatial field competing?</td></tr>
+          <tr><td class="name">primers_3</td><td>2 &rarr; 3 primers</td><td>Does per-primer detection hold with more primers?</td></tr>
+          <tr><td class="name">low_information</td><td>40 sites, weak detection</td><td>The hard case: thin, realistic eDNA data.</td></tr>
+          <tr><td class="name">d_underfit</td><td>truth 4 axes, fit 2</td><td>Under-specifying the ordination &mdash; the common real mistake.</td></tr>
+          <tr><td class="name">d_overfit</td><td>truth 2 axes, fit 4</td><td>Over-specifying it.</td></tr>
+          <tr><td class="name">species_20</td><td>10 &rarr; 20 species</td><td>Does it hold as the community grows?</td></tr>
+          <tr><td class="name">occupancy</td><td>no PCR stage</td><td>The collapsed form: field replicates only.</td></tr>
+          <tr><td class="name">binary</td><td>no replicates</td><td>Pure JSDM, no detection model.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      Testing every <em>combination</em> would be roughly fifty cells and days of
+      compute. The cost of changing one thing at a time is that it can&rsquo;t see two
+      features that each work alone but break together. The reference design is the
+      exception: it runs traits and spatial simultaneously, so it covers the interaction
+      most likely to matter, since both write into the same equation.
+    </p>
+  </section>
+
+  <section>
+    <h2>Where things stand after the fixes</h2>
+    <p>
+      Ten scenarios, 100 simulated datasets each, no failures &mdash; 155,578
+      individual interval checks. Read against the 2.2-point standard error:
+      anything from 0.93 to 0.97 is indistinguishable from correct.
+    </p>
+
+    <div class="scroller">
+      <table>
+        <caption>Coverage by parameter and scenario, after the fixes. Red = intervals too narrow. Blue = wider than needed. Dash = not estimated in that design.</caption>
+        <thead>
+          <tr>
+            <th>What it is</th><th>base</th><th>spatial<br>only</th><th>traits<br>only</th>
+            <th>3 primers</th><th>weak<br>data</th><th>too few<br>axes</th><th>too many<br>axes</th>
+            <th>20 spp</th><th>occup.</th><th>JSDM</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Species intercepts</td><td class="num">0.948</td><td class="num">0.943</td><td class="num">0.942</td><td class="num">0.954</td><td class="num lo">0.862</td><td class="num">0.958</td><td class="num">0.950</td><td class="num">0.951</td><td class="num">0.953</td><td class="num">0.962</td></tr>
+          <tr><td>Environmental effects</td><td class="num">0.947</td><td class="num lo">0.883</td><td class="num">0.916</td><td class="num">0.942</td><td class="num lo">0.826</td><td class="num">0.936</td><td class="num">0.939</td><td class="num">0.933</td><td class="num">0.947</td><td class="num">0.952</td></tr>
+          <tr><td>Trait &times; environment</td><td class="num">0.948</td><td class="num">&mdash;</td><td class="num">0.945</td><td class="num hi">0.975</td><td class="num lo">0.840</td><td class="num">0.953</td><td class="num">0.955</td><td class="num">0.925</td><td class="num hi">0.970</td><td class="num">0.938</td></tr>
+          <tr><td>Stage&nbsp;2 false positives</td><td class="num">0.945</td><td class="num">0.947</td><td class="num">0.949</td><td class="num">0.937</td><td class="num">0.911</td><td class="num">0.946</td><td class="num">0.943</td><td class="num">0.950</td><td class="num">&mdash;</td><td class="num">&mdash;</td></tr>
+          <tr class="flag"><td>Stage&nbsp;1 contamination</td><td class="num hi">0.983</td><td class="num hi">0.983</td><td class="num hi">0.978</td><td class="num hi">0.985</td><td class="num lo">0.602</td><td class="num hi">0.980</td><td class="num hi">0.981</td><td class="num hi">0.982</td><td class="num hi">0.985</td><td class="num">&mdash;</td></tr>
+          <tr class="flag"><td>Stage&nbsp;2 detection</td><td class="num">0.902</td><td class="num">0.911</td><td class="num">0.900</td><td class="num">0.925</td><td class="num lo">0.109</td><td class="num">0.913</td><td class="num">0.919</td><td class="num">0.908</td><td class="num">&mdash;</td><td class="num">&mdash;</td></tr>
+          <tr class="flag"><td>Species correlations</td><td class="num lo">0.763</td><td class="num lo">0.758</td><td class="num lo">0.758</td><td class="num lo">0.768</td><td class="num lo">0.764</td><td class="num hi">0.980</td><td class="num lo">0.755</td><td class="num lo">0.752</td><td class="num lo">0.761</td><td class="num lo">0.752</td></tr>
+          <tr class="flag"><td>Stage&nbsp;1 collection covariates</td><td class="num lo">0.763</td><td class="num lo">0.762</td><td class="num lo">0.771</td><td class="num lo">0.718</td><td class="num hi">0.983</td><td class="num lo">0.750</td><td class="num lo">0.752</td><td class="num lo">0.727</td><td class="num lo">0.709</td><td class="num">&mdash;</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>What holds</h3>
+    <p>
+      Species intercepts, environmental effects, the trait&times;environment
+      (fourth-corner) term and the Stage&nbsp;2 false-positive rate all land at
+      or near nominal in every scenario but one. The quantities most likely to
+      be reported in an ecology paper can be quoted as they stand &mdash; with one
+      caveat, below, about how far the species intercepts sit from the truth.
+    </p>
+
+    <h3>What was fixed, and what wasn&rsquo;t</h3>
+    <p>
+      <strong>Collection covariates: better, not fixed.</strong> The prior for these
+      coefficients was centred on 1 rather than 0, pulling every estimate upward. That
+      has been corrected, and it helped &mdash; every scenario gained three to five
+      points and two-thirds of the bias disappeared. But coverage is still 0.71 to 0.77,
+      and the remainder has the same signature as before: flat across model type, primer
+      count, species count and ordination misspecification. A fault that doesn&rsquo;t
+      vary with the data is in the code, not the data. There is a second cause still to
+      find.
+    </p>
+    <p>
+      <strong>Species correlations: unchanged, because the cause is unchanged.</strong>
+      A rescaling step preserves the model&rsquo;s predictions but silently changes the
+      correlation matrix computed from them, inflating correlations toward
+      &plusmn;1. It has not been altered, and the re-run confirms the consequence
+      precisely: identical data in, identical coverage out. The exception remains
+      informative &mdash; where the model is given too few ordination axes, coverage
+      rises to 0.98, because the intervals widen enough to hide the problem. A fit with
+      too few factors looks better calibrated than it is.
+    </p>
+
+    <h3>The one that turned out not to be a bug</h3>
+    <p>
+      Stage&nbsp;2 detection still collapses to 0.11 in the weak-data scenario, against
+      0.90 elsewhere. The first version of this page called that a fault in the prior.
+      <strong>That was wrong, and worth correcting plainly.</strong>
+    </p>
+    <p>
+      In this model the true detection rate and the false-positive rate enter the
+      likelihood symmetrically: nothing in the equations distinguishes &ldquo;present and
+      usually detected&rdquo; from &ldquo;absent and often contaminated&rdquo;. The
+      informative prior is what breaks that tie. Flatten it and the model is not
+      better calibrated &mdash; it is unidentified, free to settle on either explanation.
+      The earlier experiment that appeared to fix coverage only worked because the two
+      rates happened to be far apart in that scenario.
+    </p>
+    <p>
+      So this cell is not measuring a defect. It is measuring the price of an assumption
+      the model needs in order to mean anything at all, in the regime where that
+      assumption is least comfortable. The open question is not <em>how do we remove
+      it</em> but <em>how strong should it be</em> &mdash; a modelling judgement, and one
+      users should be told about when their detection rates are genuinely low.
+    </p>
+  </section>
+
+  <section>
+    <h2>Two things the re-run turned up</h2>
+
+    <div class="finding">
+      <h3>Species intercepts drifted, and coverage never showed it</h3>
+      <p>
+        On identical data, the average distance between the estimated species intercepts
+        and their true values roughly doubled between the two runs, in nine of the ten
+        scenarios. Coverage stayed put at 0.94, because the intervals are wide enough to
+        absorb the shift &mdash; so nothing in the table above reveals it.
+      </p>
+      <p>
+        This is a good argument for tracking how far estimates sit from the truth
+        alongside whether the intervals cover it. The two answer different questions, and
+        here only one of them noticed. None of the fixes should have moved species
+        intercepts; the likely culprit is a large rewrite that arrived in the same batch,
+        and it needs a cause before these numbers appear in a paper.
+      </p>
+    </div>
+
+    <div class="finding">
+      <h3>Stage&nbsp;1 contamination now overshoots</h3>
+      <p>
+        This parameter used to sit close to nominal, between 0.94 and 0.96. It now covers
+        at 0.98 in nine scenarios &mdash; intervals wider than they need to be. The
+        likely cause is the same edit that corrected the collection-covariate prior,
+        which also widened its variance, and appears to have widened it too far.
+      </p>
+      <p>
+        Overcoverage is the safe direction, so this is not urgent. But it is a reminder
+        that a fix can overshoot as easily as it can fall short, and that both directions
+        are worth watching.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Where this leaves the package</h2>
+    <div class="pending">
+      <p>
+        Of the three problems the first study found, one is partly fixed, one is
+        untouched, and one turned out not to be a problem at all. The re-run added two
+        more. Every one is recorded with the measurement that identified it, so nothing
+        rests on recollection.
+      </p>
+      <p>
+        None of this was visible from reading the code. An audit had already been over
+        these files and walked past all of it. It took a study that could say
+        <em>which</em> parameters were miscalibrated before the causes became findable
+        &mdash; and a second run on the same data before the fixes could be told apart
+        from noise.
+      </p>
+    </div>
+  </section>
+
+  <footer>
+    Two parameters are deliberately absent from every table: the spatial length-scale and
+    the factor-score variance. Neither is currently recoverable, both are recorded as open
+    bugs, and reporting a coverage figure for either would be misleading rather than merely
+    uninformative. One further parameter, the residual variance, reads as perfect coverage
+    everywhere because its prior dominates by construction &mdash; not because it is well
+    estimated.
+  </footer>
+
+</div>
+</div>
+
+<script>
+(function () {
+  // Lay out each tally as 100 marks. Misses are spread by a fixed stride
+  // rather than randomised, so the figures stay visually comparable and the
+  // page renders identically every time. Scoped to this article's marks only.
+  document.querySelectorAll('.occjsdm-report .marks').forEach(function (el) {
+    var hits = parseInt(el.dataset.hits, 10);
+    var misses = 100 - hits;
+    var stride = misses > 0 ? 100 / misses : Infinity;
+    var next = stride / 2;
+    var frag = document.createDocumentFragment();
+
+    for (var i = 0; i < 100; i++) {
+      var d = document.createElement('div');
+      var isMiss = misses > 0 && i >= Math.floor(next);
+      if (isMiss) { next += stride; }
+      d.className = 'mark ' + (isMiss ? 'miss' : 'hit');
+      frag.appendChild(d);
+    }
+    el.appendChild(frag);
+  });
+})();
+</script>
+```
