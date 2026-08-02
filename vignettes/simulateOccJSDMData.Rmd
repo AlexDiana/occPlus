@@ -145,7 +145,6 @@ list_jsdmParams <- list(
   # matrix and has no influence on occupancy.
   )
 
-# add splinevars to list_params
 
 list_params <- list(
   p = matrix(runif(P * S, 0.3, 0.6), P, S),   
