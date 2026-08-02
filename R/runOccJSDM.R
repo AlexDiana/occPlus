@@ -629,6 +629,7 @@ runOccJSDM <- function(data,
         sumP <- c(0, cumsum(P)[-N])
 
       } else {
+        P <- NULL
         primerNames <- NULL
       }
     }
