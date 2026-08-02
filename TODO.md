@@ -153,6 +153,8 @@ Every code change Claude made, newest first. None has had human review beyond Do
 
     **Separate observation, not filed as its own item yet** (`PLAN.md` 16.5): `B0` *coverage* in the `continuous` arm is 0.879 against nominal 0.95, about 4.7 SE low and the lowest of any cell measured (grid range 0.892-0.956, `binary` 0.942). Bias is zero, so the interval is too narrow rather than the estimate wrong. `continuous` is the only model type that also estimates `tau`, which itself covers at 0.921 with bias +0.0370. One arm, one configuration, found while looking for something else -- wants confirming before it is called a defect.
 
+    ALEX TO CHECK
+
 6.  **`theta0` overcovers at 0.978-0.985, having been near nominal before the fixes.** Measured by the post-fix re-run (`PLAN.md` 12.3); pre-fix it sat at 0.938-0.959. The all-cell average of 0.944 hides this, because `low_information` pulls it down at 0.602.
 
     **Two candidate causes ruled out.** The M ladder showed overcoverage falling toward nominal as M rises (0.986 at `M2`, 0.944 at `M10`) while the matched `K30` control makes it worse at 0.996, which reads as Stage 1 under-identification (`PLAN.md` 13.7). But that reading has a hole: pre-fix, `theta0` was fine at the *same* M = 2. And the coupling hypothesis, that `b_betatheta`'s widened variance propagates through `w` into `sample_theta0()`, was tested directly and disproved: a 20-fold reduction moved coverage by 0.006 (`PLAN.md` 14.7).
