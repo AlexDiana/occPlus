@@ -389,27 +389,17 @@ H.  **Reduce the repeated `arma::inv()` calls in the samplers.** `sample_beta_cp
 
     (b) **Decide the replicate count for the paper.** R = 100 was chosen to *detect* defects and did so decisively. Asserting *nominal* coverage in print is a claim about the absence of a small deviation and wants R = 200-500 (`PLAN.md` §9). The runner takes `R` as an argument.
 
-    (c) **Decide how the results are presented** (`PLAN.md` open item 4). Currently a private Claude artifact (<https://claude.ai/code/artifact/ad3d46eb-1fd4-49b5-b795-6b71474ef1d5>), updated 29 July 2026 with the post-fix re-run and the before/after comparison; a pkgdown article is the obvious home -- see item 3.
+    (c) **Decide how the results are presented** (`PLAN.md` open item 4). Largely settled: the write-up is now a pkgdown article at `vignettes/articles/validation.Rmd`, superseding the private Claude artifact, so it sits with the package and is citable as supplementary material. It is not published yet; see item 3.
 
     **One constraint carried from the bug list:** `l_s` is excluded from coverage checks because it is not recoverable while the `sample_ls()` item in group B is open, so no cell of the study speaks to spatial range. Two earlier constraints have since lapsed -- `sigma_h` is now sampled (Fixed bugs 24) and the OpenMP RNG race is closed (Fixed bugs 26), so tier 1's "structural assertions only" rule can be revisited once reproducibility is confirmed on a multi-threaded platform.
 
-3.  **Stand up a pkgdown site.** Discussed 28 July; not started.
+3.  ~~**Stand up a pkgdown site.**~~ **BUILT 2 August 2026** (`b34b36a`), but deliberately **not published**. `_pkgdown.yml`, the validation article at `vignettes/articles/validation.Rmd`, and `URL`/`BugReports` in `DESCRIPTION` are on `main`. That closes CRAN plan item 10.
 
-    pkgdown turns the package into a static website -- function reference, both vignettes, README, changelog -- and GitHub Pages hosts it. `usethis::use_pkgdown_github_pages()` wires up both plus an Action to rebuild on push. Roughly half an hour, plus time shaping the reference index.
+    `.github/workflows/pkgdown.yaml` carries only a `workflow_dispatch` trigger, so nothing builds or deploys on push. **How to rebuild locally and how to publish for real are both in `AGENTS.md`, "The documentation site".** Short version: `pkgdown::build_site()` writes to a gitignored `docs/`; publishing needs the workflow run by hand *and* Pages repointed from `main` to `gh-pages`, and neither alone is enough.
 
-    **Three reasons it earns its place:**
+    **ALEX: the Pages repoint needs admin**, which Doug does not have. Until then `alexdiana.github.io/occJSDM` serves the README via Jekyll rather than the pkgdown site.
 
-    (a) *It closes a CRAN item.* `DESCRIPTION` has no `URL` or `BugReports` field (CRAN plan item 10 in `AGENTS.md`). A documentation site is a better `URL` than the bare repo.
-    (b) *It is a much better landing page for the listserv announcement*, which currently points people at a GitHub file listing. A rendered reference and vignettes make a considerably stronger first impression for a beta release.
-    (c) *It gives the validation write-up a home.* The plain-language guide to the test suite and the R = 100 results currently lives as a Claude artifact (<https://claude.ai/code/artifact/ad3d46eb-1fd4-49b5-b795-6b71474ef1d5>, private). As a pkgdown *article* it would sit with the package and be citable as supplementary material for the MEE paper.
-
-    **Two practical constraints.**
-
-    The site would live at `alexdiana.github.io/occJSDM`, since the repo is under Alex's account -- **Alex has to enable Pages**, it is not a setting Doug can change.
-
-    And pkgdown builds every `@examples` block, so the **first build will fail on the group B functions that error unconditionally** (`predictNewSites()` among them). That is the same exposure `\donttest{}` creates under `R CMD check`, which is exactly why the CRAN plan sequences item 8 after the group B fixes. So do this after group B, or expect to `@examples`-guard several functions first.
-
-    **Sequencing caveat:** consider whether to publish a site while the `reparamFactorModel()`, `beta_theta` slope and `B0` bias items in group B are open. The site would document functions whose credible intervals are currently overconfident, without saying so anywhere a reader would see.
+    **Two things to settle before publishing.** pkgdown builds every `@examples` block, so the first real build will fail on the group B functions that error unconditionally (`predictNewSites()` among them) unless they are `@examples`-guarded first. And decide whether to publish at all while the `reparamFactorModel()`, `beta_theta` slope and `B0` bias items are open: the site would document functions whose credible intervals are currently overconfident, without saying so anywhere a reader would see.
 
 # **Future versions**
 
@@ -636,39 +626,17 @@ Items 16 and 18 are marked **partially fixed**: the crash in each is gone, but p
 
 40. ~~**`sample_z_cpp()` was exported but had no callers.**~~ **DE-EXPORTED 2 August 2026** (Claude; `src/functions.cpp`, `R/RcppExports.R`, `src/RcppExports.cpp`).
 
-    `41abe69` wired `sample_z_cpp_parallel()` into `runOccJSDM()` at `R/runOccJSDM.R:1113`, which left the serial `sample_z_cpp()` reaching R only as an unused `RcppExports` wrapper -- nothing in `R/` or `src/` referenced it. Confirmed before changing anything.
-
-    Done by the mechanism group D specifies for wrappers rather than by moving code: the `// [[Rcpp::export]]` tag was removed and `Rcpp::compileAttributes()` re-run, since `RcppExports.R` is generated and must not be hand-edited. **The C++ body is kept**, as the serial reference implementation of what the parallel version computes, with a comment at the definition saying why and warning against restoring the tag without a caller.
-
-    Verified: the package compiles and loads, `sample_z_cpp` is no longer reachable from R, `sample_z_cpp_parallel` still is. The unused-wrapper count group D tracks goes from 13 to 12. **Not verified: the test suite**, which cannot run while the debugging scaffold at `R/runOccJSDM.R:416` is live (see below) -- every `runOccJSDM()` call errors with `object 'occ_data_effort' not found`.
-
-    **Decision provenance:** Doug approved this; Alex had marked the item "ALEX TO CHECK" and had not yet answered. Recorded because he may still want a view, and because the group D timing note argues against doing this cleanup while the samplers are under active rewrite -- that argument was overridden here, not refuted.
+    `41abe69` wired `sample_z_cpp_parallel()` into `runOccJSDM()`, leaving the serial version reachable only as an unused wrapper. Tag removed and `Rcpp::compileAttributes()` re-run; the C++ body stays in `src/` as the serial reference implementation of the parallel one. Detail and decision provenance in `AGENTS.md`, "Detail behind Fixed bugs 40-42".
 
 41. ~~**`BBSL_Worker` called the non-thread-safe `sampleB_SoR()`, racing on R's RNG from every TBB thread.**~~ **FIXED 2 August 2026** (Claude; `src/jsdm.cpp`). Introduced by `41abe69`; found the same day while running the `continuous` arm for the `B0` item in group B.
 
-    **The defect.** `BBSL_Worker::operator()` runs under `RcppParallel::parallelFor(0, S, worker)` and calls `sampleB_SoR()`, whose draw was `arma::randn()`. RcppArmadillo routes that to R's global RNG via `ARMA_RNG_ALT` -- the very call *Fixed bugs* 28 recorded as safe, which it was while the function was only ever reached serially. From worker threads the same routing became an unsynchronised read-modify-write on shared RNG state, permitting duplicate draws, torn reads and draws correlated across species, so the chain could fail to target the intended posterior. Measured: two fits under one `set.seed()` differed by 4.34 on `B0` and 0.63 on `p`; `test-regression-bugs.R:267`/`:269` caught it.
+    `sampleB_SoR()`'s `arma::randn()` reached R's global RNG from every TBB worker thread, permitting duplicate and torn draws, so the chain could fail to target the intended posterior. It now draws from `rnorm()` in `src/rng.h` instead. The race is closed and results are statistically valid again.
 
-    **The fix.** `sampleB_SoR()` now draws from `rnorm()` in `src/rng.h` -- the thread-local `mt19937` derived from the base seed `runOccJSDM()` hands the sampler via `setOccJSDMSeed()`. This is the scheme `46d8804`'s own `PG_Worker` already uses, so it applies Alex's newer pattern to the older worker rather than introducing one. Verified in isolation on the exported `sampleB_SoR()`: it no longer moves `.Random.seed`, and two calls under one `setOccJSDMSeed()` are identical.
-
-    **What this fixes and what it does not.** The race is closed, so results are statistically valid again: each species gets iid normals and the posterior is the intended one. **Bit-reproducibility at more than one thread is not restored.** `sample_BBsL_parallel()` still differs run to run -- max diff 0.126 at 10 threads, 0 at 1 thread -- because TBB work-stealing decides which thread handles which species, that assignment varies between runs even at a fixed thread count, and each thread draws from its own stream. So a species can receive draws from a different stream on each run.
-
-    This is weaker than the caveat `src/rng.h` documents, which says reproducibility holds "for a given thread count"; under work-stealing it does not hold even then. `test-regression-bugs.R:267`/`:269` therefore still fail at the default thread count: the suite is **248 passing single-threaded, 246 at default**. Set `RCPP_PARALLEL_NUM_THREADS=1` whenever a run has to be reproducible, as the `continuous` arm did (`PLAN.md` 16.3).
-
-    **Closing that gap needs a different change**, not an extension of this one: key the draws on the species index rather than the thread, e.g. a generator seeded from `(base_seed, s)` constructed inside `operator()`, so species `s` gets the same draws whichever thread runs it. That requires threading an RNG through `sampleB_SoR()` and was deliberately not attempted here.
-
-    **Left alone at the time, and since acted on:** `sampleB_SoR_TS()` was redundant once this fix landed, and its `_TS` name made it a trap. That decision is now closed, by deprecation rather than deletion -- see *Fixed bugs* 42.
+    **Bit-reproducibility above one thread is not restored**, because TBB work-stealing varies which thread draws for which species even at a fixed thread count. Set `RCPP_PARALLEL_NUM_THREADS=1` whenever a run has to be reproducible; the suite is 248 passing single-threaded, and two tests in `test-regression-bugs.R` are pinned to one thread for this reason, with a companion skip naming the gap. Closing it is *MEE paper* Alex to-do 8. Measurements and full mechanism in `AGENTS.md`, "Detail behind Fixed bugs 40-42".
 
 42. ~~**`sampleB_SoR_TS()` was exported, had no callers, and its name invited the exact error it was written to prevent.**~~ **DEPRECATED 2 August 2026** (Claude; `src/jsdm.cpp`, `deprecated/jsdm-sampleB_SoR_TS.cpp`, `R/RcppExports.R`, `src/RcppExports.cpp`). Closes the decision left open at the end of *Fixed bugs* 41.
 
-    **Why it had to go.** It was written as the thread-safe variant of `sampleB_SoR()` for the `BBSL_Worker` race. That race was closed a different way, by routing `sampleB_SoR()` itself through `rnorm()` in `src/rng.h`, which left the variant with no remaining purpose. It was also actively misleading. The `_TS` suffix marks thread-safe variants throughout this codebase (`mvrnormArmaQuick_TS`, `sample_beta_cpp_TS`, `sample_beta_nocov_cpp_TS`), so it reads as the endorsed choice for anyone parallelising something, but it seeds `thread_local std::mt19937 gen(rd())` from OS entropy. A sampler built on it would ignore `set.seed()` entirely and be irreproducible at *any* thread count, which is strictly worse than the `sampleB_SoR()` it was meant to improve on. `src/rng.h`'s header records this same mistake having already been made once, with `mvrnormArmaQuick_TS`.
-
-    **What was done.** Two steps. First the export, by the mechanism group D specifies for wrappers, as in *Fixed bugs* 40: the `// [[Rcpp::export]]` tag was removed and `Rcpp::compileAttributes()` re-run, since `RcppExports.R` is generated and must not be hand-edited. Then the body was moved out of `src/jsdm.cpp` to `deprecated/jsdm-sampleB_SoR_TS.cpp`, which is where dead code goes in this repo (*Fixed bugs* 37; `deprecated/functions_old.cpp` is the precedent for C++ specifically). No stub was left at the old site, matching how the R files were moved on 30 July. The header on the new file carries the provenance, the reason the `_TS` name must not be taken at face value, and an explicit warning that this is a record and not a reference implementation.
-
-    **The first attempt only did the de-export**, leaving the body in `src/jsdm.cpp` behind a comment, on the reasoning that group D prescribes de-exporting wrappers in place. Doug caught that. Group D's instruction is about not hand-editing the generated `RcppExports.R`; it says nothing about where the body lives. *Fixed bugs* 40 had a positive reason to keep `sample_z_cpp()` in `src/` -- it is the serial reference implementation of the live parallel version -- and this function has no equivalent role. Its stated justification for staying was that it recorded an approach that had been tried, which is a description of what `deprecated/` is for.
-
-    **Verified.** The moved body is byte-identical to what stood on `main`, checked by diff rather than by eye. `sampleB_SoR_TS` appears nowhere in `src/`, `R/` or `NAMESPACE`. The package compiles clean and loads; `sampleB_SoR` is still reachable from R and `sampleB_SoR_TS` is not; `_occJSDM_sampleB_SoR_TS` is gone from the native symbol registration table. The suite is 248 passing, 0 failures, 2 skips, unchanged. Group D's dead-wrapper count drops from 12 of 36 to 11 of 35, re-measured rather than decremented.
-
-    **Not deleted, deliberately.** Doug asked for deprecation, not removal. `deprecated/` is excluded from the build via `.Rbuildignore`, so nothing here is compiled and the code as it stands would not build in isolation: it depends on `XtOmegaX_SoR()` and `XtK_SoR()` in `src/jsdm.cpp` and on the RcppArmadillo headers. That is recorded in the file so nobody mistakes it for something revivable by copy and paste.
+    Written as the thread-safe variant of `sampleB_SoR()` for the race above, and left purposeless when that race was closed another way. Worse than merely dead: it seeds from OS entropy, so anything built on it would ignore `set.seed()` entirely, despite the `_TS` name reading as the endorsed choice. De-exported and moved to `deprecated/`, not deleted. Group D's dead-wrapper count drops to 11 of 35, re-measured rather than decremented; the suite is unchanged at 248 passing. Detail in `AGENTS.md`, "Detail behind Fixed bugs 40-42".
 
 # **Completed work**
 

@@ -137,6 +137,28 @@ The tier-1 test asserts that `sample_ls()` is *reached* rather than that `idx_ls
 
 **The 29 July re-run is the strongest evidence, because it is paired.** `draw_truth()` seeds on (scenario, replicate), so truth is bit-identical between the pre- and post-fix runs, verified at `max|truth difference| = 0`. Across that pair only **104 of 49,978** `resid_cor` coverage decisions flipped, and coverage was unmoved at 0.777. Same data, same truth, same answer: the undercoverage is not sampling noise and does not depend on the RNG or on any of the four fixes.
 
+## Detail behind Fixed bugs 40-42, moved out of TODO
+
+Same principle as the group B evidence above: the TODO entries say what was done, this says why and what was measured. Do not re-derive these.
+
+### The `BBSL_Worker` RNG race (*Fixed bugs* 41)
+
+**The defect.** `BBSL_Worker::operator()` runs under `RcppParallel::parallelFor(0, S, worker)` and called `sampleB_SoR()`, whose draw was `arma::randn()`. RcppArmadillo routes that to R's global RNG via `ARMA_RNG_ALT`, the very call *Fixed bugs* 28 recorded as safe, which it was while the function was only ever reached serially. From worker threads the same routing became an unsynchronised read-modify-write on shared RNG state, permitting duplicate draws, torn reads and draws correlated across species, so the chain could fail to target the intended posterior. Measured: two fits under one `set.seed()` differed by 4.34 on `B0` and 0.63 on `p`. Introduced by `41abe69`, found the same day while running the `continuous` arm.
+
+**The fix** routes `sampleB_SoR()` through `rnorm()` in `src/rng.h`, the thread-local `mt19937` derived from the base seed `runOccJSDM()` supplies via `setOccJSDMSeed()`. That is the scheme `46d8804`'s own `PG_Worker` already uses, so it applies Alex's newer pattern to the older worker rather than inventing one. Verified in isolation: `sampleB_SoR()` no longer moves `.Random.seed`, and two calls under one `setOccJSDMSeed()` are identical.
+
+**What it does not fix.** Bit-reproducibility above one thread. TBB work-stealing decides which thread handles which species, and that assignment varies between runs *even at a fixed thread count*, so a species can draw from a different stream on each run. Measured max difference 0.126 on `B0` at 10 threads, 0 at one. This is weaker than the caveat `src/rng.h` documents, which claims reproducibility holds "for a given thread count". The remedy is to key draws on the species index rather than the thread, filed as *MEE paper* Alex to-do 8.
+
+### The two de-exports (*Fixed bugs* 40 and 42)
+
+Both used the mechanism group D specifies for wrappers: remove the `// [[Rcpp::export]]` tag, re-run `Rcpp::compileAttributes()`, never hand-edit the generated `RcppExports.R`.
+
+**They differ in where the body ended up, and that difference is the useful part.** `sample_z_cpp()` stayed in `src/functions.cpp` because it is the serial reference implementation of the live `sample_z_cpp_parallel()`. `sampleB_SoR_TS()` had no equivalent role and went to `deprecated/jsdm-sampleB_SoR_TS.cpp`. The first attempt left it in `src/` on the mistaken reading that group D prescribes de-exporting wrappers *in place*; that rule is only about not hand-editing `RcppExports.R` and says nothing about where the body lives, and `deprecated/functions_old.cpp` is the precedent for C++ going to `deprecated/`. Doug caught it.
+
+**Why `sampleB_SoR_TS()` was worse than merely dead.** The `_TS` suffix marks thread-safe variants throughout this codebase (`mvrnormArmaQuick_TS`, `sample_beta_cpp_TS`, `sample_beta_nocov_cpp_TS`), so it reads as the endorsed choice for anyone parallelising something, but it seeds `thread_local std::mt19937 gen(rd())` from OS entropy. A sampler built on it would ignore `set.seed()` and be irreproducible at *any* thread count, strictly worse than the `sampleB_SoR()` it was meant to improve on. `src/rng.h`'s header records the same mistake having been made once already, with `mvrnormArmaQuick_TS`. The moved file's header therefore says explicitly that it is a record and not a reference implementation, and that it would not compile in isolation anyway.
+
+**Decision provenance for *Fixed bugs* 40:** Doug approved it while Alex had the item marked "ALEX TO CHECK" and had not answered. Group D's own timing note argues against this cleanup mid-rewrite; that argument was overridden, not refuted.
+
 ## Expected `R CMD check` output: what is settled, what is not
 
 Baseline as of 30 July 2026, after the missing-imports work (*Fixed bugs* 36): **0 errors, 2 warnings, 2 notes.** (It was 3 notes on the first completing run; the `tidyr` unused-import NOTE is now cleared.) Check this list before filing anything from a check run. Two of these are closed by decision and re-filing them wastes a round trip; that has already happened once.
@@ -205,8 +227,42 @@ be in exactly one of them.
 
 `man/*.Rd` files are currently tracked and committed in git (not gitignored), despite an earlier commit (`dd158a9`, prior to this session) whose message claimed intent to "stop generating/tracking man/\*.Rd" -- that intent was never followed through in `.gitignore`. Regenerating docs via `devtools::document()` after adding/changing roxygen tags will produce `man/*.Rd` diffs that should be committed (or the gitignore situation resolved) deliberately.
 
+## The documentation site
+
+Two separate things publish from this repository and they are easy to conflate.
+
+**What is live now.** `https://alexdiana.github.io/occJSDM/` serves `README.md`, rendered by GitHub's built-in `pages-build-deployment` workflow, which runs Jekyll over the `main` branch root on every push. That is a Pages *setting* (Settings \> Pages, source `main` "/"), not a file in `.github/workflows/`. `_config.yml` at the repository root excludes `TODO.md`, `AGENTS.md`, `CLAUDE.md`, `dev/`, `PARALLELISATION/` and `deprecated/` from it, because Jekyll renders every markdown file it finds and had been publishing all of these as public pages. **Keep that exclude list in sync with any new maintainer-facing file.**
+
+**The pkgdown site is configured but not published.** `_pkgdown.yml` defines it and `.github/workflows/pkgdown.yaml` can build and deploy it, but that workflow was committed with only a `workflow_dispatch` trigger. The r-lib template's `push`, `pull_request` and `release` triggers were removed deliberately, so that landing the file did not publish a documentation site as a side effect of an ordinary push.
+
+### Rebuilding the docs locally
+
+``` r
+pkgdown::build_site()
+```
+
+Writes to `docs/`, which is gitignored and in `.Rbuildignore` and is never committed. Open `docs/index.html` to view it. `pkgdown::check_pkgdown()` validates `_pkgdown.yml` against the package's actual topics without building anything, and is the fast check after editing the reference index.
+
+`vignettes/articles/` is pkgdown-only: articles there are built into the site but do not ship in the package. The simulation-study write-up, `validation.Rmd`, lives there for that reason.
+
+Two things to expect on a full build. pkgdown runs every `@examples` block, so it will fail on the group B functions that error unconditionally until those are fixed or `@examples`-guarded. And pkgdown renders every root-level `.md` into the site's home section, with no config option to exclude specific files (`package_mds()` in the pkgdown source), which is why the workflow deletes `AGENTS.md`, `CLAUDE.md` and `TODO.md` from the checkout before building. That step is the pkgdown counterpart of `_config.yml`, and needs the same syncing.
+
+### Publishing it to github.io
+
+**Two switches, both required, and neither is a file in this repository.**
+
+1.  **Run the workflow.** Actions tab, then `pkgdown.yaml` in the sidebar, then **Run workflow**. The button only appears once the specific workflow is selected; there is none on the All workflows view. This builds the site and pushes the HTML to a `gh-pages` branch.
+2.  **Repoint Pages.** Settings \> Pages \> Source, from `main` to `gh-pages`. **This needs admin on the repository, which only Alex has.** Doug has push but not admin, so neither the web UI nor the API will let him do it.
+
+Neither alone suffices. Repoint without ever running and `gh-pages` does not exist, so the site 404s. Run without repointing and the HTML lands in a public `gh-pages` branch that nothing serves.
+
+Note that second case: **running the workflow publishes the built site to a public branch even while Pages points elsewhere.** The manual trigger prevents *automatic* publishing; it does not make a manual run private.
+
+To restore automatic deployment on push, put back the two lines recorded in the workflow's own header comment.
+
 ## Current work status
 
+- **2 August 2026: three commits, and the most useful one was a discovery rather than a task.** `089b421` deprecated `sampleB_SoR_TS()` and `b34b36a` landed the pkgdown scaffolding with the workflow deliberately manual-trigger only; both are covered above. Between them, `a9c723b` fixed something nobody had filed. Checking the Actions tab showed `pages-build-deployment` running on every push, because Pages had been enabled with source `main`/root, which meant Jekyll was publishing `TODO.md`, `AGENTS.md` and `CLAUDE.md` as pages on the public site. Verified live at `alexdiana.github.io/occJSDM/TODO.html` before acting and verified 404 after. The repository is public, so nothing was newly exposed, but a rendered site presence and search indexing were nobody's decision. **The lesson worth keeping:** the pkgdown workflow was assumed to be the only publishing path, and at the time it was not even committed to any branch. Check what Pages is actually configured to serve before reasoning about what publishes.
 - **This session, 1 August 2026: doc maintenance, and it found that `PLAN.md` §12 had been deleted.** The whole "Results of the full run" section -- the headline R = 100 coverage table for all ten cells, the pre-fix table at 12.6, and the `B0`/`theta0` findings -- was removed by `a8f9725` on 30 July, a commit of mine whose message described only the TODO rewrite and said nothing about deleting it. Nine references to §12 survived across the three docs, including `PLAN.md`'s own "reading order if you are new to this: §12 for the current results", which would have sent Alex to a section that was not there.
 
   **Restored, and verified rather than trusted.** Every figure in the table was re-derived from `dev/simstudy/results/simstudy-20260729-143756.csv` before restoring: all ten cells, 155,578 checks, coverage and `B0` bias per scenario all match the deleted text exactly. The stale `group A item` references inside it were rewritten to group B, and 12.1-12.3 now carry forward pointers to §14.7 and §15, which have since superseded two of their three attributions.
