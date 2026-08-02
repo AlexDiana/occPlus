@@ -54,6 +54,8 @@ Every code change Claude made, newest first. None has had human review beyond Do
 
 1.  **Should `sample_z_cpp()` be deprecated?** `sample_z_cpp_parallel()` is now the one actually wired in (`R/runOccJSDM.R:1113`, since Alex's `41abe69`, "More parallelisation"), which leaves `sample_z_cpp()` itself with no callers anywhere in `R/`, though it is still compiled and exported like any other `RcppExports` wrapper. If that's deliberate, it belongs with the rest of the dead-code cleanup in group D (which covers the mechanics for `RcppExports` wrappers specifically); if it's meant to come back, say why it should stay.
 
+    ALEX TO CHECK
+
 2.  **`listPriors$b_betatheta_slope_var`, a new prior hook.** **ADDED 29 July 2026** (Claude; `R/runOccJSDM.R:783-785`, commit `cd64e8b`). Logged here on 1 August: this had **no entry anywhere in this file**, having been removed from the review queue before it was recorded, so a new user-facing argument existed with nothing tracking it.
 
     **What it does.** `B_betatheta`'s slope variance was hard-coded, with no override, unlike `p`/`q`/`theta0`. The hook defaults to 2, the previous hard-coded value, so nothing changes unless a caller sets it. Verified to reach the sampler before it was trusted: refitting one dataset under both settings with data and seed held fixed shrank the slope posterior spread under the tighter prior.
@@ -116,7 +118,7 @@ Every code change Claude made, newest first. None has had human review beyond Do
 
     Cause is mostly the `beta_theta` slopes, per the run below. The `B_betatheta` variance decision above is the associated knob. `B0` is a headline quantity for a JSDM, so this wants settling before the paper reports species intercepts.
 
-    ALEX RESPONSE: WE COULD ADD A SIMULATION STUDY ON THE ONE-STAGE MODEL ONLY, THAT WOULD REVEALE WHETHER THERE IS ANY ISSUE IN B0 (since there is no beta_theta). If there is no issue, we could delete this point and be sure that the issue is only beta_theta.
+    ALEX RESPONSE: WE COULD ADD A SIMULATION STUDY ON THE ONE-STAGE MODEL ONLY, THAT WOULD REVEAL WHETHER THERE IS ANY ISSUE IN B0 (since there is no beta_theta). If there is no issue, we could delete this point and be sure that the issue is only beta_theta.
 
     **Ran 31 July at R = 50 and confirmed at R = 200 (`PLAN.md` 15.4, 15.6). Alex's hypothesis holds in its main claim and fails in its strong form.** The designed arm was `base` with `ncov_theta = 0`, keeping the two-stage machinery, the latent `w`/`z` and `p`/`q`/`theta0`, removing only the `beta_theta` slopes. `B0` bias:
 
@@ -132,7 +134,7 @@ Every code change Claude made, newest first. None has had human review beyond Do
 
     ALEX: WHAT REMAINS AFTER THE SLOPE DEFECT IS FIXED IS SMALL BUT NOT ZERO
 
-    ALEX RESPONSE: Actually I wasn't too clear, my suggestion was the run the model with model = "continuous" since that part of the sampelr would use B0 only. Using the occupancy model, we still sample the intercept of beta_theta so indetermination between B0 and beta_theta still affects the stimate
+    ALEX RESPONSE: Actually I wasn't too clear, my suggestion was to run the model with model = "continuous" since that part of the sampler would use B0 only. Using the occupancy model, we still sample the intercept of beta_theta so indetermination between B0 and beta_theta still affects the estimate
 
 6.  **`theta0` overcovers at 0.978-0.985, having been near nominal before the fixes.** Measured by the post-fix re-run (`PLAN.md` 12.3); pre-fix it sat at 0.938-0.959. The all-cell average of 0.944 hides this, because `low_information` pulls it down at 0.602.
 
@@ -175,14 +177,6 @@ Every code change Claude made, newest first. None has had human review beyond Do
     (e) `computeSpeciesDetected()`'s roxygen documents the removed Beta-approximation signature instead of its actual arguments.
 
     ALEX WILL REVIEW THE ABOVE
-
-3.  **`computeNewOutputs()` prints to stdout on every call and cannot be silenced.** `src/jsdm.cpp` runs `Rcout << "Computing species ..."` inside the species loop unconditionally, so every `predictNewSites()` call prints one line per species. `suppressMessages()` does not catch it, because `Rcout` is stdout rather than R's condition system.
-
-    It pollutes any script, vignette chunk or app that predicts in a loop, and unconditional console output from a compute function is the kind of thing CRAN reviewers pick up. **Fix:** a `verbose` argument defaulting to `FALSE`, threaded from `predictNewSites()`. Progress reporting is useful on a slow prediction, so making it opt-in beats deleting it.
-
-    ALEX TO DECIDE AND FIX (touches `src/jsdm.cpp`)
-
-ALEX RESPONSE: Added a verbose argument
 
 ## **D. Dead and broken internal code (Alex)**
 
@@ -570,6 +564,16 @@ Items 16 and 18 are marked **partially fixed**: the crash in each is gone, but p
 
     - `verbose` in `computeNewOutputs()` defaults to `T`, so `predictNewSites()` still prints one line per species unless a caller opts out. It is suppressible now, which was the harder half, but the default behaviour, the test-output noise and the CRAN-reviewer exposure are all unchanged. **Alex: "We can leave verbose on, people won't think of turning it on."**
     - `sample_z_cpp_parallel()` was exported but not yet called at the time; `runOccJSDM` still used `sample_z_cpp`, so only `sample_w_cim_cipp_parallel()` was wired in and half the parallelisation work was unreachable. **Alex: "sample_z_cpp_parallel now used."** Confirmed: it is called at `R/runOccJSDM.R:1113` as of `41abe69`, which leaves `sample_z_cpp()` itself with no callers -- whether *that* should now be deprecated is a new open item in group A.
+
+    The `verbose`-default residual noted above is the same one closed separately as *Fixed bugs* 39.
+
+39. ~~**`computeNewOutputs()` prints to stdout on every call and cannot be silenced.**~~ **PARTIALLY FIXED** (Alex added a `verbose` argument to `predictNewSites()`, threaded through to the `Rcout` call in `src/jsdm.cpp`). Closed 2 August 2026.
+
+    **The original defect.** `src/jsdm.cpp` ran `Rcout << "Computing species ..."` inside the species loop unconditionally, so every `predictNewSites()` call printed one line per species, and `suppressMessages()` did not catch it because `Rcout` is stdout rather than R's condition system.
+
+    **Verified live, not just from the response.** `verbose` reaches the C++ `if(verbose)` gate around the `Rcout` call (`src/jsdm.cpp:482`) via `computeNewOutputs()` (`R/output.R:1683`). Ran both ways on a fitted model: `verbose = FALSE` suppresses all four per-species lines; `suppressMessages()` alone, with `verbose` left at its default, still lets all four through -- confirming the original complaint still holds when nothing is passed explicitly.
+
+    **The fix specified a default of `FALSE`; Alex shipped `T`.** So the two concerns the item was filed for -- polluting any script, vignette chunk or app that predicts in a loop, and unconditional console output being the kind of thing CRAN reviewers pick up -- are only addressed for a caller who already knows to override the default. This is the same residual already recorded under *Fixed bugs* 38 (the RcppParallel-linking fix), with Alex's decision already given there: **"We can leave verbose on, people won't think of turning it on."** Closed on that basis rather than as a full fix.
 
 # **Completed work**
 
