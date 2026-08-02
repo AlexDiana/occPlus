@@ -155,13 +155,13 @@ Every code change Claude made, newest first. None has had human review beyond Do
 
     ALEX TO CHECK
 
-6.  **`theta0`'s intervals are ~25% wider than they need to be, and that is the price of its bias being fixed.** Coverage 0.978-0.985 post-fix against 0.938-0.959 pre-fix (`PLAN.md` 12.3). The all-cell average of 0.944 hides it, because `low_information` pulls it down at 0.602.
+6.  **`theta0`'s intervals are \~25% wider than they need to be, and that is the price of its bias being fixed.** Coverage 0.978-0.985 post-fix against 0.938-0.959 pre-fix (`PLAN.md` 12.3). The all-cell average of 0.944 hides it, because `low_information` pulls it down at 0.602.
 
     **Re-read 2 August from the two saved runs, and the framing above was wrong.** Comparing `simstudy-20260728-175534.rds` (pre-fix) with `simstudy-20260729-143756.rds` (post-fix) on identical data, over all cells except `low_information`:
 
-    - coverage 0.938-0.959 -> 0.978-0.985
-    - mean interval width 0.113 -> 0.143, i.e. **+25%**
-    - mean absolute bias **0.0175 -> 0.0020**, a factor of nine
+    - coverage 0.938-0.959 -\> 0.978-0.985
+    - mean interval width 0.113 -\> 0.143, i.e. **+25%**
+    - mean absolute bias **0.0175 -\> 0.0020**, a factor of nine
 
     **`theta0`'s point estimate went from clearly biased to essentially unbiased.** That was not recorded anywhere, and it inverts the item. Pre-fix coverage near nominal was a *coincidence*, not health: the `Beta(1, 20)` prior mean of 0.0476 sits below the truth mean of 0.06, so estimates were pulled down, and intervals that were too narrow offset that bias almost exactly. Two errors cancelling. The fixes removed the bias and left the width, so what looks like a regression in the coverage column is a genuine improvement in the bias column with an unaddressed remainder.
 
