@@ -1546,7 +1546,7 @@ update_jSDMcoef <- function(list_data,
   if(model == "continuous"){
     Omega <- matrix(1 / tau^2, nrow(z), ncol(z), byrow = T)
   } else if(model == "binary"){
-    Omega <- samplePGvariables(psiCoef)
+    Omega <- samplePGvariables_parallel(psiCoef)
   }
 
   # sample fixed effects, spatial trait loadings and factor loadings

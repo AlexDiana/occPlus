@@ -101,6 +101,10 @@ samplePGvariables <- function(Xbeta) {
     .Call(`_occJSDM_samplePGvariables`, Xbeta)
 }
 
+samplePGvariables_parallel <- function(Xbeta) {
+    .Call(`_occJSDM_samplePGvariables_parallel`, Xbeta)
+}
+
 computeNewOutputs <- function(X, B0_output, B_output, Ks_all, Bs_output, L_output, sigmah_output, idx_ls_output, conflevels, useEnvCov, useSpatial, useBiotic, model, verbose) {
     .Call(`_occJSDM_computeNewOutputs`, X, B0_output, B_output, Ks_all, Bs_output, L_output, sigmah_output, idx_ls_output, conflevels, useEnvCov, useSpatial, useBiotic, model, verbose)
 }

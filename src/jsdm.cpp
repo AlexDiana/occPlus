@@ -38,7 +38,6 @@ using namespace Rcpp;
 #define MATH_LOG_PI_2  0.451582705289454864726195229894882143571794678555056317392
 
 // old code
-
 static double aterm(int n, double x, double t) {
   double f = 0;
   if(x <= t) {
@@ -185,11 +184,98 @@ static double samplepg(double z) {
   return X;
 }
 
+// Pure C++ replacement for R::pnorm(x, 0.0, 1.0, 1, 1)
+// Completely thread-safe for OpenMP and avoids R-API lock contention.
+inline double fast_log_pnorm(double x) {
+  // Phi(x) = 0.5 * erfc(-x / sqrt(2))
+  // 0.70710678118654752440 is 1 / sqrt(2)
+  return std::log(0.5 * std::erfc(-x * 0.70710678118654752440));
+}
+
+static double samplepg_fast(double z) {
+  double orig_z = (double)std::fabs((double)z);
+
+  // -------------------------------------------------------------
+  // FAST PATH: Normal Approximation for large Z
+  // Skips the expensive rejection loop.
+  // Mean = 1 / (2z), Var = 1 / (4z^3)
+  // -------------------------------------------------------------
+  if (orig_z > 12.0) {
+    double mu = 0.5 / orig_z;
+    double var = 0.25 / (orig_z * orig_z * orig_z);
+
+    // Assumes your custom rnorm() returns a standard normal draw
+    double draw = mu + std::sqrt(var) * rnorm();
+
+    // Ensure strict positivity (draws < 0 are astronomically rare here)
+    return (draw > 1e-12) ? draw : mu;
+  }
+
+  // -------------------------------------------------------------
+  // EXACT SAMPLER: Devroye method for Z <= 12
+  // -------------------------------------------------------------
+  // PG(b, z) = 0.25 * J*(b, z/2)
+  z = orig_z * 0.5;
+
+  double t = MATH_2_PI; // Point on the intersection
+  double K = z*z/2.0 + MATH_PI2/8.0;
+  double logA = (double)std::log(4.0) - MATH_LOG_PI - z;
+  double logK = (double)std::log(K);
+  double Kt = K * t;
+  double w = (double)std::sqrt(MATH_PI_2);
+
+  // Replaced R::pnorm with pure C++ fast_log_pnorm
+  double logf1 = logA + fast_log_pnorm(w*(t*z - 1)) + logK + Kt;
+  double logf2 = logA + 2*z + fast_log_pnorm(-w*(t*z+1)) + logK + Kt;
+
+  double p_over_q = (double)std::exp(logf1) + (double)std::exp(logf2);
+  double ratio = 1.0 / (1.0 + p_over_q);
+
+  double u, X;
+
+  // Main sampling loop
+  while(1) {
+    // Step 1: Sample X ~ g(x|z)
+    u = runif();
+    if(u < ratio) {
+      X = t + exprnd(1.0)/K; // truncated exponential
+    } else {
+      X = tinvgauss(z, t);   // truncated Inverse Gaussian
+    }
+
+    // Step 2: Iteratively calculate Sn(X|z)
+    int i = 1;
+    double Sn = aterm(0, X, t);
+    double U = runif() * Sn;
+    int asgn = -1;
+    bool even = false;
+
+    while(1) {
+      Sn = Sn + asgn * aterm(i, X, t);
+
+      // Accept if n is odd
+      if(!even && (U <= Sn)) {
+        return X * 0.25; // Return directly
+      }
+
+      // Return to step 1 if n is even
+      if(even && (U > Sn)) {
+        break;
+      }
+
+      even = !even;
+      asgn = -asgn;
+      i++;
+    }
+  }
+  return X;
+}
+
 static double rpg(int n, double z){
 
   double x = 0;
   for(int i = 0; i < n; i++){
-    x += samplepg(z);
+    x += samplepg_fast(z);
   }
 
   return(x);
@@ -388,7 +474,7 @@ arma::mat samplePGvariables(arma::mat &Xbeta){
 
   arma::mat Omega_mat(n1, n2);
 
-#pragma omp parallel for collapse(2)
+// #pragma omp parallel for collapse(2)
   for(int i = 0; i < n1; i++){
     for(int j = 0; j < n2; j++){
       Omega_mat(i,j) = rpg(1, Xbeta(i,j));
@@ -400,6 +486,54 @@ arma::mat samplePGvariables(arma::mat &Xbeta){
   //  }
 
   return(Omega_mat);
+}
+
+struct PG_Worker : public RcppParallel::Worker {
+
+  // Read-only pointer to the input memory
+  const double* Xbeta_ptr;
+
+  // Pointer to the output memory
+  double* Omega_ptr;
+
+  // Constructor
+  PG_Worker(const double* Xbeta_ptr, double* Omega_ptr)
+    : Xbeta_ptr(Xbeta_ptr), Omega_ptr(Omega_ptr) {}
+
+  // The parallel execution loop
+  void operator()(std::size_t begin, std::size_t end) {
+    for (std::size_t k = begin; k < end; ++k) {
+      // Direct memory access via pointers is extremely fast
+      Omega_ptr[k] = rpg(1, Xbeta_ptr[k]);
+    }
+  }
+};
+
+// ---------------------------------------------------------
+// 2. The Main Exported Function
+// ---------------------------------------------------------
+// [[Rcpp::export]]
+arma::mat samplePGvariables_parallel(const arma::mat& Xbeta) {
+
+  // Allocate the output matrix with the exact same dimensions
+  arma::mat Omega_mat(Xbeta.n_rows, Xbeta.n_cols);
+
+  // Get the total number of elements
+  std::size_t n_elem = Xbeta.n_elem;
+
+  if (n_elem > 0) {
+    // Extract raw memory pointers
+    const double* Xbeta_ptr = Xbeta.memptr();
+    double* Omega_ptr = Omega_mat.memptr();
+
+    // Initialize the worker
+    PG_Worker worker(Xbeta_ptr, Omega_ptr);
+
+    // Execute the loop in parallel over the total number of elements
+    RcppParallel::parallelFor(0, n_elem, worker);
+  }
+
+  return Omega_mat;
 }
 
 static arma::vec mvrnormArmaQuick(arma::vec mu, arma::mat cholsigma) {
