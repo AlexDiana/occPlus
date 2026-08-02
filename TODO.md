@@ -52,22 +52,7 @@ output: html_document
 
 Every code change Claude made, newest first. None has had human review beyond Doug asking for it. All are recoverable from git; revert or rework freely. Each says what to check. Full detail for each is in *Fixed bugs*, which is the record; this section is the queue.
 
-1.  **`main` would not load at all, and two fixes were needed to restore it.** 31 July, `src/Makevars`, `src/Makevars.win`, `DESCRIPTION`, `NAMESPACE`, `R/occJSDM-package.R`, `R/runOccJSDM.R`. After `8f9f315` the test suite went from 167 passing to 25 passing, 3 failures and 33 errors, because the built `.so` had an undefined `RcppParallel::tbbParallelFor` and failed to load, taking every function in the package with it.
-
-    **Change 1, the linking.** `RcppParallel` was in `LinkingTo`, which makes the headers visible but does not link the libraries. Added the documented `RcppParallel::RcppParallelLibs()` call to both `Makevars` files, **and** added `RcppParallel` to `Imports` with an `importFrom`. **Both halves are needed**: the Makevars line alone fixes the missing symbol but the load still fails, because on macOS `libtbb` is referenced through `@rpath` and `devtools` copies the `.so` to a temp directory. Importing the package makes its namespace load first and set up the TBB paths. The reasoning is in a comment in `src/Makevars` so the next person does not stop at the first fix and conclude it did not work.
-
-    **To check:** whether you would rather solve this a different way, for instance an explicit `-Wl,-rpath`. The `Imports` addition is a new hard dependency in `DESCRIPTION`, which is your call.
-
-    **Change 2, your debugging scaffold at `R/runOccJSDM.R:404`.** It had live assignments overwriting every argument with values referencing `occ_data_effort`, a dataset not in the package, plus a live `summarisedLatentPresences`. That block was fully commented before `8f9f315`. **Re-commented rather than deleted**, since you evidently use it, with a note saying it must stay commented and what happened when it did not.
-
-    **To check:** nothing, unless you want it gone entirely.
-
-    **Two things left alone because they are your calls.**
-
-    - `verbose` in `computeNewOutputs()` defaults to `T`, so `predictNewSites()` still prints one line per species unless a caller opts out. It is suppressible now, which was the harder half, but the default behaviour, the test-output noise and the CRAN-reviewer exposure are all unchanged. Group C item 3 is therefore half closed rather than closed.
-    - **`sample_z_cpp_parallel()` is exported but never called.** `runOccJSDM` still uses `sample_z_cpp` at `R/runOccJSDM.R:1101`, so only `sample_w_cim_cipp_parallel()` is actually wired in and half the parallelisation work is unreachable. Most likely it simply has not been hooked up yet, in which case ignore this. Flagging it because it is otherwise invisible: it compiles, exports and tests clean, and it shows up only as three new entries in the dead-code scan, which went from 8 unused `RcppExports` wrappers to 11 with `8f9f315`. If it is deliberate, say so and it goes to `deprecated/` with the rest.
-
-    We can leave verbose on, people won't think of turning it on sample_z_cpp_parlalel now used
+1.  **Should `sample_z_cpp()` be deprecated?** `sample_z_cpp_parallel()` is now the one actually wired in (`R/runOccJSDM.R:1113`, since Alex's `41abe69`, "More parallelisation"), which leaves `sample_z_cpp()` itself with no callers anywhere in `R/`, though it is still compiled and exported like any other `RcppExports` wrapper. If that's deliberate, it belongs with the rest of the dead-code cleanup in group D (which covers the mechanics for `RcppExports` wrappers specifically); if it's meant to come back, say why it should stay.
 
 2.  **`listPriors$b_betatheta_slope_var`, a new prior hook.** **ADDED 29 July 2026** (Claude; `R/runOccJSDM.R:783-785`, commit `cd64e8b`). Logged here on 1 August: this had **no entry anywhere in this file**, having been removed from the review queue before it was recorded, so a new user-facing argument existed with nothing tracking it.
 
@@ -574,6 +559,17 @@ Items 16 and 18 are marked **partially fixed**: the crash in each is gone, but p
     `sample_z`, `sample_w`, `sample_cimk`, `sample_betatheta` from `R/jsdmfun.R`, plus six dead samplers and plots from `R/mcmcfun.R` and `R/output.R`. All were unreachable from any exported entry point. Roughly 26 more remain, tracked in group D, deliberately deferred until the sampler rewrite lands so the two do not collide.
 
     **Reviewed by Alex, 2 August 2026: "Ok to deprecate these functions."**
+
+38. ~~**`main` would not load at all, and two fixes were needed to restore it.**~~ **FIXED 31 July 2026** (Claude; `src/Makevars`, `src/Makevars.win`, `DESCRIPTION`, `NAMESPACE`, `R/occJSDM-package.R`, `R/runOccJSDM.R`). Closed 2 August 2026. After `8f9f315` the test suite went from 167 passing to 25 passing, 3 failures and 33 errors, because the built `.so` had an undefined `RcppParallel::tbbParallelFor` and failed to load, taking every function in the package with it.
+
+    **Change 1, the linking.** `RcppParallel` was in `LinkingTo`, which makes the headers visible but does not link the libraries. Added the documented `RcppParallel::RcppParallelLibs()` call to both `Makevars` files, **and** added `RcppParallel` to `Imports` with an `importFrom`. **Both halves are needed**: the Makevars line alone fixes the missing symbol but the load still fails, because on macOS `libtbb` is referenced through `@rpath` and `devtools` copies the `.so` to a temp directory. Importing the package makes its namespace load first and set up the TBB paths. The reasoning is in a comment in `src/Makevars` so the next person does not stop at the first fix and conclude it did not work.
+
+    **Change 2, the debugging scaffold at `R/runOccJSDM.R:404`.** It had live assignments overwriting every argument with values referencing `occ_data_effort`, a dataset not in the package, plus a live `summarisedLatentPresences`. That block was fully commented before `8f9f315`. **Re-commented rather than deleted**, since Alex evidently uses it, with a note saying it must stay commented and what happened when it did not.
+
+    **Two things left alone at the time, both since resolved by Alex:**
+
+    - `verbose` in `computeNewOutputs()` defaults to `T`, so `predictNewSites()` still prints one line per species unless a caller opts out. It is suppressible now, which was the harder half, but the default behaviour, the test-output noise and the CRAN-reviewer exposure are all unchanged. **Alex: "We can leave verbose on, people won't think of turning it on."**
+    - `sample_z_cpp_parallel()` was exported but not yet called at the time; `runOccJSDM` still used `sample_z_cpp`, so only `sample_w_cim_cipp_parallel()` was wired in and half the parallelisation work was unreachable. **Alex: "sample_z_cpp_parallel now used."** Confirmed: it is called at `R/runOccJSDM.R:1113` as of `41abe69`, which leaves `sample_z_cpp()` itself with no callers -- whether *that* should now be deprecated is a new open item in group A.
 
 # **Completed work**
 
