@@ -34,3 +34,6 @@ data/sampledata_highp_highthetabaseline.rda
 data/sampleresults_highp_highthetabaseline.rda
 # Rendered from TODO.md as a parse check; regenerable, never a deliverable.
 TODO.html
+# pkgdown build output. Regenerated from _pkgdown.yml + the R docs +
+# vignettes via pkgdown::build_site(); never a deliverable to commit.
+docs

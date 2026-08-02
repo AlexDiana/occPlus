@@ -52,68 +52,17 @@ output: html_document
 
 Every code change Claude made, newest first. None has had human review beyond Doug asking for it. All are recoverable from git; revert or rework freely. Each says what to check. Full detail for each is in *Fixed bugs*, which is the record; this section is the queue.
 
-1.  **`main` would not load at all, and two fixes were needed to restore it.** 31 July, `src/Makevars`, 
-`src/Makevars.win`, `DESCRIPTION`, `NAMESPACE`, `R/occJSDM-package.R`, `R/runOccJSDM.R`. After `8f9f315` 
-the test suite went from 167 passing to 25 passing, 3 failures and 33 errors, because the built `.so` had an undefined `RcppParallel::tbbParallelFor` and failed to load, taking every function in the package with it.
+1.  **Should `sample_z_cpp()` be deprecated?** `sample_z_cpp_parallel()` is now the one actually wired in (`R/runOccJSDM.R:1113`, since Alex's `41abe69`, "More parallelisation"), which leaves `sample_z_cpp()` itself with no callers anywhere in `R/`, though it is still compiled and exported like any other `RcppExports` wrapper. If that's deliberate, it belongs with the rest of the dead-code cleanup in group D (which covers the mechanics for `RcppExports` wrappers specifically); if it's meant to come back, say why it should stay.
 
-    **Change 1, the linking.** `RcppParallel` was in `LinkingTo`, which makes the headers visible but does not link the libraries. Added the documented `RcppParallel::RcppParallelLibs()` call to both `Makevars` files, **and** added `RcppParallel` to `Imports` with an `importFrom`. **Both halves are needed**: the Makevars line alone fixes the missing symbol but the load still fails, because on macOS `libtbb` is referenced through `@rpath` and `devtools` copies the `.so` to a temp directory. Importing the package makes its namespace load first and set up the TBB paths. The reasoning is in a comment in `src/Makevars` so the next person does not stop at the first fix and conclude it did not work.
+    ALEX TO CHECK
 
-    **To check:** whether you would rather solve this a different way, for instance an explicit `-Wl,-rpath`. The `Imports` addition is a new hard dependency in `DESCRIPTION`, which is your call.
+2.  **`listPriors$b_betatheta_slope_var`, a new prior hook.** **ADDED 29 July 2026** (Claude; `R/runOccJSDM.R:783-785`, commit `cd64e8b`). Logged here on 1 August: this had **no entry anywhere in this file**, having been removed from the review queue before it was recorded, so a new user-facing argument existed with nothing tracking it.
 
-    **Change 2, your debugging scaffold at `R/runOccJSDM.R:404`.** It had live assignments overwriting every argument with values referencing `occ_data_effort`, a dataset not in the package, plus a live `summarisedLatentPresences`. That block was fully commented before `8f9f315`. **Re-commented rather than deleted**, since you evidently use it, with a note saying it must stay commented and what happened when it did not.
+    **What it does.** `B_betatheta`'s slope variance was hard-coded, with no override, unlike `p`/`q`/`theta0`. The hook defaults to 2, the previous hard-coded value, so nothing changes unless a caller sets it. Verified to reach the sampler before it was trusted: refitting one dataset under both settings with data and seed held fixed shrank the slope posterior spread under the tighter prior.
 
-    **To check:** nothing, unless you want it gone entirely.
+    **Documented 1 August**, in the `@param listPriors` roxygen block, which had listed only the three original priors. Until then the hook was reachable but undiscoverable.
 
-    **Two things left alone because they are your calls.**
-
-    - `verbose` in `computeNewOutputs()` defaults to `T`, so `predictNewSites()` still prints one line per species unless a caller opts out. It is suppressible now, which was the harder half, but the default behaviour, the test-output noise and the CRAN-reviewer exposure are all unchanged. Group C item 3 is therefore half closed rather than closed.
-    - **`sample_z_cpp_parallel()` is exported but never called.** `runOccJSDM` still uses `sample_z_cpp` at `R/runOccJSDM.R:1101`, so only `sample_w_cim_cipp_parallel()` is actually wired in and half the parallelisation work is unreachable. Most likely it simply has not been hooked up yet, in which case ignore this. Flagging it because it is otherwise invisible: it compiles, exports and tests clean, and it shows up only as three new entries in the dead-code scan, which went from 8 unused `RcppExports` wrappers to 11 with `8f9f315`. If it is deliberate, say so and it goes to `deprecated/` with the rest.
-
-    We can leave verbose on, people won't think of turning it on
-    sample_z_cpp_parlalel now used
-
-2.  **Both exported GAM functions failed for any user with a categorical occupancy covariate.** **FIXED 30 July 2026** (Claude; 
-`R/occJSDM-package.R`, `NAMESPACE`, commit `032dcff`). Logged here on 1 August: it was completed but never given a *Fixed bugs* entry, 
-so it was invisible in this file.
-
-    **The defect.** `tidyr::pivot_longer()` was called but never imported, and `tidyr` was in `DESCRIPTION` `Imports:` 
-    with nothing imported from it in `NAMESPACE`. It is reached in the categorical-covariate branch of `returnCovariateEffect()`
-    and `plotCovariateEffect()`, so both would fail with "could not find function" from a properly installed namespace. `stats::setNames` 
-    and `stats::rnbinom` were missing the same way.
-
-    **Why it survived the test suite.** `devtools::load_all()` resolves unimported symbols through the global environment, 
-    so a functional test passes whether or not the import exists. The regression test therefore asserts on the imports 
-    environment directly, which holds under both `load_all()` and `R CMD check`.
-
-    **Not cosmetic, despite arriving as an `R CMD check` NOTE.** The "checking dependencies in R code" NOTE is now gone entirely, 
-    3 notes to 2. `dnbinom` and `bs` remain on the undefined-globals list, correctly: they are reached only by dead code, and importing
-    `bs` would add `splines` to `DESCRIPTION` to support code that should not ship.
-
-    AGREE WITH THE FIX
-
-3.  **Ten dead functions moved to `deprecated/`.** **DONE 30 July 2026** (Claude; commits `7bae018`, `f2e2701`). Logged here on 
-1 August so the deprecation has a stable anchor; it was previously cited only by section-A position, which has since been reused.
-
-    `sample_z`, `sample_w`, `sample_cimk`, `sample_betatheta` from `R/jsdmfun.R`, plus six dead samplers and plots from 
-    `R/mcmcfun.R` and `R/output.R`. All were unreachable from any exported entry point. Roughly 26 more remain, tracked in group D, 
-    deliberately deferred until the sampler rewrite lands so the two do not collide.
-    
-    ok to deprecate these functions
-
-4.  **`listPriors$b_betatheta_slope_var`, a new prior hook.** **ADDED 29 July 2026** (Claude; `R/runOccJSDM.R:783-785`, commit `cd64e8b`). 
-Logged here on 1 August: this had **no entry anywhere in this file**, having been removed from the review queue before it was recorded, 
-so a new user-facing argument existed with nothing tracking it.
-
-    **What it does.** `B_betatheta`'s slope variance was hard-coded, with no override, unlike `p`/`q`/`theta0`. The hook defaults to 2, 
-    the previous hard-coded value, so nothing changes unless a caller sets it. Verified to reach the sampler before it was trusted: 
-    refitting one dataset under both settings with data and seed held fixed shrank the slope posterior spread under the tighter prior.
-
-    **Documented 1 August**, in the `@param listPriors` roxygen block, which had listed only the three original priors. Until 
-    then the hook was reachable but undiscoverable.
-
-    **This is not a fix, and the value is still open.** It was built as a diagnostic for the `beta_theta` slope defect, 
-    and the tighter-prior arms it enabled came back null (`PLAN.md` 13.9). The `b_betatheta` variance decision in group B 
-    is where the choice lives.
+    **This is not a fix, and the value is still open.** It was built as a diagnostic for the `beta_theta` slope defect, and the tighter-prior arms it enabled came back null (`PLAN.md` 13.9). The `b_betatheta` variance decision in group B is where the choice lives.
 
     ALEX TO CHECK, AND TO DECIDE WHETHER THE HOOK SHOULD SHIP AT ALL
 
@@ -169,7 +118,7 @@ so a new user-facing argument existed with nothing tracking it.
 
     Cause is mostly the `beta_theta` slopes, per the run below. The `B_betatheta` variance decision above is the associated knob. `B0` is a headline quantity for a JSDM, so this wants settling before the paper reports species intercepts.
 
-    ALEX RESPONSE: WE COULD ADD A SIMULATION STUDY ON THE ONE-STAGE MODEL ONLY, THAT WOULD REVEALE WHETHER THERE IS ANY ISSUE IN B0 (since there is no beta_theta). If there is no issue, we could delete this point and be sure that the issue is only beta_theta.
+    ALEX RESPONSE: WE COULD ADD A SIMULATION STUDY ON THE ONE-STAGE MODEL ONLY, THAT WOULD REVEAL WHETHER THERE IS ANY ISSUE IN B0 (since there is no beta_theta). If there is no issue, we could delete this point and be sure that the issue is only beta_theta.
 
     **Ran 31 July at R = 50 and confirmed at R = 200 (`PLAN.md` 15.4, 15.6). Alex's hypothesis holds in its main claim and fails in its strong form.** The designed arm was `base` with `ncov_theta = 0`, keeping the two-stage machinery, the latent `w`/`z` and `p`/`q`/`theta0`, removing only the `beta_theta` slopes. `B0` bias:
 
@@ -184,35 +133,25 @@ so a new user-facing argument existed with nothing tracking it.
     The R = 200 run also reproduced the R = 50 replicates bit-for-bit, which is how we know the two are the same experiment rather than two similar ones.
 
     ALEX: WHAT REMAINS AFTER THE SLOPE DEFECT IS FIXED IS SMALL BUT NOT ZERO
-    
-    ALEX RESPONSE: Actually I wasn't too clear, my suggestion was the run the model with model = "continuous" since that part of the sampelr would use 
-    B0 only. Using the occupancy model, we still sample the intercept of beta_theta so indetermination between B0 and beta_theta still affects the stimate
+
+    ALEX RESPONSE: Actually I wasn't too clear, my suggestion was to run the model with model = "continuous" since that part of the sampler would use B0 only. Using the occupancy model, we still sample the intercept of beta_theta so indetermination between B0 and beta_theta still affects the estimate
 
 6.  **`theta0` overcovers at 0.978-0.985, having been near nominal before the fixes.** Measured by the post-fix re-run (`PLAN.md` 12.3); pre-fix it sat at 0.938-0.959. The all-cell average of 0.944 hides this, because `low_information` pulls it down at 0.602.
 
-    **Two candidate causes ruled out.** The M ladder showed overcoverage falling toward nominal as M rises (0.986 at `M2`, 0.944 at `M10`) while the matched `K30` control makes it worse at 0.996, which reads as Stage 1 under-identification (`PLAN.md` 13.7). But that reading has a hole: pre-fix, `theta0` was fine at the *same* M = 2. 
-    And the coupling hypothesis, that `b_betatheta`'s widened variance propagates through `w` into `sample_theta0()`, was tested directly 
-    and disproved: a 20-fold reduction moved coverage by 0.006 (`PLAN.md` 14.7).
+    **Two candidate causes ruled out.** The M ladder showed overcoverage falling toward nominal as M rises (0.986 at `M2`, 0.944 at `M10`) while the matched `K30` control makes it worse at 0.996, which reads as Stage 1 under-identification (`PLAN.md` 13.7). But that reading has a hole: pre-fix, `theta0` was fine at the *same* M = 2. And the coupling hypothesis, that `b_betatheta`'s widened variance propagates through `w` into `sample_theta0()`, was tested directly and disproved: a 20-fold reduction moved coverage by 0.006 (`PLAN.md` 14.7).
 
-    **Priority: lowest of the open findings, and it should stay there.** Overcoverage is the safe direction; it costs 
-    power, not correctness. The only untested candidate is `theta0`'s own `Beta(1, 20)` prior, which already has 
-    `listPriors$a_theta0`/`b_theta0` hooks and needs no code change.
+    **Priority: lowest of the open findings, and it should stay there.** Overcoverage is the safe direction; it costs power, not correctness. The only untested candidate is `theta0`'s own `Beta(1, 20)` prior, which already has `listPriors$a_theta0`/`b_theta0` hooks and needs no code change.
 
     CLAUDE TO PIGGYBACK A theta0-PRIOR ARM ON THE NEXT RUN, NOT TO RUN ONE FOR THIS ALONE
 
 7.  **`q` (Stage 2 false positives) degrades hard as `K` rises.** Found 29 July 2026 as a side effect of the M-ladder run (`PLAN.md` 13.7), which was not built to look for it. Never investigated beyond the measurement.
 
-    Coverage falls from 0.945 at `M2` (K = 3) to **0.614 at `K30`** (K = 30, same total rows as `M20`). `M20` itself, 
-    which holds K = 3 and raises M instead, sits at 0.742. So more PCR replicates make `q` *less* well calibrated, 
-    and the effect is larger than the M-driven change in any other item here.
+    Coverage falls from 0.945 at `M2` (K = 3) to **0.614 at `K30`** (K = 30, same total rows as `M20`). `M20` itself, which holds K = 3 and raises M instead, sits at 0.742. So more PCR replicates make `q` *less* well calibrated, and the effect is larger than the M-driven change in any other item here.
 
-    **Hypothesis, untested:** the same cost-of-identifiability pattern as `beta_theta`. More PCR replicates sharpen 
-    the posterior, so if the informative `Beta(1, 20)` prior holds `q` a fixed distance from the truth, sharper intervals 
-    show it as worse coverage. If that is what this is, it is not a new bug but a known trade extended to K, and it 
-    belongs with the prior-choice decision rather than in the sampler.
+    **Hypothesis, untested:** the same cost-of-identifiability pattern as `beta_theta`. More PCR replicates sharpen the posterior, so if the informative `Beta(1, 20)` prior holds `q` a fixed distance from the truth, sharper intervals show it as worse coverage. If that is what this is, it is not a new bug but a known trade extended to K, and it belongs with the prior-choice decision rather than in the sampler.
 
     ALEX TO DIAGNOSE THE CAUSE AND DECIDE WHAT TO DO ABOUT THIS
-    
+
     ALEX RESPONSE: I Do not have any idea of what might be causing the lack of coverage at this point. The p/q sampler seems to be implemented correctly
 
 ## **C. Crashes, unreachable code paths, and API bugs (Alex)**
@@ -238,14 +177,6 @@ so a new user-facing argument existed with nothing tracking it.
     (e) `computeSpeciesDetected()`'s roxygen documents the removed Beta-approximation signature instead of its actual arguments.
 
     ALEX WILL REVIEW THE ABOVE
-
-3.  **`computeNewOutputs()` prints to stdout on every call and cannot be silenced.** `src/jsdm.cpp` runs `Rcout << "Computing species ..."` inside the species loop unconditionally, so every `predictNewSites()` call prints one line per species. `suppressMessages()` does not catch it, because `Rcout` is stdout rather than R's condition system.
-
-    It pollutes any script, vignette chunk or app that predicts in a loop, and unconditional console output from a compute function is the kind of thing CRAN reviewers pick up. **Fix:** a `verbose` argument defaulting to `FALSE`, threaded from `predictNewSites()`. Progress reporting is useful on a slow prediction, so making it opt-in beats deleting it.
-
-    ALEX TO DECIDE AND FIX (touches `src/jsdm.cpp`)
-
-ALEX RESPONSE: Added a verbose argument
 
 ## **D. Dead and broken internal code (Alex)**
 
@@ -606,6 +537,43 @@ Items 16 and 18 are marked **partially fixed**: the crash in each is gone, but p
     **Confirmed after the refit:** `X0_psi` is present (100 x 2), `list_X_psi_mat` carries `bs_info`/`target_spline_vars`, both vignette chunks run, and `devtools::check()` completes with **0 errors** for the first time. Remaining status: 2 warnings, 3 notes, tracked separately.
 
     **The lesson worth keeping**: a stale shipped dataset presents as a bug in whatever function touches it first, and moves to the next function each time one is fixed. Two functions were investigated and one was needlessly suspected before the data was. When an example object fails and a fresh fit does not, suspect the object.
+
+36. ~~**Both exported GAM functions failed for any user with a categorical occupancy covariate.**~~ **FIXED 30 July 2026** (Claude; `R/occJSDM-package.R`, `NAMESPACE`, commit `032dcff`). Logged 1 August: it was completed but never given a *Fixed bugs* entry, so it was invisible in this file.
+
+    **The defect.** `tidyr::pivot_longer()` was called but never imported, and `tidyr` was in `DESCRIPTION` `Imports:` with nothing imported from it in `NAMESPACE`. It is reached in the categorical-covariate branch of `returnCovariateEffect()` and `plotCovariateEffect()`, so both would fail with "could not find function" from a properly installed namespace. `stats::setNames` and `stats::rnbinom` were missing the same way.
+
+    **Why it survived the test suite.** `devtools::load_all()` resolves unimported symbols through the global environment, so a functional test passes whether or not the import exists. The regression test therefore asserts on the imports environment directly, which holds under both `load_all()` and `R CMD check`.
+
+    **Not cosmetic, despite arriving as an `R CMD check` NOTE.** The "checking dependencies in R code" NOTE is now gone entirely, 3 notes to 2. `dnbinom` and `bs` remain on the undefined-globals list, correctly: they are reached only by dead code, and importing `bs` would add `splines` to `DESCRIPTION` to support code that should not ship.
+
+    **Reviewed by Alex, 2 August 2026: "Agree with the fix."**
+
+37. ~~**Ten dead functions moved to `deprecated/`.**~~ **DONE 30 July 2026** (Claude; commits `7bae018`, `f2e2701`). Logged 1 August so the deprecation has a stable anchor; it was previously cited only by section-A position, which has since been reused.
+
+    `sample_z`, `sample_w`, `sample_cimk`, `sample_betatheta` from `R/jsdmfun.R`, plus six dead samplers and plots from `R/mcmcfun.R` and `R/output.R`. All were unreachable from any exported entry point. Roughly 26 more remain, tracked in group D, deliberately deferred until the sampler rewrite lands so the two do not collide.
+
+    **Reviewed by Alex, 2 August 2026: "Ok to deprecate these functions."**
+
+38. ~~**`main` would not load at all, and two fixes were needed to restore it.**~~ **FIXED 31 July 2026** (Claude; `src/Makevars`, `src/Makevars.win`, `DESCRIPTION`, `NAMESPACE`, `R/occJSDM-package.R`, `R/runOccJSDM.R`). Closed 2 August 2026. After `8f9f315` the test suite went from 167 passing to 25 passing, 3 failures and 33 errors, because the built `.so` had an undefined `RcppParallel::tbbParallelFor` and failed to load, taking every function in the package with it.
+
+    **Change 1, the linking.** `RcppParallel` was in `LinkingTo`, which makes the headers visible but does not link the libraries. Added the documented `RcppParallel::RcppParallelLibs()` call to both `Makevars` files, **and** added `RcppParallel` to `Imports` with an `importFrom`. **Both halves are needed**: the Makevars line alone fixes the missing symbol but the load still fails, because on macOS `libtbb` is referenced through `@rpath` and `devtools` copies the `.so` to a temp directory. Importing the package makes its namespace load first and set up the TBB paths. The reasoning is in a comment in `src/Makevars` so the next person does not stop at the first fix and conclude it did not work.
+
+    **Change 2, the debugging scaffold at `R/runOccJSDM.R:404`.** It had live assignments overwriting every argument with values referencing `occ_data_effort`, a dataset not in the package, plus a live `summarisedLatentPresences`. That block was fully commented before `8f9f315`. **Re-commented rather than deleted**, since Alex evidently uses it, with a note saying it must stay commented and what happened when it did not.
+
+    **Two things left alone at the time, both since resolved by Alex:**
+
+    - `verbose` in `computeNewOutputs()` defaults to `T`, so `predictNewSites()` still prints one line per species unless a caller opts out. It is suppressible now, which was the harder half, but the default behaviour, the test-output noise and the CRAN-reviewer exposure are all unchanged. **Alex: "We can leave verbose on, people won't think of turning it on."**
+    - `sample_z_cpp_parallel()` was exported but not yet called at the time; `runOccJSDM` still used `sample_z_cpp`, so only `sample_w_cim_cipp_parallel()` was wired in and half the parallelisation work was unreachable. **Alex: "sample_z_cpp_parallel now used."** Confirmed: it is called at `R/runOccJSDM.R:1113` as of `41abe69`, which leaves `sample_z_cpp()` itself with no callers -- whether *that* should now be deprecated is a new open item in group A.
+
+    The `verbose`-default choice noted above is the same decision closed separately as *Fixed bugs* 39.
+
+39. ~~**`computeNewOutputs()` prints to stdout on every call and cannot be silenced.**~~ **FIXED** (Alex added a `verbose` argument to `predictNewSites()`, threaded through to the `Rcout` call in `src/jsdm.cpp`). Closed 2 August 2026.
+
+    **The original defect.** `src/jsdm.cpp` ran `Rcout << "Computing species ..."` inside the species loop unconditionally, so every `predictNewSites()` call printed one line per species, and `suppressMessages()` did not catch it because `Rcout` is stdout rather than R's condition system.
+
+    **Verified live, not just from the response.** `verbose` reaches the C++ `if(verbose)` gate around the `Rcout` call (`src/jsdm.cpp:482`) via `computeNewOutputs()` (`R/output.R:1683`). Ran both ways on a fitted model: `verbose = FALSE` suppresses all four per-species lines; `suppressMessages()` alone, with `verbose` left at its default, still lets all four through -- expected, not a gap, given the default chosen below.
+
+    **The item's fix spec asked for a default of `FALSE`; Alex chose `T` instead, deliberately.** `predictNewSites()` still prints by default unless a caller opts out, which is not what was originally asked for -- but it is a design decision, not an unfinished fix. Same decision already recorded under *Fixed bugs* 38 (the RcppParallel-linking fix): **"We can leave verbose on, people won't think of turning it on."** **Closed by decision, not by elimination.**
 
 # **Completed work**
 
