@@ -78,15 +78,17 @@ Every code change Claude made, newest first. None has had human review beyond Do
 
 2.  **`reparamFactorModel()` breaks residual covariance = `t(L) %*% L`, inflating reported species correlations.** `R/jsdmfun.R:48`. The rotation preserves `U %*% L` (verified to 4e-16) so the linear predictor is untouched, but it moves scale out of `U` into `L`, and `returnResidualCorrelationMatrix()` computes `cov2cor(t(L) %*% L)` from the reparameterised `L`. Measured `Var(U)` afterwards is `diag(0.23, 2.01)`, not the identity.
 
-    **Measured:** correlations move by up to 0.612, consistently toward the extremes. Across the grid `resid_cor` covers at 0.74-0.77 in nine of ten scenarios.
+    **Measured:** correlations move by up to 0.612, consistently toward the extremes.
 
     **Impact:** `returnResidualCorrelationMatrix()` and `plotResidualCorrelationMatrix()` overstate co-occurrence. This is the headline JSDM output.
 
     **Fix, two options.** (a) Rotate by `Q` alone, dropping the `diag(diag(R))` scaling, so both the identifiability constraint and the covariance identity hold. (b) Keep the scaling and compute the correlation as `t(L) %*% Var(U) %*% L`. (a) is simpler and preserves the output contract.
 
-    **Your note was that this is a non-issue for logistic models since only the correlation is recoverable.** The premise is right but the measured numbers above are already correlations: `cov2cor()` does not absorb the change, because `diag(1/diag(R))` rescales per *factor* while `cov2cor()` normalises per *species*. If it is nonetheless a non-issue, then the simulation study is measuring the wrong thing and that needs identifying before the `resid_cor` results are quoted. Full exchange in AGENTS.
+    **REOPENED 2 August 2026: the simulation evidence for this item has been withdrawn.** It previously cited `resid_cor` covering at 0.74-0.77 across the grid, and a paired re-run in which only 104 of 49,978 coverage decisions flipped. The 2 August re-run shows that statistic is degenerate: coverage equals one minus the share of true correlations sitting at exactly ±1, the credible intervals span almost the whole of [-1, 1] (median width 1.999 on a scale bounded by 2), and a truth-determined statistic cannot move when the sampler changes, so the paired result never discriminated. `PLAN.md` §17 has the measurements and §17.6 what would make the statistic informative.
 
-    ALEX TO MAKE A DECISION
+    **This does not refute the item.** The code-level argument above is about a per-factor rescaling surviving `cov2cor()` and is untouched. What has gone is the independent evidence for it, so it now rests on reading the transform alone. Your note was that this is a non-issue for logistic models since only the correlation is recoverable; the premise is right, and the reply had been that the measured numbers were already correlations. That reply is no longer available. Full exchange in AGENTS.
+
+    ALEX TO MAKE A DECISION, now on the code argument alone
 
 3.  **`beta_theta` intervals are overconfident, and it gets worse with more data.** Coverage 0.77 at the production `M = 2`, falling 
 monotonically to 0.58 at `M = 20`, while bias stays small and flat. Shrinking intervals around a bias that is not shrinking is the 

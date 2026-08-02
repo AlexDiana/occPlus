@@ -8,6 +8,8 @@ The plain-language guide to the test suite is now a pkgdown article in this repo
 
 **Reading order if you are new to this:** §12 for the headline results, then §15.4-§15.6 and §16.4-§16.5, which are the most recent and supersede parts of §12's attributions. §13.7 and §14.7 are the intermediate experiments. §1-§9 are the design and are mostly settled.
 
+**Read §17 before quoting any `resid_cor` number.** The 2 August re-run showed that block's coverage is a function of the truth-generating geometry and carries no information about the estimator. Every `resid_cor` figure in §12 to §16 is affected.
+
 **One finding is open, and it is sharply localised.** `beta_theta` (the *slope overconfidence* item in `TODO.md` group B) undercovers only on the collection-covariate *slopes*; its intercept row covers at 0.968 (§15.5). It needs a sampler-level look rather than more simulation. `B0` (the *bias doubled* item) has since been traced to it: §16.4 finds `B0` unbiased in both arms where `beta_theta` is absent entirely, which removes the evidence for an independent `B0` defect and reduces that item to "downstream of the slopes". One unlooked-for finding is recorded but not filed, `B0` undercovering in the `continuous` arm (§16.5); it wants confirming at a second configuration first.
 
 **A note on citing TODO items.** Group B items are cited here by *subject*, never by position. Positions have been renumbered four times and every numeric reference broke each time, in some cases silently repointing at an unrelated item. See "Cross-referencing TODO items" in `AGENTS.md`.
@@ -305,7 +307,7 @@ Also: pooling coverage across species within a block buys precision, but those i
 
 2.  ~~Tier 2 failing vs advisory.~~ **RESOLVED: it fails**, on thresholds measured across three seed sets (§6.3).
 
-3.  ~~`beta_theta` and `resid_cor` sit below nominal.~~ **RESOLVED and both traced.** `resid_cor` is the `reparamFactorModel()` item in `TODO.md` group B, confirmed by a paired re-run in which only 104 of 49,978 coverage decisions flipped. `beta_theta` was partly the prior mean (*Fixed bugs* 25); the residue is the slope-overconfidence item in group B, and simulation has now taken it as far as it can go. Ruled out: under-identification, prior width, pseudo-replication (§13, §14). Established: the defect sits on the **slopes** only, since the intercept row covers at 0.968 with the slopes removed (§15.5). What is left is a sampler-level question about the Polya-Gamma update, filed for Alex.
+3.  **`beta_theta` traced; `resid_cor` REOPENED 2 August 2026 on new grounds (§17).** `beta_theta` was partly the prior mean (*Fixed bugs* 25); the residue is the slope-overconfidence item in `TODO.md` group B, and simulation has taken it as far as it can go. Ruled out: under-identification, prior width, pseudo-replication (§13, §14). Established: the defect sits on the **slopes** only, since the intercept row covers at 0.968 with the slopes removed (§15.5). What is left is a sampler-level question about the Polya-Gamma update, filed for Alex. **`resid_cor` no longer belongs in this item.** It had been treated as settled evidence for the `reparamFactorModel()` defect, on the strength of a paired re-run in which only 104 of 49,978 coverage decisions flipped. §17 shows the statistic is degenerate: coverage equals one minus the share of true correlations at exactly ±1, the credible intervals span almost the whole of [-1, 1], and the paired result is exactly what a truth-determined statistic must produce. The `reparamFactorModel()` item stands on its code-level argument alone until the statistic is repaired (§17.6).
 
 4.  *MOSTLY RESOLVED 2 August 2026.* **Presentation of tier-3 results for the paper.** The write-up is a pkgdown article, `vignettes/articles/validation.Rmd`. What is still open is only whether to publish the site while the group B items are open, and whether the manuscript quotes it or restates it.
 
@@ -870,3 +872,62 @@ The bias is zero, so this is not the estimate being wrong; it is the interval be
 Not investigated further, and deliberately not filed as a group B item yet: this is one arm, at one configuration, on a model type the package's users are least likely to be running, and it was found while looking for something else. It wants confirming at a second configuration before it is called a defect. Recorded here so it is not lost.
 
 The other blocks in this arm, for completeness: `B` covers 0.943 (bias 0.0003), `G` 0.954 (-0.0008), `resid_cor` 0.703 (0.0003, consistent with the known `reparamFactorModel()` defect measuring 0.74-0.77 elsewhere), `sigma_b` 1.000 (prior-dominated by construction).
+
+## 17. `resid_cor` coverage is degenerate, and does not test `reparamFactorModel()` (2 August 2026)
+
+### 17.1 What prompted it
+
+The 2 August re-run of the production grid at R = 100 put `resid_cor` coverage between 0.752 and 0.768 in nine cells and at **0.980 in `d_underfit`**. Nothing in the design predicts that. `d_underfit` differs from `base` in one respect, fitting `d = 2` against a true `d = 4`, and no account of a `reparamFactorModel()` defect explains why underfitting the factor count would repair coverage.
+
+### 17.2 Coverage is one minus the share of truths at exactly ±1
+
+Not approximately. Arithmetically.
+
+| scenario | share of \|true r\| = 1 | 1 - that | measured coverage |
+|---|---|---|---|
+| `base` | 0.237 | 0.763 | 0.763 |
+| `d_underfit` | 0.020 | 0.980 | 0.980 |
+
+Binned by how extreme the truth is, coverage is **1.000 in every bin up to \|r\| \<= 0.9 and 0.000 above it**, in both scenarios. There is no gradient. A pair is covered if and only if its true correlation is not exactly on the boundary.
+
+### 17.3 The intervals are vacuous
+
+On a scale bounded by [-1, 1]:
+
+- **98.6%** of the 95% credible intervals are wider than 1.9
+- median width **1.999**, quartiles 1.996 and 1.999, minimum 1.871
+- posterior means sit near **0.05** in absolute value, whether the truth is 0 or 1
+
+So the interval is very nearly the entire admissible range for almost every pair. It covers everything except truths sitting exactly on the boundary, which is the whole of the result in 17.2. The model has not learned the residual correlations in this configuration; it has returned its prior support.
+
+### 17.4 Why so many truths are exactly ±1
+
+Truth is `cov2cor(crossprod(L))` with `L` of dimension `d x S`, so each species is a `d`-vector and the true correlation between two species is the cosine of the angle between them. At the base `d = 2` with sparse loadings, the true correlations take essentially three values:
+
+| quantile | 0% | 25% | 50% | 75% | 90% |
+|---|---|---|---|---|---|
+| \|true r\| | 0.000 | 0.000 | 0.707 | 0.707 | 1.000 |
+
+Species whose loading vectors are proportional are exactly collinear, giving \|r\| = 1. With only two factors that happens constantly. At the true `d = 4` of `d_underfit` it barely happens at all, which is the entire explanation of that cell's 0.980.
+
+The same geometry drives the exclusions. `simstudy_rescor_rows()` drops species whose true loading vector is all zero, because their residual correlation is 0/0 and undefined. That removes 16 to 20% of elements in every cell with true `d = 2`, and 0.6% in `d_underfit`, since needing all four loadings to be zero is far rarer than needing both of two.
+
+### 17.5 What this establishes, and what it does not
+
+**Establishes:** the `resid_cor` coverage statistic, as computed here, carries no information about the estimator. It is a function of the truth-generating geometry alone. Every `resid_cor` number in §12 through §16 should be read as such, including the 0.703 quoted for the `continuous` arm in §16.5.
+
+**Does not establish:** that `reparamFactorModel()` is correct. That argument is about a per-factor rescaling surviving `cov2cor()`, which is a statement about the transform and is untouched by anything here. What has gone is the simulation evidence for it.
+
+**And it withdraws the strongest-looking evidence.** The 29 July paired re-run, in which only 104 of 49,978 coverage decisions flipped on bit-identical truth, was read as showing the undercoverage was real and independent of the fixes. It shows nothing of the kind: a statistic fixed by the truth distribution cannot move when the sampler changes, so that result is equally consistent with a defect and with no defect. It does not discriminate.
+
+This is the contingency `AGENTS.md` wrote down when Alex called the issue a non-issue for logistic models: *if it is nonetheless a non-issue, the simulation study is measuring the wrong thing and that needs identifying before any `resid_cor` result is quoted*. This is that identification.
+
+### 17.6 What would make the statistic informative
+
+Three changes, in rough order of cost.
+
+1. **Exclude truths at exactly ±1** from the coverage calculation, as degenerate in the same sense the all-zero loading vectors already are. Cheap, and it makes the remaining number mean something. On this run it would leave coverage at 1.000, which is its own finding: the intervals are too wide, not too narrow.
+2. **Report interval width alongside coverage** for this block. A width of 1.999 on [-1, 1] should have been visible from the start, and no coverage figure should be quoted without it.
+3. **Raise the simulated `d`**, or draw loadings so that collinearity is rare, so the truth spans the interior rather than piling up at the boundary. This changes what the grid measures and wants a decision rather than a patch.
+
+Until at least 1 and 2 are done, `resid_cor` should not be quoted as evidence for or against anything.
