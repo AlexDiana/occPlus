@@ -147,7 +147,32 @@ simstudy_scenarios <- function() {
     #
     # Read it against B0 bias, not coverage: B0 covers at 0.94-0.96 in every
     # cell including `binary`, so coverage cannot distinguish anything here.
-    mk("nocollcov", ncov_theta = 0L, seed_label = "nocollcov"))
+    mk("nocollcov", ncov_theta = 0L, seed_label = "nocollcov"),
+
+    # --- Continuous, B0 with no beta_theta anywhere (PLAN.md 16) --------
+    #
+    # Alex's correction to what `nocollcov` was meant to test. Setting
+    # ncov_theta = 0 removes the beta_theta *slopes* but necessarily keeps
+    # its intercept row, logit(theta_baseline), and in an occupancy model
+    # that intercept and B0 are both intercepts on the same linear
+    # predictor chain: psi sets how often a site is occupied, theta sets
+    # how often an occupied site yields a positive sample, and with M = 2
+    # the data barely separates them. So `nocollcov`'s residual -0.0633
+    # bias could be that confounding rather than a defect in B0 itself,
+    # which is what he was actually proposing to rule out.
+    #
+    # model = "continuous" is the arm with no beta_theta at all: z is
+    # drawn as Normal(eta, tau) and observed directly, so there is no
+    # detection stage, no latent w, and B0 is estimated straight from the
+    # Gaussian likelihood. `binary` already removes beta_theta too, but it
+    # goes through the Polya-Gamma path; continuous is a different
+    # likelihood and a different branch of the sampler, so agreement
+    # between the two is worth more than either alone.
+    #
+    # Same caveat as `binary`, stated rather than glossed: this changes
+    # many things at once, not one. It is a second independent reading of
+    # "B0 with nothing confounded against it", not a controlled contrast.
+    mk("continuous", model = "continuous"))
 }
 
 # --- Seam 1: how the true parameters are chosen --------------------------

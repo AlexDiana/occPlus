@@ -136,6 +136,25 @@ Every code change Claude made, newest first. None has had human review beyond Do
 
     ALEX RESPONSE: Actually I wasn't too clear, my suggestion was to run the model with model = "continuous" since that part of the sampler would use B0 only. Using the occupancy model, we still sample the intercept of beta_theta so indetermination between B0 and beta_theta still affects the estimate
 
+    **The point is right and the arm was built for it** (`continuous` in `simstudy_scenarios()`, `PLAN.md` 16). Setting `ncov_theta = 0` necessarily keeps `beta_theta`'s intercept row, and in an occupancy model that intercept and `B0` are both intercepts on the same chain -- `psi` sets how often a site is occupied, `theta` how often an occupied site yields a positive sample -- which at `M = 2` the data barely separates. So the -0.0633 residual could be that confounding rather than a defect in `B0`. `model = "continuous"` has no `beta_theta` at all: `z` is `Normal(eta, tau)` observed directly, no detection stage, no latent `w`.
+
+    Stated rather than glossed: `continuous` changes many things at once, exactly as `binary` does, so it is a second independent reading of "`B0` with nothing confounded against it" rather than a controlled contrast. Its weight comes from being a different likelihood and a different branch of the sampler than `binary`, so the two agreeing is worth more than either alone.
+
+    **This measurement depends on the `BBSL_Worker` RNG race in this group being resolved.** That race reaches the `continuous` path too -- its `parallelFor` is gated on `total_dim > 0`, not on model -- and it can perturb the posterior, not merely the draw order, which is the same order of magnitude as the -0.0633 being measured. The arm is therefore run with `RCPP_PARALLEL_NUM_THREADS=1`, verified bit-for-bit reproducible. Any re-run at the default thread count is not comparable and should not be read against these numbers.
+
+    **Ran 2 August at R = 200, race-free (`PLAN.md` 16.4). Alex's reading is supported.** 200 fits, 20.2 min, 0 failures. `B0` bias:
+
+    - `base`, slopes present: -0.2078 (SE 0.0307), 6.8 SE from zero
+    - `nocollcov`, slopes removed, intercept kept: -0.0633 (SE 0.0192), 3.3 SE
+    - `binary`, no `beta_theta` at all: +0.0122 (SE 0.0119), 1.0 SE
+    - **`continuous`, no `beta_theta` at all: +0.0066 (SE 0.0056), 1.2 SE**
+
+    Two arms with no `beta_theta`, on two different likelihoods and two different branches of the sampler, both at zero. So `binary`'s clean result was not an artefact of its other differences, and the -0.0633 residual is better explained by the `B0`/`theta`-intercept confounding Alex identified than by a defect in `B0`. **On the evidence this item is downstream of the `beta_theta` slope item and closes when that one does.**
+
+    **What stops it closing today is procedural, not statistical.** The first three rows above were measured at the default thread count, i.e. under the `BBSL_Worker` race; only `continuous` was not. Each arm is internally valid, so the direction is not in doubt, but the cross-arm arithmetic wants redoing: re-run `base` and `nocollcov` with `RCPP_PARALLEL_NUM_THREADS=1` once the race is fixed and confirm -0.2078 and -0.0633 reproduce.
+
+    **Separate observation, not filed as its own item yet** (`PLAN.md` 16.5): `B0` *coverage* in the `continuous` arm is 0.879 against nominal 0.95, about 4.7 SE low and the lowest of any cell measured (grid range 0.892-0.956, `binary` 0.942). Bias is zero, so the interval is too narrow rather than the estimate wrong. `continuous` is the only model type that also estimates `tau`, which itself covers at 0.921 with bias +0.0370. One arm, one configuration, found while looking for something else -- wants confirming before it is called a defect.
+
 6.  **`theta0` overcovers at 0.978-0.985, having been near nominal before the fixes.** Measured by the post-fix re-run (`PLAN.md` 12.3); pre-fix it sat at 0.938-0.959. The all-cell average of 0.944 hides this, because `low_information` pulls it down at 0.602.
 
     **Two candidate causes ruled out.** The M ladder showed overcoverage falling toward nominal as M rises (0.986 at `M2`, 0.944 at `M10`) while the matched `K30` control makes it worse at 0.996, which reads as Stage 1 under-identification (`PLAN.md` 13.7). But that reading has a hole: pre-fix, `theta0` was fine at the *same* M = 2. And the coupling hypothesis, that `b_betatheta`'s widened variance propagates through `w` into `sample_theta0()`, was tested directly and disproved: a 20-fold reduction moved coverage by 0.006 (`PLAN.md` 14.7).
@@ -153,6 +172,20 @@ Every code change Claude made, newest first. None has had human review beyond Do
     ALEX TO DIAGNOSE THE CAUSE AND DECIDE WHAT TO DO ABOUT THIS
 
     ALEX RESPONSE: I Do not have any idea of what might be causing the lack of coverage at this point. The p/q sampler seems to be implemented correctly
+
+8.  **`BBSL_Worker` calls the non-thread-safe `sampleB_SoR()`, racing on R's RNG from every TBB thread.** Found 2 August 2026 while running the `continuous` arm for the `B0` item above. Introduced by `41abe69` ("More parallelisation"); the suite passed 248/248 at `ebfe3a9` immediately before it.
+
+    `BBSL_Worker::operator()` (`src/jsdm.cpp`, run via `RcppParallel::parallelFor(0, S, worker)` at `:1197`) calls `sampleB_SoR()` (`:830`), whose only RNG line is `arma::randn()`. **That is the call *Fixed bugs* 28 recorded as safe** -- "`arma::randn()` was never affected: RcppArmadillo sets `ARMA_RNG_ALT` to route Armadillo's RNG to R's" -- which was true while it was only ever reached single-threaded. Reached from worker threads, the same routing inverts it into the worst case: unsynchronised concurrent access to R's global RNG state.
+
+    **Measured, not inferred.** Two fits under one `set.seed()`: `B0` differs by up to 4.34 against a mean magnitude of 0.82, and `p`, a probability, by 0.63. Different chains, not float noise. Forcing `RCPP_PARALLEL_NUM_THREADS=1` makes the same pair bit-for-bit identical (`max diff 0`), which is what identifies the parallel region as the cause. `tests/testthat/test-regression-bugs.R:267` and `:269` fail; that test exists precisely to catch this.
+
+    **Not only a reproducibility problem.** A race on the Mersenne Twister state permits torn reads, repeated draws and correlated draws across species -- `sampleB_SoR()` draws one species' coefficient innovation and `parallelFor` runs species concurrently -- so the chain may not target the intended posterior. Treat any measurement taken on the default thread count as suspect at the scale the `B0` item works at (its residual is -0.0633 with SE 0.0192).
+
+    **The obvious fix is not sufficient.** A thread-safe `sampleB_SoR_TS()` already sits at `:855`, unused by this path, but it seeds `thread_local std::mt19937 gen(rd())` from OS entropy, so it would close the race and still leave `set.seed()` without control -- exactly the trap documented at the top of `src/rng.h`, which was written after that mistake was made once already. The scheme that satisfies both is `get_rng()` in `src/rng.h`, which derives per-thread streams from the base seed R hands the sampler via `setOccJSDMSeed()`.
+
+    **Workaround meanwhile**, verified bit-for-bit: `RCPP_PARALLEL_NUM_THREADS=1`, which the study runner honours and PSOCK workers inherit. Parallelism across replicates is unaffected, since that is process-level.
+
+    ALEX TO INVESTIGATE (this is your new code, and you may already have it in hand)
 
 ## **C. Crashes, unreachable code paths, and API bugs (Alex)**
 
