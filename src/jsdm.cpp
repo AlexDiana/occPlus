@@ -15,7 +15,9 @@
 
 using namespace Rcpp;
 
-// [[Rcpp::depends(RcppArmadillo)]]
+#include <RcppParallel.h>
+
+// [[Rcpp::depends(RcppArmadillo, RcppParallel)]]
 
 // TRUNC = 0.64 and TRUNC_RECIP = 1/0.64, the truncation point from
 // Windle (2013), were declared here but never used, and drew an
@@ -850,6 +852,47 @@ arma::vec sampleB_SoR(arma::mat X, arma::mat &invB, arma::vec &b,
 }
 
 // [[Rcpp::export]]
+arma::vec sampleB_SoR_TS(arma::mat X, arma::mat &invB, arma::vec &b,
+                      arma::vec &k, arma::vec Omega,
+                      arma::mat &X_s_index,
+                      arma::mat &Ks,
+                      int X_centers) {
+
+  // It is assumed that XtOmegaX_SoR and XtK_SoR are thread-safe
+  // and do not modify shared state or call R's RNG.
+  arma::mat XtOmegaX = XtOmegaX_SoR(X, X_centers, Omega, X_s_index, Ks);
+  arma::mat tXk = XtK_SoR(X, X_s_index, Ks, k, X_centers);
+
+  arma::mat Lambda_B = XtOmegaX + invB;
+  arma::vec mu_B = tXk + invB * b;
+
+  arma::mat L = arma::trans(arma::chol(Lambda_B));
+  arma::vec tmp = arma::solve(arma::trimatl(L), mu_B);
+  arma::vec alpha = arma::solve(arma::trimatu(arma::trans(L)), tmp);
+
+  // ---------------------------------------------------------
+  // THREAD-SAFE RNG
+  // Using thread_local ensures each worker thread gets its own
+  // independent generator, initialized only once per thread.
+  // ---------------------------------------------------------
+  thread_local std::random_device rd;
+  thread_local std::mt19937 gen(rd());
+  std::normal_distribution<double> dist(0.0, 1.0);
+
+  arma::vec z(invB.n_cols);
+  for(size_t i = 0; i < z.n_elem; ++i) {
+    z[i] = dist(gen);
+  }
+  // ---------------------------------------------------------
+
+  arma::vec v = arma::solve(arma::trimatu(arma::trans(L)), z);
+
+  arma::vec result = v + alpha;
+
+  return result;
+}
+
+// [[Rcpp::export]]
 arma::mat spatEffectMeanCpp(arma::cube& Bs_output,
                             arma::mat& Ks,
                             arma::mat& Xs_centers) {
@@ -870,4 +913,299 @@ arma::mat spatEffectMeanCpp(arma::cube& Bs_output,
   }
 
   return spatEffect_mean;
+}
+
+
+inline arma::mat computeBtcoef_cpp(const arma::mat& G,
+                                   const arma::mat& Tr,
+                                   const arma::mat& A,
+                                   const arma::mat& C,
+                                   const arma::mat& Btilde) {
+  return Tr * G + A * C + Btilde;
+}
+
+// [[Rcpp::export]]
+List sample_BBsL_cpp(arma::mat k,
+                 arma::mat X,
+                 arma::mat Tr,
+                 arma::mat U,
+                 arma::mat G,
+                 arma::mat A,
+                 arma::mat C,
+                 double sigma_b,
+                 arma::mat Gs,
+                 arma::mat As,
+                 arma::mat Cs,
+                 double sigma_bs,
+                 arma::mat Ks,
+                 arma::mat Xs_centers,
+                 arma::mat Omega,
+                 std::string model) {
+
+  int p = X.n_cols;
+  int ps = Cs.n_cols;
+  int d = U.n_cols;
+  int S = Omega.n_cols;
+
+  arma::mat zero_Sp(S, p, arma::fill::zeros);
+  arma::mat zero_Sps(S, ps, arma::fill::zeros);
+
+  arma::mat M_B = computeBtcoef_cpp(G, Tr, A, C, zero_Sp).t();
+  arma::mat M_Bs = computeBtcoef_cpp(Gs, Tr, As, Cs, zero_Sps).t();
+
+  arma::vec B0(S, arma::fill::zeros);
+  arma::mat B(p, S, arma::fill::zeros);
+  arma::mat Bs(ps, S, arma::fill::zeros);
+  arma::mat L(d, S, arma::fill::zeros);
+
+  int total_dim = 1 + p + d + ps;
+
+  if (total_dim > 0) {
+
+    arma::vec diag_B(total_dim, arma::fill::ones);
+
+    // SAFEGUARD: Only subvec if p > 0 and ps > 0
+    if (p > 0) {
+      diag_B.subvec(1, p).fill(std::pow(sigma_b, 2));
+    }
+    if (ps > 0) {
+      diag_B.subvec(1 + p + d, p + d + ps).fill(std::pow(sigma_bs, 2));
+    }
+
+    arma::mat invB_current = arma::diagmat(1.0 / diag_B);
+
+    // Pre-construct design matrix XU = [1, X, U]
+    arma::mat XU(X.n_rows, 1 + p + d);
+    XU.col(0).ones();
+
+    // SAFEGUARD: Only assign columns if dimensions exist
+    if (p > 0) {
+      XU.cols(1, p) = X;
+    }
+    if (d > 0) {
+      XU.cols(1 + p, p + d) = U;
+    }
+
+    for (int s = 0; s < S; ++s) {
+
+      arma::vec k_current;
+      if (model == "continuous") {
+        k_current = k.col(s) % Omega.col(s);
+      } else {
+        k_current = k.col(s);
+      }
+
+      arma::vec b_current(total_dim, arma::fill::zeros);
+
+      // SAFEGUARD: Only assign subvec if p > 0
+      if (p > 0) {
+        b_current.subvec(1, p) = M_B.col(s);
+      }
+
+      arma::vec omega_s = Omega.col(s);
+
+      arma::vec BBsL = sampleB_SoR(
+        XU,
+        invB_current,
+        b_current,
+        k_current,
+        omega_s,
+        Xs_centers,
+        Ks,
+        ps
+      );
+
+      // SAFEGUARD: Extract parts conditionally
+      B0(s) = BBsL(0);
+      if (p > 0) {
+        B.col(s) = BBsL.subvec(1, p);
+      }
+      if (d > 0) {
+        L.col(s) = BBsL.subvec(1 + p, p + d);
+      }
+      if (ps > 0) {
+        Bs.col(s) = BBsL.subvec(1 + p + d, p + d + ps);
+      }
+    }
+  }
+
+  arma::mat Bt = B.t() - Tr * G - A * C;
+  arma::mat Bts = Bs.t() - Tr * Gs - As * Cs;
+
+  return List::create(
+    Named("B")   = B,
+    Named("Bt")  = Bt,
+    Named("L")   = L,
+    Named("Bs")  = Bs,
+    Named("Bts") = Bts,
+    Named("B0")  = B0
+  );
+}
+
+// ---------------------------------------------------------
+// 1. Define the RcppParallel Worker
+// ---------------------------------------------------------
+struct BBSL_Worker : public RcppParallel::Worker {
+
+  // Inputs (Read-only)
+  const std::string model;
+  const int p, ps, d, total_dim;
+  const arma::mat& k;
+  const arma::mat& Omega;
+  const arma::mat& M_B;
+  const arma::mat& XU;
+
+  // Shared references passed into sampleB_SoR
+  // (Assuming sampleB_SoR does not modify these, otherwise race conditions will occur)
+  arma::mat& invB_current;
+  arma::mat& Xs_centers;
+  arma::mat& Ks;
+
+  // Outputs (Written to distinct columns, so thread-safe)
+  arma::vec& B0;
+  arma::mat& B;
+  arma::mat& Bs;
+  arma::mat& L;
+
+  // Constructor to initialize the worker with references to the data
+  BBSL_Worker(const std::string model, int p, int ps, int d, int total_dim,
+              const arma::mat& k, const arma::mat& Omega, const arma::mat& M_B, const arma::mat& XU,
+              arma::mat& invB_current, arma::mat& Xs_centers, arma::mat& Ks,
+              arma::vec& B0, arma::mat& B, arma::mat& Bs, arma::mat& L)
+    : model(model), p(p), ps(ps), d(d), total_dim(total_dim),
+      k(k), Omega(Omega), M_B(M_B), XU(XU),
+      invB_current(invB_current), Xs_centers(Xs_centers), Ks(Ks),
+      B0(B0), B(B), Bs(Bs), L(L) {}
+
+  // The parallel execution function
+  void operator()(std::size_t begin, std::size_t end) {
+    for (std::size_t s = begin; s < end; ++s) {
+
+      // Thread-local data
+      arma::vec k_current;
+      if (model == "continuous") {
+        k_current = k.col(s) % Omega.col(s);
+      } else {
+        k_current = k.col(s);
+      }
+
+      arma::vec b_current(total_dim, arma::fill::zeros);
+      if (p > 0) {
+        b_current.subvec(1, p) = M_B.col(s);
+      }
+
+      arma::vec omega_s = Omega.col(s);
+
+      // Call the external C++ function
+      // (Uses ps as the X_centers integer parameter based on your previous R code)
+      arma::vec BBsL = sampleB_SoR(
+        XU,
+        invB_current,
+        b_current,
+        k_current,
+        omega_s,
+        Xs_centers,
+        Ks,
+        ps
+      );
+
+      // Write results to the specific column 's'
+      B0(s) = BBsL(0);
+      if (p > 0) {
+        B.col(s) = BBsL.subvec(1, p);
+      }
+      if (d > 0) {
+        L.col(s) = BBsL.subvec(1 + p, p + d);
+      }
+      if (ps > 0) {
+        Bs.col(s) = BBsL.subvec(1 + p + d, p + d + ps);
+      }
+    }
+  }
+};
+
+
+// ---------------------------------------------------------
+// 2. The Main Exported Function
+// ---------------------------------------------------------
+// [[Rcpp::export]]
+List sample_BBsL_parallel(arma::mat k,
+                 arma::mat X,
+                 arma::mat Tr,
+                 arma::mat U,
+                 arma::mat G,
+                 arma::mat A,
+                 arma::mat C,
+                 double sigma_b,
+                 arma::mat Gs,
+                 arma::mat As,
+                 arma::mat Cs,
+                 double sigma_bs,
+                 arma::mat Ks,
+                 arma::mat Xs_centers,
+                 arma::mat Omega,
+                 std::string model) {
+
+  int p = X.n_cols;
+  int ps = Cs.n_cols;
+  int d = U.n_cols;
+  int S = Omega.n_cols;
+
+  arma::mat zero_Sp(S, p, arma::fill::zeros);
+  arma::mat zero_Sps(S, ps, arma::fill::zeros);
+
+  arma::mat M_B = computeBtcoef_cpp(G, Tr, A, C, zero_Sp).t();
+  arma::mat M_Bs = computeBtcoef_cpp(Gs, Tr, As, Cs, zero_Sps).t();
+
+  arma::vec B0(S, arma::fill::zeros);
+  arma::mat B(p, S, arma::fill::zeros);
+  arma::mat Bs(ps, S, arma::fill::zeros);
+  arma::mat L(d, S, arma::fill::zeros);
+
+  int total_dim = 1 + p + d + ps;
+
+  if (total_dim > 0) {
+
+    arma::vec diag_B(total_dim, arma::fill::ones);
+
+    if (p > 0) {
+      diag_B.subvec(1, p).fill(std::pow(sigma_b, 2));
+    }
+    if (ps > 0) {
+      diag_B.subvec(1 + p + d, p + d + ps).fill(std::pow(sigma_bs, 2));
+    }
+
+    arma::mat invB_current = arma::diagmat(1.0 / diag_B);
+
+    arma::mat XU(X.n_rows, 1 + p + d);
+    XU.col(0).ones();
+
+    if (p > 0) {
+      XU.cols(1, p) = X;
+    }
+    if (d > 0) {
+      XU.cols(1 + p, p + d) = U;
+    }
+
+    // Initialize the RcppParallel Worker
+    BBSL_Worker worker(model, p, ps, d, total_dim,
+                       k, Omega, M_B, XU,
+                       invB_current, Xs_centers, Ks,
+                       B0, B, Bs, L);
+
+    // Call parallelFor over the columns 0 to S
+    RcppParallel::parallelFor(0, S, worker);
+  }
+
+  arma::mat Bt = B.t() - Tr * G - A * C;
+  arma::mat Bts = Bs.t() - Tr * Gs - As * Cs;
+
+  return List::create(
+    Named("B")   = B,
+    Named("Bt")  = Bt,
+    Named("L")   = L,
+    Named("Bs")  = Bs,
+    Named("Bts") = Bts,
+    Named("B0")  = B0
+  );
 }

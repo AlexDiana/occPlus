@@ -519,6 +519,24 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// sampleB_SoR_TS
+arma::vec sampleB_SoR_TS(arma::mat X, arma::mat& invB, arma::vec& b, arma::vec& k, arma::vec Omega, arma::mat& X_s_index, arma::mat& Ks, int X_centers);
+RcppExport SEXP _occJSDM_sampleB_SoR_TS(SEXP XSEXP, SEXP invBSEXP, SEXP bSEXP, SEXP kSEXP, SEXP OmegaSEXP, SEXP X_s_indexSEXP, SEXP KsSEXP, SEXP X_centersSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< arma::mat >::type X(XSEXP);
+    Rcpp::traits::input_parameter< arma::mat& >::type invB(invBSEXP);
+    Rcpp::traits::input_parameter< arma::vec& >::type b(bSEXP);
+    Rcpp::traits::input_parameter< arma::vec& >::type k(kSEXP);
+    Rcpp::traits::input_parameter< arma::vec >::type Omega(OmegaSEXP);
+    Rcpp::traits::input_parameter< arma::mat& >::type X_s_index(X_s_indexSEXP);
+    Rcpp::traits::input_parameter< arma::mat& >::type Ks(KsSEXP);
+    Rcpp::traits::input_parameter< int >::type X_centers(X_centersSEXP);
+    rcpp_result_gen = Rcpp::wrap(sampleB_SoR_TS(X, invB, b, k, Omega, X_s_index, Ks, X_centers));
+    return rcpp_result_gen;
+END_RCPP
+}
 // spatEffectMeanCpp
 arma::mat spatEffectMeanCpp(arma::cube& Bs_output, arma::mat& Ks, arma::mat& Xs_centers);
 RcppExport SEXP _occJSDM_spatEffectMeanCpp(SEXP Bs_outputSEXP, SEXP KsSEXP, SEXP Xs_centersSEXP) {
@@ -529,6 +547,58 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< arma::mat& >::type Ks(KsSEXP);
     Rcpp::traits::input_parameter< arma::mat& >::type Xs_centers(Xs_centersSEXP);
     rcpp_result_gen = Rcpp::wrap(spatEffectMeanCpp(Bs_output, Ks, Xs_centers));
+    return rcpp_result_gen;
+END_RCPP
+}
+// sample_BBsL_cpp
+List sample_BBsL_cpp(arma::mat k, arma::mat X, arma::mat Tr, arma::mat U, arma::mat G, arma::mat A, arma::mat C, double sigma_b, arma::mat Gs, arma::mat As, arma::mat Cs, double sigma_bs, arma::mat Ks, arma::mat Xs_centers, arma::mat Omega, std::string model);
+RcppExport SEXP _occJSDM_sample_BBsL_cpp(SEXP kSEXP, SEXP XSEXP, SEXP TrSEXP, SEXP USEXP, SEXP GSEXP, SEXP ASEXP, SEXP CSEXP, SEXP sigma_bSEXP, SEXP GsSEXP, SEXP AsSEXP, SEXP CsSEXP, SEXP sigma_bsSEXP, SEXP KsSEXP, SEXP Xs_centersSEXP, SEXP OmegaSEXP, SEXP modelSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< arma::mat >::type k(kSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type X(XSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type Tr(TrSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type U(USEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type G(GSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type A(ASEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type C(CSEXP);
+    Rcpp::traits::input_parameter< double >::type sigma_b(sigma_bSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type Gs(GsSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type As(AsSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type Cs(CsSEXP);
+    Rcpp::traits::input_parameter< double >::type sigma_bs(sigma_bsSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type Ks(KsSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type Xs_centers(Xs_centersSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type Omega(OmegaSEXP);
+    Rcpp::traits::input_parameter< std::string >::type model(modelSEXP);
+    rcpp_result_gen = Rcpp::wrap(sample_BBsL_cpp(k, X, Tr, U, G, A, C, sigma_b, Gs, As, Cs, sigma_bs, Ks, Xs_centers, Omega, model));
+    return rcpp_result_gen;
+END_RCPP
+}
+// sample_BBsL_parallel
+List sample_BBsL_parallel(arma::mat k, arma::mat X, arma::mat Tr, arma::mat U, arma::mat G, arma::mat A, arma::mat C, double sigma_b, arma::mat Gs, arma::mat As, arma::mat Cs, double sigma_bs, arma::mat Ks, arma::mat Xs_centers, arma::mat Omega, std::string model);
+RcppExport SEXP _occJSDM_sample_BBsL_parallel(SEXP kSEXP, SEXP XSEXP, SEXP TrSEXP, SEXP USEXP, SEXP GSEXP, SEXP ASEXP, SEXP CSEXP, SEXP sigma_bSEXP, SEXP GsSEXP, SEXP AsSEXP, SEXP CsSEXP, SEXP sigma_bsSEXP, SEXP KsSEXP, SEXP Xs_centersSEXP, SEXP OmegaSEXP, SEXP modelSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< arma::mat >::type k(kSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type X(XSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type Tr(TrSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type U(USEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type G(GSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type A(ASEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type C(CSEXP);
+    Rcpp::traits::input_parameter< double >::type sigma_b(sigma_bSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type Gs(GsSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type As(AsSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type Cs(CsSEXP);
+    Rcpp::traits::input_parameter< double >::type sigma_bs(sigma_bsSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type Ks(KsSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type Xs_centers(Xs_centersSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type Omega(OmegaSEXP);
+    Rcpp::traits::input_parameter< std::string >::type model(modelSEXP);
+    rcpp_result_gen = Rcpp::wrap(sample_BBsL_parallel(k, X, Tr, U, G, A, C, sigma_b, Gs, As, Cs, sigma_bs, Ks, Xs_centers, Omega, model));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -566,7 +636,10 @@ static const R_CallMethodDef CallEntries[] = {
     {"_occJSDM_KsBproduct", (DL_FUNC) &_occJSDM_KsBproduct, 3},
     {"_occJSDM_XtOmegaX_SoR", (DL_FUNC) &_occJSDM_XtOmegaX_SoR, 5},
     {"_occJSDM_sampleB_SoR", (DL_FUNC) &_occJSDM_sampleB_SoR, 8},
+    {"_occJSDM_sampleB_SoR_TS", (DL_FUNC) &_occJSDM_sampleB_SoR_TS, 8},
     {"_occJSDM_spatEffectMeanCpp", (DL_FUNC) &_occJSDM_spatEffectMeanCpp, 3},
+    {"_occJSDM_sample_BBsL_cpp", (DL_FUNC) &_occJSDM_sample_BBsL_cpp, 16},
+    {"_occJSDM_sample_BBsL_parallel", (DL_FUNC) &_occJSDM_sample_BBsL_parallel, 16},
     {NULL, NULL, 0}
 };
 

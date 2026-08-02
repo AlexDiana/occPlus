@@ -1,5 +1,4 @@
 
-
 buildGrid <- function(XY_sp, gridStep){
 
   x_grid <- seq(min(XY_sp[,1]) - (1.5) * gridStep,
@@ -59,8 +58,6 @@ computePsiE <- function(X_psi, beta_psi, X_ord, beta_ord, LL){
 computeTheta <- function(X_theta, beta_theta){
   logistic(X_theta %*% beta_theta)
 }
-
-
 
 # OK
 sample_pq <- function(c_imk, w, primerIdx, idx_k, maxL, a_p,

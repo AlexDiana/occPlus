@@ -1550,7 +1550,7 @@ update_jSDMcoef <- function(list_data,
   }
 
   # sample fixed effects, spatial trait loadings and factor loadings
-  list_BBsL <- sample_BBsL(k, X, Tr, U,
+  list_BBsL <- sample_BBsL_parallel(k, X, Tr, U,
                            G, A, C, sigma_b,
                            Gs, As, Cs, sigma_bs,
                            Ks, list_Xs$Xs_centers,

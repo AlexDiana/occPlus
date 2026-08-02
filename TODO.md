@@ -52,7 +52,9 @@ output: html_document
 
 Every code change Claude made, newest first. None has had human review beyond Doug asking for it. All are recoverable from git; revert or rework freely. Each says what to check. Full detail for each is in *Fixed bugs*, which is the record; this section is the queue.
 
-1.  **`main` would not load at all, and two fixes were needed to restore it.** 31 July, `src/Makevars`, `src/Makevars.win`, `DESCRIPTION`, `NAMESPACE`, `R/occJSDM-package.R`, `R/runOccJSDM.R`. After `8f9f315` the test suite went from 167 passing to 25 passing, 3 failures and 33 errors, because the built `.so` had an undefined `RcppParallel::tbbParallelFor` and failed to load, taking every function in the package with it.
+1.  **`main` would not load at all, and two fixes were needed to restore it.** 31 July, `src/Makevars`, 
+`src/Makevars.win`, `DESCRIPTION`, `NAMESPACE`, `R/occJSDM-package.R`, `R/runOccJSDM.R`. After `8f9f315` 
+the test suite went from 167 passing to 25 passing, 3 failures and 33 errors, because the built `.so` had an undefined `RcppParallel::tbbParallelFor` and failed to load, taking every function in the package with it.
 
     **Change 1, the linking.** `RcppParallel` was in `LinkingTo`, which makes the headers visible but does not link the libraries. Added the documented `RcppParallel::RcppParallelLibs()` call to both `Makevars` files, **and** added `RcppParallel` to `Imports` with an `importFrom`. **Both halves are needed**: the Makevars line alone fixes the missing symbol but the load still fails, because on macOS `libtbb` is referenced through `@rpath` and `devtools` copies the `.so` to a temp directory. Importing the package makes its namespace load first and set up the TBB paths. The reasoning is in a comment in `src/Makevars` so the next person does not stop at the first fix and conclude it did not work.
 
@@ -67,29 +69,51 @@ Every code change Claude made, newest first. None has had human review beyond Do
     - `verbose` in `computeNewOutputs()` defaults to `T`, so `predictNewSites()` still prints one line per species unless a caller opts out. It is suppressible now, which was the harder half, but the default behaviour, the test-output noise and the CRAN-reviewer exposure are all unchanged. Group C item 3 is therefore half closed rather than closed.
     - **`sample_z_cpp_parallel()` is exported but never called.** `runOccJSDM` still uses `sample_z_cpp` at `R/runOccJSDM.R:1101`, so only `sample_w_cim_cipp_parallel()` is actually wired in and half the parallelisation work is unreachable. Most likely it simply has not been hooked up yet, in which case ignore this. Flagging it because it is otherwise invisible: it compiles, exports and tests clean, and it shows up only as three new entries in the dead-code scan, which went from 8 unused `RcppExports` wrappers to 11 with `8f9f315`. If it is deliberate, say so and it goes to `deprecated/` with the rest.
 
-    ALEX TO REVIEW
+    We can leave verbose on, people won't think of turning it on
+    sample_z_cpp_parlalel now used
 
-2.  **Both exported GAM functions failed for any user with a categorical occupancy covariate.** **FIXED 30 July 2026** (Claude; `R/occJSDM-package.R`, `NAMESPACE`, commit `032dcff`). Logged here on 1 August: it was completed but never given a *Fixed bugs* entry, so it was invisible in this file.
+2.  **Both exported GAM functions failed for any user with a categorical occupancy covariate.** **FIXED 30 July 2026** (Claude; 
+`R/occJSDM-package.R`, `NAMESPACE`, commit `032dcff`). Logged here on 1 August: it was completed but never given a *Fixed bugs* entry, 
+so it was invisible in this file.
 
-    **The defect.** `tidyr::pivot_longer()` was called but never imported, and `tidyr` was in `DESCRIPTION` `Imports:` with nothing imported from it in `NAMESPACE`. It is reached in the categorical-covariate branch of `returnCovariateEffect()` and `plotCovariateEffect()`, so both would fail with "could not find function" from a properly installed namespace. `stats::setNames` and `stats::rnbinom` were missing the same way.
+    **The defect.** `tidyr::pivot_longer()` was called but never imported, and `tidyr` was in `DESCRIPTION` `Imports:` 
+    with nothing imported from it in `NAMESPACE`. It is reached in the categorical-covariate branch of `returnCovariateEffect()`
+    and `plotCovariateEffect()`, so both would fail with "could not find function" from a properly installed namespace. `stats::setNames` 
+    and `stats::rnbinom` were missing the same way.
 
-    **Why it survived the test suite.** `devtools::load_all()` resolves unimported symbols through the global environment, so a functional test passes whether or not the import exists. The regression test therefore asserts on the imports environment directly, which holds under both `load_all()` and `R CMD check`.
+    **Why it survived the test suite.** `devtools::load_all()` resolves unimported symbols through the global environment, 
+    so a functional test passes whether or not the import exists. The regression test therefore asserts on the imports 
+    environment directly, which holds under both `load_all()` and `R CMD check`.
 
-    **Not cosmetic, despite arriving as an `R CMD check` NOTE.** The "checking dependencies in R code" NOTE is now gone entirely, 3 notes to 2. `dnbinom` and `bs` remain on the undefined-globals list, correctly: they are reached only by dead code, and importing `bs` would add `splines` to `DESCRIPTION` to support code that should not ship.
+    **Not cosmetic, despite arriving as an `R CMD check` NOTE.** The "checking dependencies in R code" NOTE is now gone entirely, 
+    3 notes to 2. `dnbinom` and `bs` remain on the undefined-globals list, correctly: they are reached only by dead code, and importing
+    `bs` would add `splines` to `DESCRIPTION` to support code that should not ship.
 
-    ALEX TO CHECK
+    AGREE WITH THE FIX
 
-3.  **Ten dead functions moved to `deprecated/`.** **DONE 30 July 2026** (Claude; commits `7bae018`, `f2e2701`). Logged here on 1 August so the deprecation has a stable anchor; it was previously cited only by section-A position, which has since been reused.
+3.  **Ten dead functions moved to `deprecated/`.** **DONE 30 July 2026** (Claude; commits `7bae018`, `f2e2701`). Logged here on 
+1 August so the deprecation has a stable anchor; it was previously cited only by section-A position, which has since been reused.
 
-    `sample_z`, `sample_w`, `sample_cimk`, `sample_betatheta` from `R/jsdmfun.R`, plus six dead samplers and plots from `R/mcmcfun.R` and `R/output.R`. All were unreachable from any exported entry point. Roughly 26 more remain, tracked in group D, deliberately deferred until the sampler rewrite lands so the two do not collide.
+    `sample_z`, `sample_w`, `sample_cimk`, `sample_betatheta` from `R/jsdmfun.R`, plus six dead samplers and plots from 
+    `R/mcmcfun.R` and `R/output.R`. All were unreachable from any exported entry point. Roughly 26 more remain, tracked in group D, 
+    deliberately deferred until the sampler rewrite lands so the two do not collide.
+    
+    ok to deprecate these functions
 
-4.  **`listPriors$b_betatheta_slope_var`, a new prior hook.** **ADDED 29 July 2026** (Claude; `R/runOccJSDM.R:783-785`, commit `cd64e8b`). Logged here on 1 August: this had **no entry anywhere in this file**, having been removed from the review queue before it was recorded, so a new user-facing argument existed with nothing tracking it.
+4.  **`listPriors$b_betatheta_slope_var`, a new prior hook.** **ADDED 29 July 2026** (Claude; `R/runOccJSDM.R:783-785`, commit `cd64e8b`). 
+Logged here on 1 August: this had **no entry anywhere in this file**, having been removed from the review queue before it was recorded, 
+so a new user-facing argument existed with nothing tracking it.
 
-    **What it does.** `B_betatheta`'s slope variance was hard-coded, with no override, unlike `p`/`q`/`theta0`. The hook defaults to 2, the previous hard-coded value, so nothing changes unless a caller sets it. Verified to reach the sampler before it was trusted: refitting one dataset under both settings with data and seed held fixed shrank the slope posterior spread under the tighter prior.
+    **What it does.** `B_betatheta`'s slope variance was hard-coded, with no override, unlike `p`/`q`/`theta0`. The hook defaults to 2, 
+    the previous hard-coded value, so nothing changes unless a caller sets it. Verified to reach the sampler before it was trusted: 
+    refitting one dataset under both settings with data and seed held fixed shrank the slope posterior spread under the tighter prior.
 
-    **Documented 1 August**, in the `@param listPriors` roxygen block, which had listed only the three original priors. Until then the hook was reachable but undiscoverable.
+    **Documented 1 August**, in the `@param listPriors` roxygen block, which had listed only the three original priors. Until 
+    then the hook was reachable but undiscoverable.
 
-    **This is not a fix, and the value is still open.** It was built as a diagnostic for the `beta_theta` slope defect, and the tighter-prior arms it enabled came back null (`PLAN.md` 13.9). The `b_betatheta` variance decision in group B is where the choice lives.
+    **This is not a fix, and the value is still open.** It was built as a diagnostic for the `beta_theta` slope defect, 
+    and the tighter-prior arms it enabled came back null (`PLAN.md` 13.9). The `b_betatheta` variance decision in group B 
+    is where the choice lives.
 
     ALEX TO CHECK, AND TO DECIDE WHETHER THE HOOK SHOULD SHIP AT ALL
 
@@ -160,22 +184,36 @@ Every code change Claude made, newest first. None has had human review beyond Do
     The R = 200 run also reproduced the R = 50 replicates bit-for-bit, which is how we know the two are the same experiment rather than two similar ones.
 
     ALEX: WHAT REMAINS AFTER THE SLOPE DEFECT IS FIXED IS SMALL BUT NOT ZERO
+    
+    ALEX RESPONSE: Actually I wasn't too clear, my suggestion was the run the model with model = "continuous" since that part of the sampelr would use 
+    B0 only. Using the occupancy model, we still sample the intercept of beta_theta so indetermination between B0 and beta_theta still affects the stimate
 
 6.  **`theta0` overcovers at 0.978-0.985, having been near nominal before the fixes.** Measured by the post-fix re-run (`PLAN.md` 12.3); pre-fix it sat at 0.938-0.959. The all-cell average of 0.944 hides this, because `low_information` pulls it down at 0.602.
 
-    **Two candidate causes ruled out.** The M ladder showed overcoverage falling toward nominal as M rises (0.986 at `M2`, 0.944 at `M10`) while the matched `K30` control makes it worse at 0.996, which reads as Stage 1 under-identification (`PLAN.md` 13.7). But that reading has a hole: pre-fix, `theta0` was fine at the *same* M = 2. And the coupling hypothesis, that `b_betatheta`'s widened variance propagates through `w` into `sample_theta0()`, was tested directly and disproved: a 20-fold reduction moved coverage by 0.006 (`PLAN.md` 14.7).
+    **Two candidate causes ruled out.** The M ladder showed overcoverage falling toward nominal as M rises (0.986 at `M2`, 0.944 at `M10`) while the matched `K30` control makes it worse at 0.996, which reads as Stage 1 under-identification (`PLAN.md` 13.7). But that reading has a hole: pre-fix, `theta0` was fine at the *same* M = 2. 
+    And the coupling hypothesis, that `b_betatheta`'s widened variance propagates through `w` into `sample_theta0()`, was tested directly 
+    and disproved: a 20-fold reduction moved coverage by 0.006 (`PLAN.md` 14.7).
 
-    **Priority: lowest of the open findings, and it should stay there.** Overcoverage is the safe direction; it costs power, not correctness. The only untested candidate is `theta0`'s own `Beta(1, 20)` prior, which already has `listPriors$a_theta0`/`b_theta0` hooks and needs no code change.
+    **Priority: lowest of the open findings, and it should stay there.** Overcoverage is the safe direction; it costs 
+    power, not correctness. The only untested candidate is `theta0`'s own `Beta(1, 20)` prior, which already has 
+    `listPriors$a_theta0`/`b_theta0` hooks and needs no code change.
 
     CLAUDE TO PIGGYBACK A theta0-PRIOR ARM ON THE NEXT RUN, NOT TO RUN ONE FOR THIS ALONE
 
 7.  **`q` (Stage 2 false positives) degrades hard as `K` rises.** Found 29 July 2026 as a side effect of the M-ladder run (`PLAN.md` 13.7), which was not built to look for it. Never investigated beyond the measurement.
 
-    Coverage falls from 0.945 at `M2` (K = 3) to **0.614 at `K30`** (K = 30, same total rows as `M20`). `M20` itself, which holds K = 3 and raises M instead, sits at 0.742. So more PCR replicates make `q` *less* well calibrated, and the effect is larger than the M-driven change in any other item here.
+    Coverage falls from 0.945 at `M2` (K = 3) to **0.614 at `K30`** (K = 30, same total rows as `M20`). `M20` itself, 
+    which holds K = 3 and raises M instead, sits at 0.742. So more PCR replicates make `q` *less* well calibrated, 
+    and the effect is larger than the M-driven change in any other item here.
 
-    **Hypothesis, untested:** the same cost-of-identifiability pattern as `beta_theta`. More PCR replicates sharpen the posterior, so if the informative `Beta(1, 20)` prior holds `q` a fixed distance from the truth, sharper intervals show it as worse coverage. If that is what this is, it is not a new bug but a known trade extended to K, and it belongs with the prior-choice decision rather than in the sampler.
+    **Hypothesis, untested:** the same cost-of-identifiability pattern as `beta_theta`. More PCR replicates sharpen 
+    the posterior, so if the informative `Beta(1, 20)` prior holds `q` a fixed distance from the truth, sharper intervals 
+    show it as worse coverage. If that is what this is, it is not a new bug but a known trade extended to K, and it 
+    belongs with the prior-choice decision rather than in the sampler.
 
     ALEX TO DIAGNOSE THE CAUSE AND DECIDE WHAT TO DO ABOUT THIS
+    
+    ALEX RESPONSE: I Do not have any idea of what might be causing the lack of coverage at this point. The p/q sampler seems to be implemented correctly
 
 ## **C. Crashes, unreachable code paths, and API bugs (Alex)**
 
@@ -288,20 +326,43 @@ Ten dead functions were moved to `deprecated/` on 30 July (*Fixed bugs* 37). Wha
 ALEX NOTE: After manually comparing each MCMC step with microbenchmark(), the slowest step is definitely the sample_betatheta_cpp_parallel. There are few things to note, first the parallelisation does not seem to achieve much speed up, and even in its current state, it is not macos compatible since it uses openMP (rather than RcppParallel). Moreover, the slowest step of the sampler seems to be the sample_Omega_cpp, which samples a very large number of PG variables (N x S). We could consider an alternative PG sampler to speed up the computation.
 
 ```         
+ALEX: Several changes made to imrpvoe performances:
+- Parallelise Polya-gamma sampler in the sample_betatheta_cpp_parallel function using RcppParallel,
+which makes it macos compatible
+- Parallelise the sample_BBsl function in update_jsdmcoef, which is the most computationally heavy function in the
+whole JSDM machinery, using RcppParallel (so macos compatible again)
+
+Still investinating a way to parallelise samplePGvariables(psiCoef) and 
+sample_U_cpp, which are now the heaviest calculations left.
+
+Also worth investigating a faster to compute the variancePartitioning or the WAIC.
+
 **Profiled by Alex, 31 July 2026, which answers the "nothing here has been profiled" caveat this list used to carry.** Comparing each MCMC step with `microbenchmark()`:
 
 - **`sample_betatheta_cpp_parallel()` is the slowest step**, decisively.
-- **The parallelisation achieves little speedup**, and is inert on macOS because it uses OpenMP rather than RcppParallel. This independently corroborates the measurement below: `SHLIB_OPENMP_CXXFLAGS` is empty on Doug's machine, so every `#pragma omp` compiles to a no-op and the "parallel" samplers run serially. Alex has since moved two samplers to RcppParallel in `8f9f315` for this reason.
+- **The parallelisation achieves little speedup**, and is inert on macOS because it uses OpenMP rather than RcppParallel. 
+This independently corroborates the measurement below: `SHLIB_OPENMP_CXXFLAGS` is empty on Doug's machine, so every `#pragma omp` 
+compiles to a no-op and the "parallel" samplers run serially. Alex has since moved two samplers to RcppParallel in `8f9f315` for this reason.
 - **Within that step, `sample_Omega_cpp()` dominates**: it draws `N x S` Polya-Gamma variables per iteration.
-- **Alex's suggestion: consider an alternative Polya-Gamma sampler.** That is the lever with the best expected return, and it is a different kind of work from the parallelisation items below, which redistribute the same cost rather than reducing it.
+- **Alex's suggestion: consider an alternative Polya-Gamma sampler.** That is the lever with the best expected return, 
+and it is a different kind of work from the parallelisation items below, which redistribute the same cost rather than reducing it.
 
-**This reorders the list.** Items A and B parallelise around a step whose cost is dominated by PG sampling; making the PG draw cheaper would benefit every configuration, including single-core and macOS, where the parallelisation currently does nothing. Worth settling the PG question before investing in either.
+**This reorders the list.** Items A and B parallelise around a step whose cost is dominated by PG sampling; 
+making the PG draw cheaper would benefit every configuration, including single-core and macOS, where the parallelisation 
+currently does nothing. Worth settling the PG question before investing in either.
 
 The items below are ordered by expected speedup per unit of effort as originally written.
 
-**Before profiling, check whether OpenMP is even on.** Measured 29 July 2026 on the macOS development machine: `R CMD config SHLIB_OPENMP_CXXFLAGS` is *empty*, so the `$(SHLIB_OPENMP_CXXFLAGS)` in `src/Makevars` expands to nothing, every `#pragma omp` compiles to a no-op, and `nm -u src/occJSDM.so | grep -c '__kmpc\|_GOMP'` returns 0. The package is running single-threaded here despite `libomp.dylib` appearing in `otool -L` (pulled in transitively by R's own libraries, not by us).
+**Before profiling, check whether OpenMP is even on.** Measured 29 July 2026 on the macOS development machine: 
+`R CMD config SHLIB_OPENMP_CXXFLAGS` is *empty*, so the `$(SHLIB_OPENMP_CXXFLAGS)` in `src/Makevars` expands to nothing, 
+every `#pragma omp` compiles to a no-op, and `nm -u src/occJSDM.so | grep -c '__kmpc\|_GOMP'` returns 0. 
+The package is running single-threaded here despite `libomp.dylib` appearing in `otool -L` (pulled in transitively by R's own libraries, not by us).
 
-Consequences: the parallel sections are currently dead weight on this machine, the thread-safety bug of Fixed bugs 26 could never have manifested locally, and any timing measured here says nothing about a Linux build where OpenMP *is* active. Worth confirming what Alex's machine and CRAN's check farm do before investing in items 1 and 2 below -- the payoff differs completely between the two cases.
+
+Consequences: the parallel sections are currently dead weight on this machine, the thread-safety bug of Fixed bugs 26
+could never have manifested locally, and any timing measured here says nothing about a Linux build where OpenMP *is* active.
+Worth confirming what Alex's machine and CRAN's check farm do before investing in items 1 and 2 below -- the payoff differs completely 
+between the two cases.
 
 A.  **Parallelise over chains -- but use a PSOCK cluster, not `mclapply()`.** The `for (chain in 1:nchain)` loop (`R/runOccJSDM.R:895`) is serial and embarrassingly parallel; each chain touches only its own `*_output_chain` arrays, so running the chains in separate *processes* gives close to an `nchain`-fold speedup and sidesteps the RNG thread-safety problem in bug A.2 entirely (each process has its own RNG state). Portability constraints, though:
 

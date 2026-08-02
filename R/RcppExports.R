@@ -137,7 +137,19 @@ sampleB_SoR <- function(X, invB, b, k, Omega, X_s_index, Ks, X_centers) {
     .Call(`_occJSDM_sampleB_SoR`, X, invB, b, k, Omega, X_s_index, Ks, X_centers)
 }
 
+sampleB_SoR_TS <- function(X, invB, b, k, Omega, X_s_index, Ks, X_centers) {
+    .Call(`_occJSDM_sampleB_SoR_TS`, X, invB, b, k, Omega, X_s_index, Ks, X_centers)
+}
+
 spatEffectMeanCpp <- function(Bs_output, Ks, Xs_centers) {
     .Call(`_occJSDM_spatEffectMeanCpp`, Bs_output, Ks, Xs_centers)
+}
+
+sample_BBsL_cpp <- function(k, X, Tr, U, G, A, C, sigma_b, Gs, As, Cs, sigma_bs, Ks, Xs_centers, Omega, model) {
+    .Call(`_occJSDM_sample_BBsL_cpp`, k, X, Tr, U, G, A, C, sigma_b, Gs, As, Cs, sigma_bs, Ks, Xs_centers, Omega, model)
+}
+
+sample_BBsL_parallel <- function(k, X, Tr, U, G, A, C, sigma_b, Gs, As, Cs, sigma_bs, Ks, Xs_centers, Omega, model) {
+    .Call(`_occJSDM_sample_BBsL_parallel`, k, X, Tr, U, G, A, C, sigma_b, Gs, As, Cs, sigma_bs, Ks, Xs_centers, Omega, model)
 }
 

@@ -56,8 +56,6 @@ void setOccJSDMSeed(unsigned int seed) {
 #define MATH_LOG_2_PI  -0.45158270528945486472619522989488214357179467855505631739
 #define MATH_LOG_PI_2  0.451582705289454864726195229894882143571794678555056317392
 
-// old code
-
 static double aterm(int n, double x, double t) {
   double f = 0;
   if(x <= t) {
@@ -295,7 +293,7 @@ static double rpg(int n, double z){
 
   double x = 0;
   for(int i = 0; i < n; i++){
-    x += samplepg(z);
+    x += samplepg_fast(z);
   }
 
   return(x);
@@ -429,6 +427,44 @@ static arma::vec sample_Omega_cpp(arma::mat& X, arma::vec& beta, arma::vec& n){
   return(Omega_vec);
 }
 
+struct SampleOmegaWorker : public RcppParallel::Worker {
+
+  // Use raw Armadillo references directly (no RMatrix/RVector)
+  const arma::mat& X;
+  const arma::vec& beta;
+  const arma::vec& n;
+  arma::vec& Omega_vec;
+
+  SampleOmegaWorker(const arma::mat& X, const arma::vec& beta, const arma::vec& n, arma::vec& Omega_vec)
+    : X(X), beta(beta), n(n), Omega_vec(Omega_vec) {}
+
+  void operator()(std::size_t begin, std::size_t end) {
+    // Standard Armadillo property
+    std::size_t p = beta.n_elem;
+
+    for (std::size_t i = begin; i < end; ++i) {
+      // Calculate dot product
+      double b = 0.0;
+      for (std::size_t j = 0; j < p; ++j) {
+        b += X(i, j) * beta[j];
+      }
+
+      // Safe thread_local sampling
+      Omega_vec[i] = rpg(n[i], b);
+    }
+  }
+};
+
+arma::vec sample_Omega_parallel(arma::mat& X, arma::vec& beta, arma::vec& n) {
+  int nsize = n.size();
+  arma::vec Omega_vec(nsize);
+
+  SampleOmegaWorker worker(X, beta, n, Omega_vec);
+  RcppParallel::parallelFor(0, nsize, worker);
+
+  return Omega_vec;
+}
+
 static arma::vec sample_beta_nocov_cpp(arma::vec beta, arma::mat& X, arma::vec b,
                                 arma::mat B, arma::vec n, arma::vec k){
 
@@ -442,7 +478,8 @@ static arma::vec sample_beta_nocov_cpp(arma::vec beta, arma::mat& X, arma::vec b
 static arma::vec sample_beta_nocov_cpp_TS(arma::vec beta, arma::mat& X, arma::vec b,
                                 arma::mat B, arma::vec n, arma::vec k){
 
-  arma::vec Omega = sample_Omega_cpp(X, beta, n);
+  // arma::vec Omega = sample_Omega_cpp(X, beta, n);
+  arma::vec Omega = sample_Omega_parallel(X, beta, n);
 
   beta = sample_beta_cpp_TS(X, B, b, Omega, k);
 
@@ -960,7 +997,7 @@ arma::mat sample_betatheta_cpp_parallel(const arma::mat& w,
 
   // Tell OpenMP to parallelize this loop.
   // All variables declared inside the loop become private to each thread.
-  #pragma omp parallel for
+  // #pragma omp parallel for
   for (int s = 0; s < S; ++s) {
 
     // Get the s-th column of z_all
