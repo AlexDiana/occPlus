@@ -977,7 +977,22 @@ arma::vec sampleB_SoR(arma::mat X, arma::mat &invB, arma::vec &b,
   arma::vec tmp = arma::solve(arma::trimatl(L), mu_B);
   arma::vec alpha = arma::solve(arma::trimatu(arma::trans(L)),tmp);
 
-  arma::vec z = arma::randn(invB.n_cols);
+  // Thread-safe, R-seeded draw. This was `arma::randn(invB.n_cols)`, which
+  // RcppArmadillo routes to R's global RNG via ARMA_RNG_ALT. That was correct
+  // while this function was only ever reached serially, but BBSL_Worker calls
+  // it from every TBB thread under RcppParallel::parallelFor, making it an
+  // unsynchronised read-modify-write on R's RNG state: duplicate draws, torn
+  // reads, and results that depend on thread scheduling.
+  //
+  // rnorm() in rng.h gives each thread its own mt19937 derived from the base
+  // seed runOccJSDM() draws from R via setOccJSDMSeed(), so the race is gone
+  // and set.seed() still controls the sampler. Do not revert this to
+  // arma::randn() while any caller is parallel.
+  arma::vec z(invB.n_cols);
+  for (arma::uword i = 0; i < z.n_elem; ++i) {
+    z[i] = rnorm();
+  }
+
   arma::vec v = arma::solve(arma::trimatu(arma::trans(L)), z);
 
   arma::vec result = v + alpha;
