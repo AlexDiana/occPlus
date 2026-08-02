@@ -409,25 +409,30 @@ runOccJSDM <- function(data,
 
   {
     # Debugging scaffold: a set of arguments to paste in when stepping through
-    # this function by hand. Everything here must stay commented out. In 8f9f315
-    # part of it was left live, which overwrote every argument with a dataset
-    # that does not exist in the package.
+    # this function by hand. Everything here must stay commented out. Live
+    # exactly once (8f9f315) breaks the function outright -- every call fails
+    # with "object 'occ_data_effort' not found" -- and this is now the fourth
+    # time it has happened (8f9f315, 46d8804, and again between e5d0105 and
+    # 11981a1). 11981a1 re-commented it; 522b89e uncommented it again in the
+    # same "some more parallelisation" commit, seemingly as a side effect of
+    # editing nearby lines rather than a deliberate change. If you need this
+    # for stepping through by hand, paste it into the console, not here.
     #
-    data = occ_data_effort
-    listParams = list(n_factors = 3)
-    threshold = 1
-    occCovariates = c("season_year","z_prop_closed")
-    collCovariates = c("predator_season_year", "z_log_effort_m_total")
-    spatCovariates = c()
-    MCMCparams = list(
-    nchain = 2,
-    nburn = 5000,
-    niter = 5000,
-    nthin = 1 )
-    listPriors = list(
-    a_theta0 = 1,
-    b_theta0 = 100)# listParams = list(n_factors = 3, splineVars = F)
-    summarisedLatentPresences = T
+    # data = occ_data_effort
+    # listParams = list(n_factors = 3)
+    # threshold = 1
+    # occCovariates = c("season_year","z_prop_closed")
+    # collCovariates = c("predator_season_year", "z_log_effort_m_total")
+    # spatCovariates = c()
+    # MCMCparams = list(
+    # nchain = 2,
+    # nburn = 5000,
+    # niter = 5000,
+    # nthin = 1 )
+    # listPriors = list(
+    # a_theta0 = 1,
+    # b_theta0 = 100)# listParams = list(n_factors = 3, splineVars = F)
+    # summarisedLatentPresences = T
     # threshold = 1
     # occCovariates = c( "X_psi.EnvCov.1", "X_psi.EnvCov.2", "X_psi.EnvCov.3",
     #                    "X_psi.EnvCov.4", "X_psi.EnvCov.5" ,"X_psi.EnvCov.6")

@@ -52,15 +52,7 @@ output: html_document
 
 Every code change Claude made, newest first. None has had human review beyond Doug asking for it. All are recoverable from git; revert or rework freely. Each says what to check. Full detail for each is in *Fixed bugs*, which is the record; this section is the queue.
 
-1.  **`listPriors$b_betatheta_slope_var`, a new prior hook.** **ADDED 29 July 2026** (Claude; `R/runOccJSDM.R:783-785`, commit `cd64e8b`). Logged here on 1 August: this had **no entry anywhere in this file**, having been removed from the review queue before it was recorded, so a new user-facing argument existed with nothing tracking it.
-
-    **What it does.** `B_betatheta`'s slope variance was hard-coded, with no override, unlike `p`/`q`/`theta0`. The hook defaults to 2, the previous hard-coded value, so nothing changes unless a caller sets it. Verified to reach the sampler before it was trusted: refitting one dataset under both settings with data and seed held fixed shrank the slope posterior spread under the tighter prior.
-
-    **Documented 1 August**, in the `@param listPriors` roxygen block, which had listed only the three original priors. Until then the hook was reachable but undiscoverable.
-
-    **This is not a fix, and the value is still open.** It was built as a diagnostic for the `beta_theta` slope defect, and the tighter-prior arms it enabled came back null (`PLAN.md` 13.9). The `b_betatheta` variance decision in group B is where the choice lives.
-
-    ALEX RESPONSE: Happy with the new fix
+No open items. The one item this section held, the `listPriors$b_betatheta_slope_var` hook, is closed as *Fixed bugs* 45.
 
 ## **B. Inference-affecting bugs (wrong numbers, silently) (Alex)**
 
@@ -90,22 +82,13 @@ Every code change Claude made, newest first. None has had human review beyond Do
 
     ALEX TO MAKE A DECISION, now on the code argument alone
 
-3.  **`beta_theta` intervals are overconfident, and it gets worse with more data.** Coverage 0.77 at the production `M = 2`, falling 
-monotonically to 0.58 at `M = 20`, while bias stays small and flat. Shrinking intervals around a bias that is not shrinking is the 
-signature of a real defect being exposed by more information, not fixed by it.
+3.  **`beta_theta` intervals are overconfident, and it gets worse with more data.** Coverage 0.77 at the production `M = 2`, falling monotonically to 0.58 at `M = 20`, while bias stays small and flat. Shrinking intervals around a bias that is not shrinking is the signature of a real defect being exposed by more information, not fixed by it.
 
-    **Narrowed 31 July: the defect is in the *slopes*, not in `beta_theta` as a block.** Refitting `base` with `ncov_theta = 0`, so only 
-    the intercept row remains, gives `beta_theta` coverage of **0.968** (SE 0.013, R = 200), i.e. nominal, against 0.763 with the slopes 
-    present (`PLAN.md` 15.5, 15.6). Whatever is wrong is specific to the covariate columns.
+    **Narrowed 31 July: the defect is in the *slopes*, not in `beta_theta` as a block.** Refitting `base` with `ncov_theta = 0`, so only the intercept row remains, gives `beta_theta` coverage of **0.968** (SE 0.013, R = 200), i.e. nominal, against 0.763 with the slopes present (`PLAN.md` 15.5, 15.6). Whatever is wrong is specific to the covariate columns.
 
-    **Four candidate causes now ruled out**, each by measurement: Stage 1 under-identification (more data makes it worse, not better); 
-    the slope prior's width (tightening it 20-fold at `M = 2` moves coverage the wrong way); pseudo-replication in `X_theta` 
-    (it is drawn per sample, not per site); and the intercept path (nominal once the slopes are gone).
+    **Four candidate causes now ruled out**, each by measurement: Stage 1 under-identification (more data makes it worse, not better); the slope prior's width (tightening it 20-fold at `M = 2` moves coverage the wrong way); pseudo-replication in `X_theta` (it is drawn per sample, not per site); and the intercept path (nominal once the slopes are gone).
 
-    **So the cause is in whatever handles the covariate columns in the Polya-Gamma update**, in 
-    `sample_beta_cpp_TS`/`sample_betatheta_cpp_parallel`. Note this is the same step Alex's `microbenchmark()` profiling
-    identified as the slowest in the sampler, so the calibration problem and the performance bottleneck sit in the same code. 
-    This needs someone who knows it; it is not another prior experiment. Evidence in `PLAN.md` 13, 14 and 15.5.
+    **So the cause is in whatever handles the covariate columns in the Polya-Gamma update**, in `sample_beta_cpp_TS`/`sample_betatheta_cpp_parallel`. Note this is the same step Alex's `microbenchmark()` profiling identified as the slowest in the sampler, so the calibration problem and the performance bottleneck sit in the same code. This needs someone who knows it; it is not another prior experiment. Evidence in `PLAN.md` 13, 14 and 15.5.
 
     ALEX TO INVESTIGATE THE SAMPLER
 
@@ -115,58 +98,15 @@ signature of a real defect being exposed by more information, not fixed by it.
     - variance 0.5: `B0` bias -0.106, `beta_theta` coverage 0.707
     - variance 0.1: `B0` bias -0.044, `beta_theta` coverage 0.653
 
-    **This identified the cause of the `B0` item below.** `42198d9` widened `B_betatheta` from `diag(1)` to `diag(2)`, which is exactly when `B0`'s bias doubled. Turning it back down moves the bias back, monotonically.
+    **This identified the cause of `B0`'s doubled bias, closed by decision as *Fixed bugs* 46.** `42198d9` widened `B_betatheta` from `diag(1)` to `diag(2)`, which is exactly when the bias doubled; turning it back down moves it back, monotonically. Alex's decision closed the bias question rather than this variance trade, which stands on its own regardless.
 
-    **But it is a trade, not a fix:** tightening helps `B0` and hurts `beta_theta`. The `beta_theta` item and the `B0` item pull opposite ways on one knob. Not known: whether an intermediate value beats both endpoints, whether the trade holds at `M > 2`, and whether fixing the `beta_theta` slope defect at its source would dissolve it entirely.
+    **But it is a trade, not a fix:** tightening helps `B0` and hurts `beta_theta` coverage. This item and the `beta_theta` slope item above pull opposite ways on one knob. Not known: whether an intermediate value beats both endpoints, whether the trade holds at `M > 2`, and whether fixing the `beta_theta` slope defect at its source would dissolve it entirely.
 
     ALEX TO DECIDE THE VALUE (or that fixing the slope defect supersedes this)
 
-5.  **`B0`'s bias doubled, and coverage does not show it.** Between the pre- and post-fix runs on identical data, nine of ten scenarios moved more negative: overall -0.135 to -0.228. Coverage held at 0.943 throughout, because the intervals are wide enough to absorb the shift, so this is invisible in the headline table and shows only in the bias column.
+5.  **`B0` coverage undercovers by 4.7 SE in the `continuous` arm, and has not been chased.** 0.879 against nominal 0.95 (`PLAN.md` 16.5), the lowest `B0` coverage of any cell measured, bias zero so the interval is too narrow rather than the estimate wrong. Split out of the `B0` bias item below when that one closed, since Alex's decision addressed the bias, not this. One arm, one configuration, found while looking for something else -- wants confirming at a second configuration before it is called a defect.
 
-    Cause is mostly the `beta_theta` slopes, per the run below. The `B_betatheta` variance decision above is the associated knob. `B0` is a headline quantity for a JSDM, so this wants settling before the paper reports species intercepts.
-
-    ALEX RESPONSE: WE COULD ADD A SIMULATION STUDY ON THE ONE-STAGE MODEL ONLY, THAT WOULD REVEAL WHETHER THERE IS ANY ISSUE IN B0 (since there is no beta_theta). If there is no issue, we could delete this point and be sure that the issue is only beta_theta.
-
-    **Ran 31 July at R = 50 and confirmed at R = 200 (`PLAN.md` 15.4, 15.6). Alex's hypothesis holds in its main claim and fails in its strong form.** The designed arm was `base` with `ncov_theta = 0`, keeping the two-stage machinery, the latent `w`/`z` and `p`/`q`/`theta0`, removing only the `beta_theta` slopes. `B0` bias:
-
-    - `base`, slopes present: -0.2078 (SE 0.0307), 6.8 SE from zero
-    - `nocollcov`, slopes removed: **-0.0633** (SE 0.0192), **3.3 SE from zero**
-    - `binary`, no `beta_theta` at all: +0.0122 (SE 0.0119), 1.0 SE from zero
-
-    Removing the slopes removes **70%** of the bias, so fixing the `beta_theta` slope defect will recover most of `B0`. **But the residual is real**: 1.5 SE at R = 50, 3.3 SE at R = 200. `binary` at 1.0 SE is what no bias looks like by comparison.
-
-    **So this item stays open.** Alex proposed deleting it if the one-stage test showed no issue; the test shows a smaller issue, not none. The cause is now split: most is downstream of the slope defect, a measurable part is not, and `B0` coverage sits at 0.94-0.96 throughout so it will never surface there.
-
-    The R = 200 run also reproduced the R = 50 replicates bit-for-bit, which is how we know the two are the same experiment rather than two similar ones.
-
-    ALEX: WHAT REMAINS AFTER THE SLOPE DEFECT IS FIXED IS SMALL BUT NOT ZERO
-
-    ALEX RESPONSE: Actually I wasn't too clear, my suggestion was to run the model with model = "continuous" since that part of the sampler would use B0 only. Using the occupancy model, we still sample the intercept of beta_theta so indetermination between B0 and beta_theta still affects the estimate
-
-    **The point is right and the arm was built for it** (`continuous` in `simstudy_scenarios()`, `PLAN.md` 16). Setting `ncov_theta = 0` necessarily keeps `beta_theta`'s intercept row, and in an occupancy model that intercept and `B0` are both intercepts on the same chain -- `psi` sets how often a site is occupied, `theta` how often an occupied site yields a positive sample -- which at `M = 2` the data barely separates. So the -0.0633 residual could be that confounding rather than a defect in `B0`. `model = "continuous"` has no `beta_theta` at all: `z` is `Normal(eta, tau)` observed directly, no detection stage, no latent `w`.
-
-    Stated rather than glossed: `continuous` changes many things at once, exactly as `binary` does, so it is a second independent reading of "`B0` with nothing confounded against it" rather than a controlled contrast. Its weight comes from being a different likelihood and a different branch of the sampler than `binary`, so the two agreeing is worth more than either alone.
-
-    **Run at `RCPP_PARALLEL_NUM_THREADS=1`, and that is a requirement rather than a preference.** The `BBSL_Worker` race (*Fixed bugs* 41, open at the time of this run) reached the `continuous` path too -- its `parallelFor` is gated on `total_dim > 0`, not on model -- and it can perturb the posterior, not merely the draw order, at the same order of magnitude as the -0.0633 being measured. One thread removes the concurrency, so the race cannot occur at all; verified bit-for-bit reproducible. A re-run at the default thread count would not be comparable and should not be read against these numbers.
-
-    **Ran 2 August at R = 200, race-free (`PLAN.md` 16.4). Alex's reading is supported.** 200 fits, 20.2 min, 0 failures. `B0` bias:
-
-    - `base`, slopes present: -0.2078 (SE 0.0307), 6.8 SE from zero
-    - `nocollcov`, slopes removed, intercept kept: -0.0633 (SE 0.0192), 3.3 SE
-    - `binary`, no `beta_theta` at all: +0.0122 (SE 0.0119), 1.0 SE
-    - **`continuous`, no `beta_theta` at all: +0.0066 (SE 0.0056), 1.2 SE**
-
-    Two arms with no `beta_theta`, on two different likelihoods and two different branches of the sampler, both at zero. So `binary`'s clean result was not an artefact of its other differences, and the -0.0633 residual is better explained by the `B0`/`theta`-intercept confounding Alex identified than by a defect in `B0`. **On the evidence this item is downstream of the `beta_theta` slope item and closes when that one does.**
-
-    **All four rows are race-free; no re-run is pending.** The `nocollcov` R = 200 run was written 31 July 18:11 and the `BBSL_Worker` race arrived on 2 August 01:08, so those figures predate it by about 31 hours; `base` and `binary` are older still. `continuous` was run at one thread, which eliminates the race rather than working around it. An earlier version of this entry said the first three rows needed re-running once the race was fixed, which was wrong twice over: they were never affected, and one thread does not require the fix in any case.
-
-    **The one thing not established:** confounding is a mechanism, not a measurement. Nothing here shows it produces a
-    bias of exactly -0.0633. What is shown is that `B0` is unbiased wherever `beta_theta` is absent entirely, 
-    which removes the only evidence for an independent `B0` defect without quantitatively accounting for the residual.
-
-    **Separate observation, not filed as its own item yet** (`PLAN.md` 16.5): `B0` *coverage* in the `continuous` arm is 0.879 against nominal 0.95, about 4.7 SE low and the lowest of any cell measured (grid range 0.892-0.956, `binary` 0.942). Bias is zero, so the interval is too narrow rather than the estimate wrong. `continuous` is the only model type that also estimates `tau`, which itself covers at 0.921 with bias +0.0370. One arm, one configuration, found while looking for something else -- wants confirming before it is called a defect.
-
-    ALEX RESPONSE: in that case, we can close the point on B0 and assume that the bias is only due to the confounding with beta_theta
+    CLAUDE OR ALEX TO CONFIRM AT A SECOND CONFIGURATION
 
 6.  **`theta0`'s intervals are \~25% wider than they need to be, and that is the price of its bias being fixed.** Coverage 0.978-0.985 post-fix against 0.938-0.959 pre-fix (`PLAN.md` 12.3). The all-cell average of 0.944 hides it, because `low_information` pulls it down at 0.602.
 
@@ -194,9 +134,17 @@ signature of a real defect being exposed by more information, not fixed by it.
 
     **Hypothesis, untested:** the same cost-of-identifiability pattern as `beta_theta`. More PCR replicates sharpen the posterior, so if the informative `Beta(1, 20)` prior holds `q` a fixed distance from the truth, sharper intervals show it as worse coverage. If that is what this is, it is not a new bug but a known trade extended to K, and it belongs with the prior-choice decision rather than in the sampler.
 
-    ALEX TO DIAGNOSE THE CAUSE AND DECIDE WHAT TO DO ABOUT THIS
+    **Alex's response rules out an implementation defect, not the item.** He does not see a cause and reads the `p`/`q` sampler as correctly implemented. That leaves the untested hypothesis above as the live lead -- it does not require the sampler to be wrong, only the prior to be informative relative to how much `K` sharpens the posterior.
 
-    ALEX RESPONSE: I Do not have any idea of what might be causing the lack of coverage at this point. The p/q sampler seems to be implemented correctly
+    ALEX OR CLAUDE TO TEST THE COST-OF-IDENTIFIABILITY HYPOTHESIS
+
+8.  **Every `rng.h`-based parallel sampler draws an identical stream on every thread, not merely a non-reproducible one.** Found 2 August 2026 while reviewing `522b89e`'s new `BetaThetaWorker`, which calls into this same scheme. `get_rng()` seeds each thread from `seed_seq{base_seed, tid}`, and `tid` comes from `omp_get_thread_num()` -- which returns 0 for every `RcppParallel`/TBB worker thread, on any platform, because none of them ever enters an actual `#pragma omp parallel` region (every such pragma in this codebase is commented out). On this machine specifically it is worse again: `_OPENMP` is not even defined when the package is compiled via its own `Makevars`, confirmed independently three ways. So every thread seeds identically, and their random streams are not merely correlated but literally the same sequence, consumed at different offsets. Verified directly through the package's real build: of 3000 draws across 6 threads, only 872 were distinct.
+
+    **This does not reopen the race *Fixed bugs* 41 closed.** There is no concurrent read-modify-write on shared state; that fix still holds. What it undermines is the claim built on top of it, that per-species draws are then independent. They are not, whenever more than one thread actually runs. Everything reported in `PLAN.md` and the validation article is unaffected, because every run there was pinned to one thread already, for the separate reason of bit-reproducibility. What is affected is any fit run by a user at the package's default (multi-core) thread count, on any sampler that calls into `rng.h` from more than one `RcppParallel` thread -- `sampleB_SoR()`/`sample_BBsL_parallel()`, and now also `sample_betatheta_cpp_parallel()`'s new `BetaThetaWorker`.
+
+    **This is the same defect *MEE paper* Alex to-do 8 already proposes fixing**, seeding on the species index rather than the thread. That was filed as a reproducibility improvement; this finding makes it a correctness fix, since keying on `s` sidesteps the broken `tid` computation entirely rather than only making non-reproducibility deterministic. Full verification: `AGENTS.md`.
+
+    ALEX TO DECIDE: fix now, or treat `RCPP_PARALLEL_NUM_THREADS=1` as the interim safety net until *MEE paper* item 8 lands
 
 ## **C. Crashes, unreachable code paths, and API bugs (Alex)**
 
@@ -208,9 +156,7 @@ signature of a real defect being exposed by more information, not fixed by it.
 
     ALEX TO DISABLE IT FOR NOW, BUT LET'S KEEP IT THERE
 
-2.  **Assorted smaller items.**
-
-    FIXED: (a) `createDataIdx()` is called with `maxP` (`R/runOccJSDM.R:638`) for `model = "occupancy"` too, where `maxP` was never assigned. It survives only because lazy evaluation never forces the promise; pass `NULL` explicitly.
+2.  **Assorted smaller items.** (a) and (e) closed as *Fixed bugs* 44.
 
     (b) `d <- get_param(listParams, "n_factors")` defaults to 0, and the cap at `:716` uses `ncol(OTU)`, which is `NULL` for a single-species vector: `if (d > NULL)` errors.
 
@@ -218,11 +164,7 @@ signature of a real defect being exposed by more information, not fixed by it.
 
     (d) The spatial-covariate numeric check at `:540` runs before the "names present in `data$info`" check at `:544`, so a mistyped name gives `undefined columns selected` rather than the intended message.
 
-    FIXED: (e) `computeSpeciesDetected()`'s roxygen documents the removed Beta-approximation signature instead of its actual arguments.
-    
-    
-
-    ALEX WILL REVIEW THE ABOVE
+    ALEX WILL REVIEW (b), (c) AND (d)
 
 ## **D. Dead and broken internal code (Alex)**
 
@@ -282,7 +224,7 @@ Ten dead functions were moved to `deprecated/` on 30 July (*Fixed bugs* 37). Wha
     >
     > occJSDM extends the occPlus two-stage eDNA occupancy model of Ji et al. (2025, *Ecology Letters*, <doi:10.1111/ele.70302>) by adding a JSDM layer. Unusually for an occupancy model, false positives are estimated explicitly at both the field and lab stages and separately for each species and each primer.
     >
-    > Note this is **beta software**. We are validating it against simulated data. Environmental effects on occupancy, trait-by-environment interactions, and Stage 2 false-positive rates recover well, but we would treat pairwise species correlations, the spatial term, and collection-covariate effects with caution for now.
+    > Note this is **beta software**.
     >
     > Highlights:
     >
@@ -380,11 +322,11 @@ H.  **Reduce the repeated `arma::inv()` calls in the samplers.** `sample_beta_cp
 
 8.  **Make the parallel sampler reproducible at any thread count, by keying the draws on species rather than on thread.** This is a design change in your sampler, which is why it is here rather than being applied.
 
-    **Where it stands now.** `sampleB_SoR()` is thread-safe and R-seeded (*Fixed bugs* 41): it draws from `rnorm()` in `src/rng.h`, whose per-thread `mt19937` derives from the base seed `runOccJSDM()` hands the sampler via `setOccJSDMSeed()`. The data race is gone and results are statistically valid. What is not fixed is bit-reproducibility: `BBSL_Worker` runs species across TBB threads, TBB work-steals, so which thread handles which species varies between runs *even at a fixed thread count*, and each thread draws from a different stream. Measured 2 August 2026: max difference 0.126 on `B0` at 10 threads, exactly 0 at one.
+    **Where it stands now, and this got worse on 2 August.** `sampleB_SoR()` draws from `rnorm()` in `src/rng.h`, whose per-thread `mt19937` is meant to derive from `(base_seed, tid)`. `tid` comes from `omp_get_thread_num()`, which returns 0 for every `RcppParallel`/TBB thread regardless of platform, since none of them ever enters a real OpenMP parallel region. So every thread seeds identically, and their streams are not merely uncoordinated but literally the same sequence. Verified directly: 3000 draws across 6 threads produced only 872 distinct values. This is the item at the bottom of group B; it is a correctness gap at the package's default thread count, not only a reproducibility one, and it applies to every sampler that calls into `rng.h` from more than one thread, not only `sampleB_SoR()`.
 
-    **The change.** Build a generator inside `BBSL_Worker::operator()` seeded from `(base_seed, s)` for species `s`, and thread it into `sampleB_SoR()` as an argument instead of having that function reach for a thread-local engine. Species `s` then gets the same draws whichever thread runs it, so the result is reproducible at any thread count and stays race-free. `src/rng.h` already has the pieces -- the base seed and the `seed_seq` construction -- and the generation-counter and `dist.reset()` traps documented at the top of that file apply unchanged.
+    **The change.** Build a generator inside each worker's `operator()` seeded from `(base_seed, s)` for species `s`, and thread it into the sampler as an argument instead of having the sampler reach for a thread-local engine keyed on the broken `tid`. Species `s` then gets the same draws whichever thread runs it, which fixes both problems at once: the stream is no longer shared across threads, and it no longer depends on work-stealing assignment. `src/rng.h` already has the pieces -- the base seed and the `seed_seq` construction -- and the generation-counter and `dist.reset()` traps documented at the top of that file apply unchanged.
 
-    **Why it is worth doing rather than living with.** The simulation study's paired design depends on it. The single strongest result in the study -- that only 104 of 49,978 `resid_cor` coverage decisions flipped between the pre- and post-fix runs on identical truths -- was only computable because a fit reproduced exactly. Every future before/after comparison loses that power without it, and the workaround, running everything at one thread, gives up the parallelisation you have just added.
+    **Why it is worth doing rather than living with.** It is no longer only about bit-reproducibility between runs. At the package's default thread count, species handled by different threads can draw from the same random-number stream, at whatever offset each thread happens to have reached -- a correctness problem for any user who has not manually set `RCPP_PARALLEL_NUM_THREADS=1`. The simulation study itself is unaffected, since every run has been pinned to one thread throughout, for the separate reason of exact reproducibility; but that was never documented as a requirement for statistical validity until now, only for comparing runs against each other.
 
     **Two things it also unblocks.** `test-regression-bugs.R` currently pins its reproducibility test to one thread and carries a skipping test naming this gap; both can go when this lands. And tier 1's "structural assertions only" rule can finally be revisited, which the testing item under *Doug to dos* already flags as waiting on reproducibility being confirmed on a multi-threaded platform.
 
@@ -652,6 +594,24 @@ Items 16 and 18 are marked **partially fixed**: the crash in each is gone, but p
 42. ~~**`sampleB_SoR_TS()` was exported, had no callers, and its name invited the exact error it was written to prevent.**~~ **DEPRECATED 2 August 2026** (Claude; `src/jsdm.cpp`, `deprecated/jsdm-sampleB_SoR_TS.cpp`, `R/RcppExports.R`, `src/RcppExports.cpp`). Closes the decision left open at the end of *Fixed bugs* 41.
 
     Written as the thread-safe variant of `sampleB_SoR()` for the race above, and left purposeless when that race was closed another way. Worse than merely dead: it seeds from OS entropy, so anything built on it would ignore `set.seed()` entirely, despite the `_TS` name reading as the endorsed choice. De-exported and moved to `deprecated/`, not deleted. Group D's dead-wrapper count drops to 11 of 35, re-measured rather than decremented; the suite is unchanged at 248 passing. Detail in `AGENTS.md`, "Detail behind Fixed bugs 40-42".
+
+43. ~~**The `runOccJSDM()` debugging scaffold went live for the fourth time.**~~ **FIXED 2 August 2026** (Claude; `R/runOccJSDM.R`, `tests/testthat/test-regression-bugs.R`). First occurrence `8f9f315` (*Fixed bugs* 38); second `46d8804`, fixed in `e5d0105`; third some time before `11981a1`, which Alex fixed himself; fourth `522b89e`, minutes later, apparently as a side effect of editing nearby lines rather than a deliberate change.
+
+    Re-commented as before. This time also added a static regression test, since four occurrences of the identical defect is not a coincidence to keep fixing by hand: it reads `R/runOccJSDM.R` and asserts the live `data = occ_data_effort` line is not present, catching the defect before any fit is attempted rather than after. Verified: tier 1 passes clean, 144 of 144.
+
+44. ~~**Two of the "assorted smaller items" in group C.**~~ **FIXED** (Alex; `R/runOccJSDM.R`, `R/output.R`). Closed 2 August 2026, Alex marked both in `f4a59e4`.
+
+    (a) `createDataIdx()`'s `maxP` for `model = "occupancy"`. Verified moot rather than fixed as originally described: `maxP` is used nowhere outside `if (model == "two_stage")` blocks, so the described crash path is not reachable as the code now stands. Confirmed live via the tier-1 occupancy smoke test, which passes.
+
+    (b) `computeSpeciesDetected()`'s roxygen no longer documents any signature at all -- title, description and `@noRd` only -- so the stale Beta-approximation `@param` block is simply gone.
+
+45. ~~**`listPriors$b_betatheta_slope_var`, a new prior hook.**~~ **APPROVED 2 August 2026** (Alex: "Happy with the new fix"). Closes group A item 1.
+
+    Exposes `B_betatheta`'s previously hard-coded slope variance, default 2 unchanged. Built as a diagnostic for the `beta_theta` slope item, which is still open; approving the hook is not a decision on the value, which remains the `b_betatheta` variance item in group B. Alex's `522b89e` also removed the explanatory comment at the call site that had marked it as provisional, consistent with treating it as a permanent feature now.
+
+46. ~~**`B0`'s bias doubled between the pre- and post-fix runs.**~~ **CLOSED BY DECISION 2 August 2026** (Alex: "we can close the point on B0 and assume that the bias is only due to the confounding with beta_theta"). Not closed by elimination -- the quantitative link was never established, only that `B0` is unbiased in both arms tested with `beta_theta` absent entirely (`binary` +0.0122 at 1.0 SE, `continuous` +0.0066 at 1.2 SE, `PLAN.md` 16.4), against -0.0633 at 3.3 SE with only the intercept present. Alex accepted that as sufficient. Full investigation, including the two hypotheses tested and ruled out along the way, in `AGENTS.md`.
+
+    The coverage sub-finding this item also carried (`continuous` at 0.879 against nominal, `PLAN.md` 16.5) was not addressed by this decision and is carried forward as its own item in group B.
 
 # **Completed work**
 

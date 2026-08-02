@@ -1,9 +1,9 @@
 ---
-title: "Checking whether the model's uncertainty is honest"
+title: "Checking occJSDM against simulated truth"
 description: >
-  A plain-language guide to the occJSDM test suite: what "coverage" means,
-  what the three test tiers check, and what happened when the R = 100
-  coverage study was re-run after the first round of fixes.
+  How accurately occJSDM recovers parameters it is given, and how honest the
+  credible intervals around them are. Measured on 1000 simulated datasets
+  across ten scenarios, plus a per-species occupancy check.
 ---
 
 ```{=html}
@@ -55,7 +55,11 @@ html[data-bs-theme="dark"] .occjsdm-report {
 }
 
 .occjsdm-report .wrap {
-  max-width: 45rem;
+  /* Widened from 45rem: the per-species and coverage tables (5-7 columns)
+     were readable but tight at 45rem, needing the .scroller fallback more
+     than the prose needed. Paragraphs keep their own 40rem cap below, so
+     text width is unaffected; only the tables get the extra room. */
+  max-width: 58rem;
   margin: 0 auto;
   padding: 3rem 1.5rem 4rem;
   display: flex;
@@ -145,6 +149,10 @@ html[data-bs-theme="dark"] .occjsdm-report {
 
 .occjsdm-report .tally-row {
   display: grid;
+  /* First column is sized for a short caption. Do not put long parameter names
+     here: beta_theta needs 73px against this column's 58, and widening it
+     pushed the whole row past 375px on a phone. Parameter names go in the
+     .tally-label, which wraps. */
   grid-template-columns: 3.6rem 1fr 3.2rem;
   gap: 0 0.9rem;
   align-items: center;
@@ -268,12 +276,12 @@ html[data-bs-theme="dark"] .occjsdm-report {
 <div class="wrap">
 
   <header>
-    <div class="eyebrow">occJSDM &middot; validation &middot; 29 July 2026</div>
-    <h1>Checking whether the model&rsquo;s uncertainty is honest</h1>
+    <div class="eyebrow">occJSDM &middot; validation &middot; 2 August 2026</div>
+    <h1>Checking occJSDM against simulated truth</h1>
     <p class="standfirst">
-      A plain-language guide to the test suite: what it does, what
-      &ldquo;coverage&rdquo; means, and what happened when the study was re-run
-      after the first round of fixes.
+      Two questions, asked of the same model: how close its estimates are to the truth,
+      and how honest the uncertainty around them is. Neither answer implies the other,
+      and this package is currently better at one than the other.
     </p>
   </header>
 
@@ -290,6 +298,185 @@ html[data-bs-theme="dark"] .occjsdm-report {
       check whether it finds its way back. Real data can never do this. You never know
       the true occupancy of a species at a site, so you can never tell whether the model
       got it right.
+    </p>
+    <p>
+      Everything below is one of two questions. <strong>Is the estimate close?</strong>
+      That is accuracy, and it comes first. <strong>Is the stated uncertainty
+      honest?</strong> That is calibration, and it comes second. A model can pass either
+      while failing the other, and this one does exactly that in places.
+    </p>
+  </section>
+
+  <section>
+    <h2>Recovering occupancy, species by species</h2>
+    <p>
+      Start with the thing an occupancy model exists to do: say where each species is.
+      One fit of a hundred sites and ten species, two chains of 500 iterations after 500
+      discarded. Source: <code>tests/testthat/test-recovery-occupancy.R</code>.
+    </p>
+    <div class="scroller">
+      <table>
+        <caption>
+          One row per species from a single fit. Shaded rows fall below a threshold used
+          by one of the checks in the next table.
+        </caption>
+        <thead>
+          <tr>
+            <th>species</th><th>occ_true</th><th>occ_est</th><th>psi_cor</th>
+            <th>auc</th><th>drv_cov</th><th>drv_err</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td class="num">1</td><td class="num">0.44</td><td class="num">0.516</td><td class="num">0.782</td><td class="num">0.805</td><td class="num">1.000</td><td class="num">0.321</td></tr>
+          <tr class="flag"><td class="num">2</td><td class="num">0.48</td><td class="num">0.412</td><td class="num lo">0.271</td><td class="num">0.700</td><td class="num">1.000</td><td class="num">0.451</td></tr>
+          <tr><td class="num">3</td><td class="num">0.53</td><td class="num">0.423</td><td class="num">0.790</td><td class="num">0.872</td><td class="num">1.000</td><td class="num">0.703</td></tr>
+          <tr><td class="num">4</td><td class="num">0.50</td><td class="num">0.414</td><td class="num">0.793</td><td class="num">0.742</td><td class="num">1.000</td><td class="num">0.258</td></tr>
+          <tr><td class="num">5</td><td class="num">0.53</td><td class="num">0.494</td><td class="num">0.727</td><td class="num">0.801</td><td class="num">1.000</td><td class="num">0.393</td></tr>
+          <tr class="flag"><td class="num">6</td><td class="num">0.27</td><td class="num">0.479</td><td class="num lo">0.179</td><td class="num lo">0.572</td><td class="num">1.000</td><td class="num">1.046</td></tr>
+          <tr><td class="num">7</td><td class="num">0.48</td><td class="num">0.449</td><td class="num">0.511</td><td class="num">0.687</td><td class="num">1.000</td><td class="num">0.697</td></tr>
+          <tr><td class="num">8</td><td class="num">0.30</td><td class="num">0.577</td><td class="num">0.682</td><td class="num">0.799</td><td class="num">0.667</td><td class="num">1.456</td></tr>
+          <tr><td class="num">9</td><td class="num">0.27</td><td class="num">0.336</td><td class="num">0.847</td><td class="num">0.921</td><td class="num">1.000</td><td class="num">0.777</td></tr>
+          <tr><td class="num">10</td><td class="num">0.52</td><td class="num">0.373</td><td class="num">0.751</td><td class="num">0.864</td><td class="num">1.000</td><td class="num">0.720</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      <b>occ_true</b> is the fraction of the hundred sites where the species really is
+      present; <b>occ_est</b> is the fraction where the model thinks it is. Close values
+      are necessary but not sufficient: a model can get the overall prevalence right
+      while placing the species at entirely the wrong sites.
+    </p>
+    <p>
+      <b>psi_cor</b> catches that. It correlates the estimated chance of presence against
+      the true chance across sites, so it asks whether the species is put in the
+      <em>right places</em> rather than merely the right number of them. It runs from
+      &minus;1 to 1, and 0 means the estimates say nothing about where the species is.
+      <b>auc</b> asks the same question more forgivingly: the chance the model rates a
+      site where the species really is present above one where it really is absent. A
+      coin flip scores 0.5.
+    </p>
+    <p>
+      The last two columns concern the coefficients underneath. Each species has three
+      &mdash; a baseline and two environmental effects. <b>drv_cov</b> is the share whose
+      stated range contains the true value, and <b>drv_err</b> is the average distance
+      from best guess to truth, on the coefficients&rsquo; own scale, so there is no fixed
+      good value.
+    </p>
+    <p>
+      <strong>Species 6 is the row to read twice.</strong> Its <code>psi_cor</code> of
+      0.179 and <code>auc</code> of 0.572 say the model has barely located it, and its
+      <code>drv_err</code> is the second worst here &mdash; yet <code>drv_cov</code> is a
+      perfect 1.000, because the intervals are wide enough to contain the truth anyway.
+      Honest uncertainty about a poor estimate. That pairing is the reason this article
+      asks two questions rather than one, and it recurs at grid scale further down.
+    </p>
+    <p>
+      Species with a low <code>occ_true</code> are the hard ones. Species 6 and 9 are both
+      present at 27% of sites, and 9 is recovered well while 6 is not. A single fit cannot
+      say whether that is a property of the model or the luck of one dataset.
+    </p>
+
+    <h3>The checks these numbers have to pass</h3>
+    <p>
+      The table above is one snapshot. The test asserts on pooled summaries of it, with
+      floors set by running the whole thing under eight different sets of random seeds and
+      taking a value comfortably below the worst seen, so a failure means breakage rather
+      than an unlucky draw.
+    </p>
+    <div class="scroller">
+      <table>
+        <caption>Asserted quantities. All five pass on this run.</caption>
+        <thead>
+          <tr><th>What it measures</th><th>Result</th><th>Floor</th><th>Swept</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Estimated occupancy tracking the truth, averaged over species</td>
+            <td class="num">0.633</td><td class="num">0.30</td><td class="num">0.498&ndash;0.753</td>
+          </tr>
+          <tr>
+            <td>Species clearing that bar individually</td>
+            <td class="num">8 of 10</td><td class="num">5</td><td class="num">7&ndash;10</td>
+          </tr>
+          <tr>
+            <td>Telling present sites from absent ones</td>
+            <td class="num">0.776</td><td class="num">0.60</td><td class="num">0.748&ndash;0.855</td>
+          </tr>
+          <tr>
+            <td>Coverage of the coefficients driving occupancy</td>
+            <td class="num">0.967</td><td class="num">0.55</td><td class="num">0.800&ndash;1.000</td>
+          </tr>
+          <tr>
+            <td>Those coefficients tracking their true values</td>
+            <td class="num">0.751</td><td class="num">0.30</td><td class="num">0.647&ndash;0.900</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      The species are judged pooled rather than each having to pass alone, because a
+      per-species floor proved unworkable: across the eight seed sets the worst individual
+      species ranged from &minus;0.401 to 0.913, so any threshold strict enough to be worth
+      having would fail on ordinary, healthy data. Counting how many clear the bar keeps
+      most of what a per-species check would catch without that fragility.
+    </p>
+  </section>
+
+  <section>
+    <h2>How close are the estimates, across the whole grid?</h2>
+    <p>
+      One fit cannot separate the model from the dataset. The full study fits 1000 of
+      them &mdash; 100 simulated datasets in each of ten scenarios &mdash; and that is
+      enough to say how well each kind of parameter is recovered. Source:
+      <code>tests/testthat/test-coverage-study.R</code>, run via
+      <code>dev/simstudy/run_study.R</code>.
+    </p>
+    <div class="scroller">
+      <table>
+        <caption>
+          Reference scenario, 100 datasets. <b>nRMSE</b> is the typical error divided by
+          how much the true values themselves vary: below 1 the model beats guessing the
+          average, above 1 it does not. <b>r</b> correlates estimates against truth.
+        </caption>
+        <thead>
+          <tr><th>Parameter</th><th>What it is</th><th>bias</th><th>nRMSE</th><th>r</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="name">B</td><td>species responses to environment</td><td class="num">&minus;0.005</td><td class="num hi">0.512</td><td class="num hi">0.860</td></tr>
+          <tr><td class="name">G</td><td>trait effects</td><td class="num">&minus;0.011</td><td class="num hi">0.566</td><td class="num hi">0.829</td></tr>
+          <tr><td class="name">p</td><td>detection probability</td><td class="num">0.041</td><td class="num">0.821</td><td class="num">0.799</td></tr>
+          <tr><td class="name">q</td><td>false-positive rate</td><td class="num">&minus;0.001</td><td class="num">0.832</td><td class="num">0.720</td></tr>
+          <tr><td class="name">B0</td><td>species intercepts</td><td class="num lo">&minus;0.210</td><td class="num">0.869</td><td class="num">0.538</td></tr>
+          <tr><td class="name">beta_theta</td><td>collection-covariate effects</td><td class="num">0.025</td><td class="num">0.886</td><td class="num">0.524</td></tr>
+          <tr class="flag"><td class="name">resid_cor</td><td>species co-occurrence</td><td class="num">0.008</td><td class="num lo">0.996</td><td class="num lo">0.090</td></tr>
+          <tr class="flag"><td class="name">theta0</td><td>collection baseline</td><td class="num">&minus;0.002</td><td class="num lo">1.294</td><td class="num lo">0.342</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      <strong>Environmental responses and trait effects are recovered well.</strong>
+      <code>B</code> and <code>G</code> both sit around half the error you would get by
+      ignoring the data, correlating with truth at 0.86 and 0.83. If you are fitting this
+      model to ask which species respond to which environmental gradients, that is the
+      part of the answer that holds up.
+    </p>
+    <p>
+      <strong>Detection is respectable</strong> &mdash; <code>p</code> and <code>q</code>
+      both around 0.8 nRMSE &mdash; though <code>p</code> carries a positive bias of 0.041,
+      so detection is being reported as slightly better than it is.
+    </p>
+    <p>
+      <strong>Two parameters are not recovered at all.</strong> <code>resid_cor</code>
+      correlates with truth at 0.090 and <code>theta0</code> at 0.342, with nRMSE at or
+      above 1. For those two, the model&rsquo;s estimates carry essentially no information
+      about the true values; <code>theta0</code> is fractionally worse than predicting the
+      overall average. Both are covered below.
+    </p>
+    <p>
+      <code>B0</code> is the one to watch. The correlation of 0.538 is mediocre, and the
+      bias of &minus;0.210 is the largest in the table &mdash; species intercepts are
+      systematically pulled down. Its interval coverage, further down, is a perfectly
+      respectable 0.949, which tells you nothing about either problem.
     </p>
   </section>
 
@@ -311,188 +498,9 @@ html[data-bs-theme="dark"] .occjsdm-report {
       It matters in print. Report a 95% interval for a parameter that covers at 72%, and
       you are overstating your confidence to a reader who has no way to check.
       Overcoverage &mdash; intervals wider than they need to be &mdash; is the opposite
-      problem: safer, but you are discarding power you actually had.
+      problem: safer, but you are discarding power you actually had. And as the section
+      above shows, an honest interval around a useless estimate is still useless.
     </p>
-  </section>
-
-  <section>
-    <h2>The study has now been run twice</h2>
-    <p>
-      The first run, in late July, found several parameters whose intervals were not
-      honest. Those results were traced to specific lines of code, some of which have
-      since been fixed. The study was then re-run to find out whether the fixes worked.
-    </p>
-    <p>
-      <strong>The two runs used identical simulated data.</strong> Each dataset is
-      generated from a seed derived from its scenario and replicate number, so the
-      second run recreated the first run&rsquo;s 1000 datasets exactly &mdash; verified,
-      not assumed. Every difference below is therefore caused by the change in code, not
-      by the luck of a different draw. Each square is one dataset; the faded row is
-      before, the solid row after.
-    </p>
-
-    <div class="tally-set">
-
-      <figure class="tally">
-        <div class="tally-head">
-          <div class="tally-label">
-            <b>Collection covariates</b> &mdash; moved, but nowhere near far enough
-          </div>
-          <div class="tally-delta">72 &rarr; 76 of 100</div>
-        </div>
-        <div class="tally-row">
-          <div class="tally-when">before</div>
-          <div class="marks is-before" data-hits="72"></div>
-          <div class="tally-score is-bad">0.717</div>
-        </div>
-        <div class="tally-row">
-          <div class="tally-when">after</div>
-          <div class="marks" data-hits="76"></div>
-          <div class="tally-score is-bad">0.763</div>
-        </div>
-        <figcaption class="tally-note">
-          The fix was real &mdash; two-thirds of the bias is gone &mdash; but a
-          &ldquo;95%&rdquo; interval that behaves like a 76% one is still not honest.
-          Something else is wrong.
-        </figcaption>
-      </figure>
-
-      <figure class="tally">
-        <div class="tally-head">
-          <div class="tally-label">
-            <b>Species correlations</b> &mdash; did not move at all
-          </div>
-          <div class="tally-delta">76 &rarr; 76 of 100</div>
-        </div>
-        <div class="tally-row">
-          <div class="tally-when">before</div>
-          <div class="marks is-before" data-hits="76"></div>
-          <div class="tally-score is-bad">0.763</div>
-        </div>
-        <div class="tally-row">
-          <div class="tally-when">after</div>
-          <div class="marks" data-hits="76"></div>
-          <div class="tally-score is-bad">0.763</div>
-        </div>
-        <figcaption class="tally-note">
-          Across the whole study, only 104 of 49,978 individual checks changed their
-          answer. The cause of this one has not been fixed, and the identical result on
-          identical data says so unambiguously.
-        </figcaption>
-      </figure>
-
-      <figure class="tally">
-        <div class="tally-head">
-          <div class="tally-label">
-            <b>Environmental effects</b> &mdash; what an honest interval looks like
-          </div>
-          <div class="tally-delta">94 &rarr; 95 of 100</div>
-        </div>
-        <div class="tally-row">
-          <div class="tally-when">before</div>
-          <div class="marks is-before" data-hits="94"></div>
-          <div class="tally-score is-good">0.943</div>
-        </div>
-        <div class="tally-row">
-          <div class="tally-when">after</div>
-          <div class="marks" data-hits="95"></div>
-          <div class="tally-score is-good">0.947</div>
-        </div>
-        <figcaption class="tally-note">
-          Close to the promised 95 both times. The interval means what it says, and the
-          fixes did not disturb it.
-        </figcaption>
-      </figure>
-
-    </div>
-  </section>
-
-  <section>
-    <h2>Why exactly 100 datasets</h2>
-    <p>
-      Coverage is a proportion, so it carries sampling error like any other estimate.
-      With 100 datasets the standard error is about <strong>2.2 percentage
-      points</strong>. So a gap of 0.94 against 0.95 is noise and means nothing; a gap
-      of 0.72 against 0.95 is ten standard errors and means a great deal.
-    </p>
-    <p>
-      With only five datasets the error is nearer eight points, and 0.78 cannot be
-      distinguished from 0.95 at all. That is precisely why the quick daily check
-      can&rsquo;t answer this question and the long run can.
-    </p>
-  </section>
-
-  <section>
-    <h2>Three tiers, by what they cost</h2>
-    <div class="tiers">
-      <div class="tier">
-        <div class="tier-when">10&nbsp;sec<br>every&nbsp;run</div>
-        <div class="tier-body">
-          <h3>Does it work at all?</h3>
-          <p>
-            Fits every configuration the package offers &mdash; two-stage, occupancy-only,
-            pure JSDM, with and without traits or spatial structure &mdash; and checks each
-            completes and returns sensibly shaped output. Also one test per bug already
-            fixed, named after it, so none comes back unnoticed, and a set covering the
-            convergence diagnostics, checking that the convergence statistic, the effective
-            sample size and the posterior summaries agree with values worked out by hand on
-            inputs whose answers are known in advance.
-          </p>
-          <p>
-            Checks <em>shape</em> rather than exact numbers. That rule now stands on its own
-            merits: any legitimate change to the sampler moves every number, so a suite full
-            of stored values would turn each such change into a wall of failures that says
-            nothing about whether anything is actually broken.
-          </p>
-          <p>
-            It also remains partly forced, for a reason worth stating plainly. The model
-            reproduces exactly from a seed on a single processor core, but not on several.
-            Work is handed to whichever core falls free first, and that order varies between
-            runs, so a species can draw different random numbers each time even at a fixed
-            number of cores. This does not affect the results &mdash; the numbers come from
-            the right distributions either way &mdash; but a run that has to be repeated
-            exactly has to be pinned to one core, and two tests are pinned for that reason.
-          </p>
-        </div>
-      </div>
-
-      <div class="tier">
-        <div class="tier-when">30&nbsp;sec<br>local&nbsp;only</div>
-        <div class="tier-body">
-          <h3>Has anything obviously broken?</h3>
-          <p>
-            Five simulated datasets, fitted and compared against their known truth. Too
-            few to measure coverage &mdash; it&rsquo;s a canary. Its real job is catching a
-            broken connection between &ldquo;true value&rdquo; and &ldquo;estimated
-            value&rdquo;, which would show up as coverage near zero rather than merely low.
-          </p>
-          <p>
-            A second check asks that question of occupancy itself, species by species. It
-            fits one dataset of a hundred sites and ten species, then measures how closely
-            each species&rsquo; estimated chance of being present tracks the truth, and how
-            well the model tells apart the sites where a species really was present from
-            those where it was not. A companion check does the same for the coefficients
-            that drive occupancy. Both judge the species pooled rather than one by one,
-            since any single species can come out poorly by luck, and both use thresholds
-            set by sweeping eight sets of random seeds and taking a floor well below the
-            worst result seen.
-          </p>
-        </div>
-      </div>
-
-      <div class="tier">
-        <div class="tier-when">4.75&nbsp;hr<br>on&nbsp;demand</div>
-        <div class="tier-body">
-          <h3>Is the model&rsquo;s uncertainty honest?</h3>
-          <p>
-            One hundred simulated datasets for each of ten scenarios. This is the coverage
-            study, and the only tier that can answer the question above. The most recent
-            run took 285 minutes across five processor cores and fitted the model 1000
-            times without a single failure.
-          </p>
-        </div>
-      </div>
-    </div>
   </section>
 
   <section>
@@ -505,254 +513,249 @@ html[data-bs-theme="dark"] .occjsdm-report {
       The reference is a mid-sized survey: 100 sites, 10 species, 2 water samples per
       site, 2 primers, 3 PCR replicates each, two environmental covariates, one
       collection covariate, two measured traits, two ordination axes, spatial field on.
-      It exercises every feature at once.
-    </p>
-
-    <div class="scroller">
-      <table>
-  <caption>Each variant differs from the reference in one respect only.</caption>
-  <thead>
-    <tr><th>Scenario</th><th>What changes</th><th>What it asks</th></tr>
-  </thead>
-  <tbody>
-    <tr><td class="name">spatial_isolated</td><td>traits off</td><td>Does the spatial term work with trait effects out of the way?</td></tr>
-    <tr><td class="name">traits_isolated</td><td>spatial off</td><td>Does the trait&times;environment term work without the spatial field competing?</td></tr>
-    <tr><td class="name">primers_3</td><td>2 &rarr; 3 primers</td><td>Does per-primer detection hold with more primers?</td></tr>
-    <tr><td class="name">low_information</td><td>40 sites, weak detection</td><td>The hard case: thin, realistic eDNA data.</td></tr>
-    <tr><td class="name">d_underfit</td><td>truth 4 axes, fit 2</td><td>Under-specifying the ordination &mdash; the common real mistake.</td></tr>
-    <tr><td class="name">d_overfit</td><td>truth 2 axes, fit 4</td><td>Over-specifying it.</td></tr>
-    <tr><td class="name">species_20</td><td>10 &rarr; 20 species</td><td>Does it hold as the community grows?</td></tr>
-    <tr><td class="name">occupancy</td><td>no PCR stage</td><td>The collapsed form: field replicates only.</td></tr>
-    <tr><td class="name">binary</td><td>no replicates</td><td>Pure JSDM, no detection model.</td></tr>
-  </tbody>
-</table>
-    </div>
-
-    <p>
-      Testing every <em>combination</em> would be roughly fifty cells and days of
-      compute. The cost of changing one thing at a time is that it can&rsquo;t see two
-      features that each work alone but break together. The reference design is the
-      exception: it runs traits and spatial simultaneously, so it covers the interaction
-      most likely to matter, since both write into the same equation.
-    </p>
-  </section>
-
-  <section>
-    <h2>Where things stand after the fixes</h2>
-    <p>
-      Ten scenarios, 100 simulated datasets each, no failures &mdash; 155,578
-      individual interval checks. Read against the 2.2-point standard error:
-      anything from 0.93 to 0.97 is indistinguishable from correct.
-    </p>
-
-    <div class="scroller">
-      <table>
-  <caption>Coverage by parameter and scenario, after the fixes. Red = intervals too narrow. Blue = wider than needed. Dash = not estimated in that design.</caption>
-  <thead>
-    <tr>
-      <th>What it is</th><th>base</th><th>spatial<br>only</th><th>traits<br>only</th>
-      <th>3 primers</th><th>weak<br>data</th><th>too few<br>axes</th><th>too many<br>axes</th>
-      <th>20 spp</th><th>occup.</th><th>JSDM</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr><td>Species intercepts</td><td class="num">0.948</td><td class="num">0.943</td><td class="num">0.942</td><td class="num">0.954</td><td class="num lo">0.862</td><td class="num">0.958</td><td class="num">0.950</td><td class="num">0.951</td><td class="num">0.953</td><td class="num">0.962</td></tr>
-    <tr><td>Environmental effects</td><td class="num">0.947</td><td class="num lo">0.883</td><td class="num">0.916</td><td class="num">0.942</td><td class="num lo">0.826</td><td class="num">0.936</td><td class="num">0.939</td><td class="num">0.933</td><td class="num">0.947</td><td class="num">0.952</td></tr>
-    <tr><td>Trait &times; environment</td><td class="num">0.948</td><td class="num">&mdash;</td><td class="num">0.945</td><td class="num hi">0.975</td><td class="num lo">0.840</td><td class="num">0.953</td><td class="num">0.955</td><td class="num">0.925</td><td class="num hi">0.970</td><td class="num">0.938</td></tr>
-    <tr><td>Stage&nbsp;2 false positives</td><td class="num">0.945</td><td class="num">0.947</td><td class="num">0.949</td><td class="num">0.937</td><td class="num">0.911</td><td class="num">0.946</td><td class="num">0.943</td><td class="num">0.950</td><td class="num">&mdash;</td><td class="num">&mdash;</td></tr>
-    <tr class="flag"><td>Stage&nbsp;1 contamination</td><td class="num hi">0.983</td><td class="num hi">0.983</td><td class="num hi">0.978</td><td class="num hi">0.985</td><td class="num lo">0.602</td><td class="num hi">0.980</td><td class="num hi">0.981</td><td class="num hi">0.982</td><td class="num hi">0.985</td><td class="num">&mdash;</td></tr>
-    <tr class="flag"><td>Stage&nbsp;2 detection</td><td class="num">0.902</td><td class="num">0.911</td><td class="num">0.900</td><td class="num">0.925</td><td class="num lo">0.109</td><td class="num">0.913</td><td class="num">0.919</td><td class="num">0.908</td><td class="num">&mdash;</td><td class="num">&mdash;</td></tr>
-    <tr class="flag"><td>Species correlations</td><td class="num lo">0.763</td><td class="num lo">0.758</td><td class="num lo">0.758</td><td class="num lo">0.768</td><td class="num lo">0.764</td><td class="num hi">0.980</td><td class="num lo">0.755</td><td class="num lo">0.752</td><td class="num lo">0.761</td><td class="num lo">0.752</td></tr>
-    <tr class="flag"><td>Stage&nbsp;1 collection covariates</td><td class="num lo">0.763</td><td class="num lo">0.762</td><td class="num lo">0.771</td><td class="num lo">0.718</td><td class="num hi">0.983</td><td class="num lo">0.750</td><td class="num lo">0.752</td><td class="num lo">0.727</td><td class="num lo">0.709</td><td class="num">&mdash;</td></tr>
-  </tbody>
-</table>
-    </div>
-
-    <h3>What holds</h3>
-    <p>
-      Species intercepts, environmental effects, the trait&times;environment
-      (fourth-corner) term and the Stage&nbsp;2 false-positive rate all land at
-      or near nominal in every scenario but one. The quantities most likely to
-      be reported in an ecology paper can be quoted as they stand &mdash; with one
-      caveat, below, about how far the species intercepts sit from the truth.
-    </p>
-
-    <h3>What was fixed, and what wasn&rsquo;t</h3>
-    <p>
-      <strong>Collection covariates: better, not fixed.</strong> The prior for these
-      coefficients was centred on 1 rather than 0, pulling every estimate upward. That
-      has been corrected, and it helped &mdash; every scenario gained three to five
-      points and two-thirds of the bias disappeared. But coverage is still 0.71 to 0.77,
-      and the remainder has the same signature as before: flat across model type, primer
-      count, species count and ordination misspecification. A fault that doesn&rsquo;t
-      vary with the data is in the code, not the data. There is a second cause still to
-      find.
-    </p>
-    <p>
-      <strong>Species correlations: unchanged, because the cause is unchanged.</strong>
-      A rescaling step preserves the model&rsquo;s predictions but silently changes the
-      correlation matrix computed from them, inflating correlations toward
-      &plusmn;1. It has not been altered, and the re-run confirms the consequence
-      precisely: identical data in, identical coverage out. The exception remains
-      informative &mdash; where the model is given too few ordination axes, coverage
-      rises to 0.98, because the intervals widen enough to hide the problem. A fit with
-      too few factors looks better calibrated than it is.
-    </p>
-
-    <h3>The one that turned out not to be a bug</h3>
-    <p>
-      Stage&nbsp;2 detection still collapses to 0.11 in the weak-data scenario, against
-      0.90 elsewhere. The first version of this page called that a fault in the prior.
-      <strong>That was wrong, and worth correcting plainly.</strong>
-    </p>
-    <p>
-      In this model the true detection rate and the false-positive rate enter the
-      likelihood symmetrically: nothing in the equations distinguishes &ldquo;present and
-      usually detected&rdquo; from &ldquo;absent and often contaminated&rdquo;. The
-      informative prior is what breaks that tie. Flatten it and the model is not
-      better calibrated &mdash; it is unidentified, free to settle on either explanation.
-      The earlier experiment that appeared to fix coverage only worked because the two
-      rates happened to be far apart in that scenario.
-    </p>
-    <p>
-      So this cell is not measuring a defect. It is measuring the price of an assumption
-      the model needs in order to mean anything at all, in the regime where that
-      assumption is least comfortable. The open question is not <em>how do we remove
-      it</em> but <em>how strong should it be</em> &mdash; a modelling judgement, and one
-      users should be told about when their detection rates are genuinely low.
-    </p>
-  </section>
-
-  <section>
-    <h2>Two things the re-run turned up</h2>
-
-    <div class="finding">
-      <h3>Species intercepts drifted, and coverage never showed it</h3>
-      <p>
-        On identical data, the average distance between the estimated species intercepts
-        and their true values roughly doubled between the two runs, in nine of the ten
-        scenarios. Coverage stayed put at 0.94, because the intervals are wide enough to
-        absorb the shift &mdash; so nothing in the table above reveals it.
-      </p>
-      <p>
-        This is a good argument for tracking how far estimates sit from the truth
-        alongside whether the intervals cover it. The two answer different questions, and
-        here only one of them noticed.
-      </p>
-      <p>
-        Since this was written the bias has been traced, though not the doubling. Two
-        further experiments removed the covariate effects on collection from the model
-        entirely, by two different routes and on two different kinds of response, and in
-        both the species intercepts land on their true values. The bias is therefore
-        inherited from those covariate effects rather than being a fault in the intercepts
-        themselves, and it should resolve when they do &mdash; they are the remaining open
-        finding below. What still has no stated cause is why it grew between the two runs.
-      </p>
-    </div>
-
-    <div class="finding">
-      <h3>Stage&nbsp;1 contamination now overshoots</h3>
-      <p>
-        This parameter used to sit close to nominal, between 0.94 and 0.96. It now covers
-        at 0.98 in nine scenarios &mdash; intervals wider than they need to be. The
-        likely cause is the same edit that corrected the collection-covariate prior,
-        which also widened its variance, and appears to have widened it too far.
-      </p>
-      <p>
-        Overcoverage is the safe direction, so this is not urgent. But it is a reminder
-        that a fix can overshoot as easily as it can fall short, and that both directions
-        are worth watching.
-      </p>
-    </div>
-  </section>
-
-  <section>
-    <h2>Does the model actually find the species?</h2>
-    <p>
-      Coverage asks whether the model&rsquo;s stated uncertainty is honest. It does not ask
-      whether the answers are any good. A model that reported &ldquo;somewhere between none
-      and all of them&rdquo; for every species would score perfect coverage and be useless.
-      The tier&nbsp;2 occupancy check asks that second question, on one dataset of a hundred
-      sites and ten species.
+      It exercises every feature at once. Definitions:
+      <code>tests/testthat/helper-simstudy.R</code>.
     </p>
     <div class="scroller">
       <table>
-        <caption>
-          One fit, ten species. &ldquo;Swept&rdquo; is the range seen across eight different
-          sets of random seeds; each floor sits well below the worst of them, so the check
-          fails on breakage rather than on an unlucky draw.
-        </caption>
+        <caption>Each variant differs from the reference in one respect only.</caption>
         <thead>
-          <tr><th>What it measures</th><th>Result</th><th>Floor</th><th>Swept</th></tr>
+          <tr><th>Scenario</th><th>What changes</th><th>What it asks</th></tr>
         </thead>
         <tbody>
-          <tr>
-            <td>How closely estimated occupancy tracks the truth, averaged over species</td>
-            <td class="num">0.633</td><td class="num">0.30</td><td class="num">0.498&ndash;0.753</td>
-          </tr>
-          <tr>
-            <td>Species clearing that bar individually</td>
-            <td class="num">8 of 10</td><td class="num">5</td><td class="num">7&ndash;10</td>
-          </tr>
-          <tr>
-            <td>How well sites where a species was present are told from sites where it was not</td>
-            <td class="num">0.776</td><td class="num">0.60</td><td class="num">0.748&ndash;0.855</td>
-          </tr>
-          <tr>
-            <td>Coverage of the coefficients that drive occupancy</td>
-            <td class="num">0.967</td><td class="num">0.55</td><td class="num">0.800&ndash;1.000</td>
-          </tr>
-          <tr>
-            <td>How closely those coefficients track their true values</td>
-            <td class="num">0.751</td><td class="num">0.30</td><td class="num">0.647&ndash;0.900</td>
-          </tr>
+          <tr><td class="name">spatial_isolated</td><td>traits off</td><td>Does the spatial term work with trait effects out of the way?</td></tr>
+          <tr><td class="name">traits_isolated</td><td>spatial off</td><td>Does the trait&times;environment term work without the spatial field competing?</td></tr>
+          <tr><td class="name">primers_3</td><td>2 &rarr; 3 primers</td><td>Does per-primer detection hold with more primers?</td></tr>
+          <tr><td class="name">low_information</td><td>40 sites, weak detection</td><td>The hard case: thin, realistic eDNA data.</td></tr>
+          <tr><td class="name">d_underfit</td><td>truth 4 axes, fit 2</td><td>Under-specifying the ordination &mdash; the common real mistake.</td></tr>
+          <tr><td class="name">d_overfit</td><td>truth 2 axes, fit 4</td><td>Over-specifying it.</td></tr>
+          <tr><td class="name">species_20</td><td>10 &rarr; 20 species</td><td>Does it hold as the community grows?</td></tr>
+          <tr><td class="name">occupancy</td><td>no PCR stage</td><td>The collapsed form: field replicates only.</td></tr>
+          <tr><td class="name">binary</td><td>no replicates</td><td>Pure JSDM, no detection model.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Is the uncertainty honest?</h2>
+    <p>
+      Two parameters from the reference design, each fitted to 100 simulated datasets.
+      Every mark is one interval; the dark ones missed the truth. Both promise to miss
+      five times.
+    </p>
+
+    <div class="tally-set">
+      <figure class="tally">
+        <div class="tally-head">
+          <div class="tally-label">
+            <b>Environmental responses</b> (<code>B</code>) &mdash; the interval means what it says
+          </div>
+          <div class="tally-delta">94 of 100</div>
+        </div>
+        <div class="tally-row">
+          <div class="tally-when">n = 100</div>
+          <div class="marks" data-hits="94"></div>
+          <div class="tally-score is-good">0.944</div>
+        </div>
+        <figcaption class="tally-note">
+          Six misses where five were promised. That is within the noise of the
+          measurement, and this is what a calibrated parameter looks like.
+        </figcaption>
+      </figure>
+
+      <figure class="tally">
+        <div class="tally-head">
+          <div class="tally-label">
+            <b>Collection-covariate effects</b> (<code>beta_theta</code>) &mdash; overconfident, and open
+          </div>
+          <div class="tally-delta">77 of 100</div>
+        </div>
+        <div class="tally-row">
+          <div class="tally-when">n = 100</div>
+          <div class="marks" data-hits="77"></div>
+          <div class="tally-score is-bad">0.769</div>
+        </div>
+        <figcaption class="tally-note">
+          Twenty-three misses against five promised, more than four times the advertised
+          error rate. A reader quoting these intervals would be substantially more
+          confident than the data warrants.
+        </figcaption>
+      </figure>
+    </div>
+
+    <p>
+      The same measurement for every parameter, summarised across all ten scenarios.
+      Nominal is 0.95, and at 100 datasets the measurement itself carries a standard error
+      of about 0.022, so differences smaller than that are noise.
+    </p>
+    <div class="scroller">
+      <table>
+        <caption>Median across scenarios, with the range and the worst-performing cell.</caption>
+        <thead>
+          <tr><th>Parameter</th><th>median</th><th>lowest</th><th>highest</th><th>worst cell</th></tr>
+        </thead>
+        <tbody>
+          <tr class="flag"><td class="name">beta_theta</td><td class="num lo">0.757</td><td class="num">0.707</td><td class="num">0.985</td><td>occupancy</td></tr>
+          <tr class="flag"><td class="name">resid_cor</td><td class="num lo">0.760</td><td class="num">0.752</td><td class="num">0.980</td><td>binary</td></tr>
+          <tr><td class="name">p</td><td class="num">0.909</td><td class="num lo">0.100</td><td class="num">0.928</td><td>low_information</td></tr>
+          <tr><td class="name">B</td><td class="num">0.937</td><td class="num">0.808</td><td class="num">0.951</td><td>low_information</td></tr>
+          <tr><td class="name">q</td><td class="num">0.944</td><td class="num">0.911</td><td class="num">0.948</td><td>low_information</td></tr>
+          <tr><td class="name">G</td><td class="num">0.948</td><td class="num">0.830</td><td class="num">0.973</td><td>low_information</td></tr>
+          <tr><td class="name">B0</td><td class="num">0.949</td><td class="num">0.865</td><td class="num">0.962</td><td>low_information</td></tr>
+          <tr><td class="name">theta0</td><td class="num hi">0.982</td><td class="num">0.612</td><td class="num">0.987</td><td>low_information</td></tr>
+          <tr><td class="name">sigma_b</td><td class="num hi">1.000</td><td class="num">1.000</td><td class="num">1.000</td><td>&mdash;</td></tr>
         </tbody>
       </table>
     </div>
     <p>
-      Read these as a floor on competence rather than a measure of it. One fit on a hundred
-      sites is not much data, the thresholds are deliberately generous, and the job is to
-      notice a broken connection between truth and estimate rather than to characterise how
-      well the model performs. The separation figure is the easiest to read on its own:
-      0.5 would mean the model cannot tell a site where a species was present from one where
-      it was not, and 1.0 would mean it always can.
+      <strong>Most of the model is well calibrated.</strong> <code>B</code>,
+      <code>G</code>, <code>q</code> and <code>B0</code> all sit within noise of the
+      advertised 0.95 in the reference design and in most variants. Combined with the
+      accuracy table, <code>B</code> and <code>G</code> are the parts of this model you
+      can quote with a straight face.
     </p>
     <p>
-      The species are judged pooled, rather than each having to pass on its own, because a
-      per-species floor turned out to be unworkable. Across the eight seed sets the worst
-      individual species ranged from &minus;0.401 to 0.913 &mdash; so any threshold strict
-      enough to be worth having would have failed on ordinary, healthy data. Counting how
-      many species clear the bar keeps most of what a per-species check would have caught,
-      without that fragility.
+      <strong><code>beta_theta</code> is genuinely overconfident.</strong> A median of
+      0.757 against a promised 0.95 means roughly one interval in four misses when one in
+      twenty should. This is a real defect, localised to the collection-covariate slopes,
+      and it is open.
     </p>
-  </section>
+    <p>
+      <strong><code>theta0</code> overcovers at 0.982.</strong> Safe rather than
+      dangerous, but read it alongside the accuracy table: those wide intervals sit around
+      estimates that correlate with truth at 0.342. Honest about being uninformative.
+    </p>
+    <p>
+      <strong><code>sigma_b</code> reads 1.000 everywhere</strong> because its prior is
+      tight enough to dominate the data. It is not evidence of anything.
+    </p>
 
-  <section>
-    <h2>Where this leaves the package</h2>
-    <div class="pending">
+    <div class="finding">
+      <h3>Do not read the <code>resid_cor</code> row as undercoverage</h3>
       <p>
-        Of the three problems the first study found, one is partly fixed, one is
-        untouched, and one turned out not to be a problem at all. The re-run added two
-        more. Every one is recorded with the measurement that identified it, so nothing
-        rests on recollection.
+        It looks like the second-worst calibrated parameter in the table. It is something
+        stranger, and the number should not be quoted as evidence for or against anything
+        until the measurement is repaired.
       </p>
       <p>
-        None of this was visible from reading the code. An audit had already been over
-        these files and walked past all of it. It took a study that could say
-        <em>which</em> parameters were miscalibrated before the causes became findable
-        &mdash; and a second run on the same data before the fixes could be told apart
-        from noise.
+        The credible intervals for residual correlations span almost the entire range a
+        correlation can occupy: <strong>98.6% are wider than 1.9</strong> on a scale
+        bounded by &minus;1 and 1, median width 1.999. An interval that wide contains
+        everything, so coverage should be near perfect. It is 0.760 only because a
+        quarter of the true correlations sit at exactly &plusmn;1, right on the boundary,
+        and fall a hair outside.
+      </p>
+      <p>
+        Coverage here is therefore <em>arithmetically</em> one minus the share of true
+        correlations equal to &plusmn;1 &mdash; 0.763 predicted against 0.763 measured in
+        the reference cell, and 0.980 against 0.980 in <code>d_underfit</code>, the one
+        scenario simulated with four ordination axes instead of two rather than anything
+        about the model. With two axes each species is a two-dimensional vector and many
+        pairs come out exactly collinear; with four that is rare.
+      </p>
+      <p>
+        The honest summary is the accuracy table: residual correlations correlate with
+        truth at <strong>0.090</strong>. They are not being recovered, and the intervals
+        are too wide rather than too narrow. If species co-occurrence is what you came for,
+        this configuration of the model does not deliver it, and
+        <code>plotResidualCorrelationMatrix()</code> should be read with that in mind.
       </p>
     </div>
   </section>
 
+  <section>
+    <h2>Where it breaks down</h2>
+    <p>
+      <strong>Thin data breaks detection outright.</strong> In
+      <code>low_information</code> &mdash; 40 sites and weak detection, which is a
+      realistic eDNA survey rather than a pathological one &mdash; <code>p</code> covers
+      at <strong>0.100</strong> with a bias of +0.49. Detection probability is not
+      identified there, and every parameter downstream of it degrades: <code>theta0</code>
+      falls to 0.612, <code>B0</code> carries a bias of &minus;1.07. This is the cell to
+      look at before trusting the model on a small survey.
+    </p>
+    <p>
+      <strong>The spatial range parameter is not tested at all.</strong> It is never
+      recovered by the current sampler, so it is excluded from every table above. No cell
+      in this study says anything about spatial range.
+    </p>
+    <p>
+      <strong>These are one run at one seed.</strong> Every number here comes from a
+      single execution of the study. The coverage figures carry a standard error near
+      0.022; the single-fit table at the top has no error bar at all and should be read as
+      a floor on competence rather than a measurement of it.
+    </p>
+  </section>
+
+  <section>
+    <h2>What runs when</h2>
+    <div class="tiers">
+      <div class="tier">
+        <div class="tier-when">10&nbsp;sec<br>every&nbsp;run</div>
+        <div class="tier-body">
+          <h3>Does it work at all?</h3>
+          <p>
+            Fits every configuration the package offers &mdash; two-stage,
+            occupancy-only, pure JSDM, with and without traits or spatial structure &mdash;
+            and checks each completes and returns sensibly shaped output. One test per bug
+            already fixed, named after it, so none returns unnoticed. Plus the convergence
+            diagnostics, checked against values worked out by hand.
+            <code>test-smoke-configs.R</code>, <code>test-api-contracts.R</code>,
+            <code>test-regression-bugs.R</code>, <code>test-diagnostics.R</code>.
+          </p>
+          <p>
+            Checks <em>shape</em> rather than exact numbers, because any legitimate change
+            to the sampler moves every number and a suite of stored values would turn each
+            such change into a wall of meaningless failures. It is also partly forced: the
+            model reproduces exactly from a seed on one processor core but not on several,
+            since work goes to whichever core is free first and that order varies. Results
+            are unaffected, but a run that must be repeated exactly has to be pinned, and
+            two tests are.
+          </p>
+        </div>
+      </div>
+
+      <div class="tier">
+        <div class="tier-when">30&nbsp;sec<br>local&nbsp;only</div>
+        <div class="tier-body">
+          <h3>Has anything obviously broken?</h3>
+          <p>
+            Five simulated datasets fitted and compared against known truth, plus the
+            per-species occupancy check at the top of this page. Too few to measure
+            coverage &mdash; these are canaries. Their job is catching a broken connection
+            between truth and estimate, which shows up as coverage near zero rather than
+            merely low. <code>test-recovery.R</code>,
+            <code>test-recovery-occupancy.R</code>.
+          </p>
+        </div>
+      </div>
+
+      <div class="tier">
+        <div class="tier-when">2.8&nbsp;hr<br>on&nbsp;demand</div>
+        <div class="tier-body">
+          <h3>Is it accurate, and is it honest?</h3>
+          <p>
+            One hundred simulated datasets for each of ten scenarios: the study behind
+            every grid-scale number on this page. The run reported here fitted the model
+            1000 times across six processor cores in 167 minutes without a single failure.
+            <code>test-coverage-study.R</code>, <code>dev/simstudy/run_study.R</code>.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <footer>
-    Two parameters are deliberately absent from every table: the spatial length-scale and
-    the factor-score variance. Neither is currently recoverable, both are recorded as open
-    bugs, and reporting a coverage figure for either would be misleading rather than merely
-    uninformative. One further parameter, the residual variance, reads as perfect coverage
-    everywhere because its prior dominates by construction &mdash; not because it is well
-    estimated.
+    <p>
+      Results from a single run of <code>dev/simstudy/run_study.R</code> on 2 August 2026:
+      R = 100 replicates, ten production scenarios, 1000 fits, 2 chains of 1000 iterations
+      after 1000 burn-in, six worker processes each pinned to one thread
+      (<code>RCPP_PARALLEL_NUM_THREADS=1</code>), 167 minutes, zero failures. Package at
+      commit <code>f4a59e4</code>. The per-species table is a separate single fit from
+      <code>tests/testthat/test-recovery-occupancy.R</code>. Full design, measurements and
+      open questions: <code>dev/simstudy/PLAN.md</code>.
+    </p>
   </footer>
 
 </div>
