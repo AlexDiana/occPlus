@@ -396,6 +396,8 @@ The all-cell average of 0.944 is misleading. Per cell it is **0.978-0.985 in nin
 
 Overcoverage is the safe direction. This entry originally guessed the widened `diag(2)` prior variance had overshot; §14.7 disproved that directly, and the M ladder (§13.7) instead points at Stage 1 under-identification, which relaxes as M rises.
 
+**Revised 2 August, see the addendum in §14.7.** Two corrections. The §14.7 disproof covers `b_betatheta`'s prior *variance* only; `42198d9` also corrected its *mean* from 1 to 0, and that half was never tested. And the framing "moved from mildly under to distinctly over" understates what happened: over the same cells, mean absolute bias fell from 0.0175 to 0.0020 while interval width rose 25%. `theta0` became essentially unbiased, and its pre-fix near-nominal coverage was a downward bias offsetting narrow intervals rather than a healthy state.
+
 ### 12.4 What holds
 
 `q`, `B0`, `B` and `G` are at or near nominal in every cell except `low_information`. The quantities most likely to be reported in an ecology paper remain trustworthy -- with the `B0` bias caveat in 12.2, which affects the point estimate rather than the interval.
@@ -670,6 +672,16 @@ Dropped, not deferred. Its purpose was to confirm `theta0` has genuinely reached
 A **20-fold** reduction in the prior variance moved coverage by 0.006. The paired bias change reaches 2.7 SE at var = 0.1, so it is detectable, but it is far too small to matter: reaching nominal from 0.986 by this route would need an extrapolation the data does not support. **Coupling through `b_betatheta` is not what makes `theta0` overcover.**
 
 That is outcome 2 of 14.4, so the next test is `theta0`'s own `Beta(1, 20)` prior, which already has `listPriors$a_theta0`/`b_theta0` hooks and needs no code change. Given 14.5's priority argument, that is worth doing only if it can ride along with another run.
+
+**Both conclusions in the two paragraphs above were revised on 2 August. Read them with this.**
+
+*The disproof covers half the change.* As this section itself notes further down, `42198d9` widened `B_betatheta`'s variance from `diag(1)` to `diag(2)` **and corrected its mean from 1 to 0**. Only the variance was varied here. So "coupling through `b_betatheta` is not what makes `theta0` overcover" is established for the variance and untested for the mean, and the mean is the half that would plausibly shift a biased estimate.
+
+*And the `theta0` prior arm is the wrong follow-up.* Re-reading the two saved runs on identical data (`simstudy-20260728-175534.rds` pre-fix, `simstudy-20260729-143756.rds` post-fix), across all cells but `low_information`: coverage 0.938-0.959 to 0.978-0.985, mean interval width 0.113 to 0.143 (+25%), and **mean absolute bias 0.0175 to 0.0020**, a factor of nine. `theta0`'s point estimate went from clearly biased to essentially unbiased, which was never recorded.
+
+That reframes the finding. Pre-fix coverage near nominal was a coincidence: the `Beta(1, 20)` prior mean of 0.0476 sits below the truth mean of 0.06, pulling estimates down, and intervals that were too narrow offset that bias almost exactly. The fixes removed the bias and left the width. `theta0`'s own prior never changed, so it cannot explain a change in behaviour, and the posterior is not prior-dominated in either run -- 0.68 of the prior's 95% width pre-fix, 0.86 post-fix. Tightening it would narrow the interval and mechanically improve coverage while explaining nothing.
+
+**The arm worth running, if this is ever revisited, is `b_betatheta`'s prior mean.** It tests the untested half and would account for the bias improvement and the width increase together. See TODO.md group B.
 
 ### `B0`: an unplanned diagnosis, and the most useful thing here
 

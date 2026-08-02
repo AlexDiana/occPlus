@@ -155,13 +155,25 @@ Every code change Claude made, newest first. None has had human review beyond Do
 
     ALEX TO CHECK
 
-6.  **`theta0` overcovers at 0.978-0.985, having been near nominal before the fixes.** Measured by the post-fix re-run (`PLAN.md` 12.3); pre-fix it sat at 0.938-0.959. The all-cell average of 0.944 hides this, because `low_information` pulls it down at 0.602.
+6.  **`theta0`'s intervals are ~25% wider than they need to be, and that is the price of its bias being fixed.** Coverage 0.978-0.985 post-fix against 0.938-0.959 pre-fix (`PLAN.md` 12.3). The all-cell average of 0.944 hides it, because `low_information` pulls it down at 0.602.
 
-    **Two candidate causes ruled out.** The M ladder showed overcoverage falling toward nominal as M rises (0.986 at `M2`, 0.944 at `M10`) while the matched `K30` control makes it worse at 0.996, which reads as Stage 1 under-identification (`PLAN.md` 13.7). But that reading has a hole: pre-fix, `theta0` was fine at the *same* M = 2. And the coupling hypothesis, that `b_betatheta`'s widened variance propagates through `w` into `sample_theta0()`, was tested directly and disproved: a 20-fold reduction moved coverage by 0.006 (`PLAN.md` 14.7).
+    **Re-read 2 August from the two saved runs, and the framing above was wrong.** Comparing `simstudy-20260728-175534.rds` (pre-fix) with `simstudy-20260729-143756.rds` (post-fix) on identical data, over all cells except `low_information`:
 
-    **Priority: lowest of the open findings, and it should stay there.** Overcoverage is the safe direction; it costs power, not correctness. The only untested candidate is `theta0`'s own `Beta(1, 20)` prior, which already has `listPriors$a_theta0`/`b_theta0` hooks and needs no code change.
+    - coverage 0.938-0.959 -> 0.978-0.985
+    - mean interval width 0.113 -> 0.143, i.e. **+25%**
+    - mean absolute bias **0.0175 -> 0.0020**, a factor of nine
 
-    CLAUDE TO PIGGYBACK A theta0-PRIOR ARM ON THE NEXT RUN, NOT TO RUN ONE FOR THIS ALONE
+    **`theta0`'s point estimate went from clearly biased to essentially unbiased.** That was not recorded anywhere, and it inverts the item. Pre-fix coverage near nominal was a *coincidence*, not health: the `Beta(1, 20)` prior mean of 0.0476 sits below the truth mean of 0.06, so estimates were pulled down, and intervals that were too narrow offset that bias almost exactly. Two errors cancelling. The fixes removed the bias and left the width, so what looks like a regression in the coverage column is a genuine improvement in the bias column with an unaddressed remainder.
+
+    **So this is not "`theta0` was fine and broke".** It is "`theta0` was quietly biased, is no longer, and its intervals have not caught up".
+
+    **One of the two "ruled out" causes is only half ruled out.** The M ladder reading (overcoverage falling toward nominal as M rises, 0.986 at `M2` to 0.944 at `M10`, while the matched `K30` control worsens to 0.996) still has the hole it always had: pre-fix, `theta0` was fine at the *same* M = 2. The coupling hypothesis is the one to reopen. *Fixed bugs* 25 changed `b_betatheta`'s prior **mean** (1 to 0) *and* widened its **variance** (`diag(1)` to `diag(2)`). `PLAN.md` 14.7 tested only the variance -- a 20-fold reduction moved coverage by 0.006 -- and that was read as disproving the coupling. **The mean was never tested**, and it is the half that plausibly matters, since it is also the change that would remove a downward bias.
+
+    **The `theta0`-prior arm is the wrong test and should not be run.** `theta0`'s own prior never changed, so it cannot explain a change in behaviour; and the posterior is not prior-dominated in either run -- width is 0.68 of the prior's 95% width pre-fix and 0.86 post-fix, informative in both. Tightening it would narrow the interval and mechanically improve coverage while explaining nothing.
+
+    **Priority: still the lowest of the open findings.** Overcoverage costs power, not correctness, and the parameter is now unbiased, which is the half that matters for a paper.
+
+    IF THIS IS EVER REVISITED, RUN A `b_betatheta` PRIOR **MEAN** ARM, NOT A `theta0` PRIOR ARM. It tests the untested half and would account for the bias improvement and the width increase together.
 
 7.  **`q` (Stage 2 false positives) degrades hard as `K` rises.** Found 29 July 2026 as a side effect of the M-ladder run (`PLAN.md` 13.7), which was not built to look for it. Never investigated beyond the measurement.
 
