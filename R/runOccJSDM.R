@@ -448,7 +448,9 @@ runOccJSDM <- function(data,
   {
     if(is.null(data$info) || is.null(data$OTU)){
       stop("data_info or OTU missing")
-    } else {
+    } else if (is.vector(data$OTU)) {
+      stop("data$OTU cannot be a vector. Please provide it as a matrix or data frame.")
+    }else {
       data_info <- as.data.frame(data$info)
       OTU <- data$OTU
     }
@@ -749,11 +751,19 @@ runOccJSDM <- function(data,
   {
     d <- get_param(listParams, "n_factors")
 
-    if(d > ncol(OTU)){
-      message("More species than factors. The number of factors will be capped to the
+    if(ncol(OTU) > 1){
+      if(d > ncol(OTU)){
+        message("More species than factors. The number of factors will be capped to the
             number of species")
-      d <- ncol(OTU)
+        d <- ncol(OTU)
+      }
+    } else {
+      if(d > 0){
+        message("Cannot have a factor model with just one species")
+        d <- 0
+      }
     }
+
 
     gt_default <- floor(sqrt(min(S, ncov_psi)))
     gt <- get_param(listParams, "n_lattrait", gt_default)

@@ -210,14 +210,13 @@ signature of a real defect being exposed by more information, not fixed by it.
 
     FIXED: (a) `createDataIdx()` is called with `maxP` (`R/runOccJSDM.R:638`) for `model = "occupancy"` too, where `maxP` was never assigned. It survives only because lazy evaluation never forces the promise; pass `NULL` explicitly.
 
-    (b) `d <- get_param(listParams, "n_factors")` defaults to 0, and the cap at `:716` uses `ncol(OTU)`, which is `NULL` for a single-species vector: `if (d > NULL)` errors.
+    FIXED (b) `d <- get_param(listParams, "n_factors")` defaults to 0, and the cap at `:716` uses `ncol(OTU)`, which is `NULL` for a single-species vector: `if (d > NULL)` errors.
 
     (c) `reparamFactorModel(A_output, C_output)` (`:1273`) assumes `qr.Q()` is square; when `ncov_psi < gt` it is not, and `diag(diag(R_current), nrow = d)` recycles.
 
     (d) The spatial-covariate numeric check at `:540` runs before the "names present in `data$info`" check at `:544`, so a mistyped name gives `undefined columns selected` rather than the intended message.
 
     FIXED: (e) `computeSpeciesDetected()`'s roxygen documents the removed Beta-approximation signature instead of its actual arguments.
-    
     
 
     ALEX WILL REVIEW THE ABOVE
