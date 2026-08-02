@@ -375,6 +375,17 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// samplePGvariables_parallel
+arma::mat samplePGvariables_parallel(const arma::mat& Xbeta);
+RcppExport SEXP _occJSDM_samplePGvariables_parallel(SEXP XbetaSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type Xbeta(XbetaSEXP);
+    rcpp_result_gen = Rcpp::wrap(samplePGvariables_parallel(Xbeta));
+    return rcpp_result_gen;
+END_RCPP
+}
 // computeNewOutputs
 arma::cube computeNewOutputs(const arma::mat& X, const arma::mat& B0_output, const arma::cube& B_output, const arma::cube& Ks_all, const arma::cube& Bs_output, const arma::cube& L_output, const arma::vec sigmah_output, const arma::vec idx_ls_output, const arma::vec& conflevels, bool useEnvCov, bool useSpatial, bool useBiotic, std::string model, bool verbose);
 RcppExport SEXP _occJSDM_computeNewOutputs(SEXP XSEXP, SEXP B0_outputSEXP, SEXP B_outputSEXP, SEXP Ks_allSEXP, SEXP Bs_outputSEXP, SEXP L_outputSEXP, SEXP sigmah_outputSEXP, SEXP idx_ls_outputSEXP, SEXP conflevelsSEXP, SEXP useEnvCovSEXP, SEXP useSpatialSEXP, SEXP useBioticSEXP, SEXP modelSEXP, SEXP verboseSEXP) {
@@ -627,6 +638,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_occJSDM_K", (DL_FUNC) &_occJSDM_K, 4},
     {"_occJSDM_K2", (DL_FUNC) &_occJSDM_K2, 4},
     {"_occJSDM_samplePGvariables", (DL_FUNC) &_occJSDM_samplePGvariables, 1},
+    {"_occJSDM_samplePGvariables_parallel", (DL_FUNC) &_occJSDM_samplePGvariables_parallel, 1},
     {"_occJSDM_computeNewOutputs", (DL_FUNC) &_occJSDM_computeNewOutputs, 14},
     {"_occJSDM_convert_to_correlation", (DL_FUNC) &_occJSDM_convert_to_correlation, 4},
     {"_occJSDM_sampleBuniv", (DL_FUNC) &_occJSDM_sampleBuniv, 5},

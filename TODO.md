@@ -332,7 +332,7 @@ which makes it macos compatible
 - Parallelise the sample_BBsl function in update_jsdmcoef, which is the most computationally heavy function in the
 whole JSDM machinery, using RcppParallel (so macos compatible again)
 
-Still investinating a way to parallelise samplePGvariables(psiCoef) and 
+Still investinating a way to parallelise 
 sample_U_cpp, which are now the heaviest calculations left.
 
 Also worth investigating a faster to compute the variancePartitioning or the WAIC.
