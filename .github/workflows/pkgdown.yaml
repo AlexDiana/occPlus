@@ -1,0 +1,70 @@
+# Workflow derived from https://github.com/r-lib/actions/tree/v2/examples
+# Need help debugging build failures? Start at https://github.com/r-lib/actions#where-to-find-help
+# MANUAL TRIGGER ONLY, deliberately. The r-lib template also fires this on
+# push to main, on pull_request, and on release; those four triggers were
+# removed so that landing this file on main does not publish a site as a side
+# effect of an ordinary push. Nothing here runs until someone opens the
+# Actions tab and clicks "Run workflow".
+#
+# To turn automatic deployment back on, restore:
+#
+#   push:
+#     branches: [main, master]
+#
+# Note that this file is NOT what currently serves https://alexdiana.github.io/occJSDM/.
+# That is GitHub's built-in pages-build-deployment, which runs Jekyll over the
+# main branch root because Pages is configured with source main "/" (see
+# _config.yml). Deploying this workflow's output would need Pages repointed at
+# the gh-pages branch, which requires admin on the repository.
+on:
+  workflow_dispatch:
+
+name: pkgdown.yaml
+
+permissions: read-all
+
+jobs:
+  pkgdown:
+    runs-on: ubuntu-latest
+    # Only restrict concurrency for non-PR jobs
+    concurrency:
+      group: pkgdown-${{ github.event_name != 'pull_request' || github.run_id }}
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+
+      # AGENTS.md, CLAUDE.md, and TODO.md are agent- and maintainer-facing
+      # working notes, not documentation for package users. pkgdown has no
+      # config option to exclude specific root .md files from its home
+      # section -- it renders every one it finds (see package_mds() in the
+      # pkgdown source) -- so the only way to keep them off the public site
+      # is to remove them from the checkout before the build step runs. They
+      # stay tracked in git; this only affects the copy the site is built
+      # from. Keep this list in sync with any new root-level .md file that
+      # is written for agents/maintainers rather than for users.
+      - name: Remove internal docs before building the site
+        run: rm -f AGENTS.md CLAUDE.md TODO.md
+
+      - uses: r-lib/actions/setup-pandoc@v2
+
+      - uses: r-lib/actions/setup-r@v2
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::pkgdown, local::.
+          needs: website
+
+      - name: Build site
+        run: pkgdown::build_site_github_pages(new_process = FALSE, install = FALSE)
+        shell: Rscript {0}
+
+      - name: Deploy to GitHub pages 🚀
+        if: github.event_name != 'pull_request'
+        uses: JamesIves/github-pages-deploy-action@d92aa235d04922e8f08b40ce78cc5442fcfbfa2f # v4.8.0
+        with:
+          clean: false
+          branch: gh-pages
+          folder: docs

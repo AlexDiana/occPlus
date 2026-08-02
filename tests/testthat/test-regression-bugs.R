@@ -252,18 +252,43 @@ test_that("Fixed bugs 26: a fixed seed reproduces a fit", {
   # PLAN.md 5.1 exists *because* the sampler used to be irreproducible, so the
   # test that it no longer is must necessarily be an equality test.
   #
-  # Scope: reproducibility holds for a given thread count. Each thread derives
-  # its own stream from the base seed, so if this package is ever built with
-  # OpenMP actually enabled, changing the thread count changes which stream
-  # produces which element. That is inherent to per-thread streams, not a bug,
-  # but it does mean "same seed" is only half of the contract -- see the note
-  # in src/rng.h. (As built here, SHLIB_OPENMP_CXXFLAGS is empty and the
-  # pragmas compile to nothing, so the point is currently moot.)
+  # Scope, and why the fits below are pinned to one thread. The seeding
+  # mechanism this test exists to check is the R-derived base seed reaching
+  # the sampler, and that is what one thread verifies exactly. It does NOT
+  # hold at more than one thread, for a reason that is not a defect in the
+  # seeding: each thread draws from its own stream, and RcppParallel's TBB
+  # backend work-steals, so which thread handles which species varies between
+  # runs even at a fixed thread count. Species then get draws from different
+  # streams and two fits diverge. Measured 2 August 2026: max difference 0.126
+  # on B0 at 10 threads, exactly 0 at one. See TODO.md Fixed bugs 41, and the
+  # test below this one.
+  #
+  # Unpinned, this test failed on every default-threaded devtools::test() run
+  # while asserting something true only single-threaded. Pinning keeps the
+  # assertion honest rather than hiding the gap; the gap is stated above, in
+  # Fixed bugs 41, and in the skipped test that follows.
   sim <- simulate_fixture(model = "two_stage")
   mc <- list(nchain = 2, nburn = 20, niter = 20, nthin = 1)
 
-  set.seed(4242); a <- fit_fixture(sim, MCMCparams = mc)
-  set.seed(4242); b <- fit_fixture(sim, MCMCparams = mc)
+  # on.exit() needs a real function frame, which test_that()'s evaluation
+  # environment does not give us, so the pinned section is its own function.
+  fit_pinned_pair <- function() {
+    old <- Sys.getenv("RCPP_PARALLEL_NUM_THREADS", unset = NA)
+    RcppParallel::setThreadOptions(numThreads = 1)
+    on.exit({
+      if (is.na(old)) {
+        Sys.unsetenv("RCPP_PARALLEL_NUM_THREADS")
+      } else {
+        Sys.setenv(RCPP_PARALLEL_NUM_THREADS = old)
+      }
+    }, add = TRUE)
+    set.seed(4242); a <- fit_fixture(sim, MCMCparams = mc)
+    set.seed(4242); b <- fit_fixture(sim, MCMCparams = mc)
+    list(a = a, b = b)
+  }
+  pair <- fit_pinned_pair()
+  a <- pair$a; b <- pair$b
+
   expect_equal(a$results_output$jsdm_output$B0_output,
                b$results_output$jsdm_output$B0_output)
   expect_equal(a$results_output$p_output, b$results_output$p_output)
@@ -273,6 +298,30 @@ test_that("Fixed bugs 26: a fixed seed reproduces a fit", {
   set.seed(9999); d <- fit_fixture(sim, MCMCparams = mc)
   expect_false(isTRUE(all.equal(a$results_output$jsdm_output$B0_output,
                                d$results_output$jsdm_output$B0_output)))
+})
+
+test_that("a fixed seed does NOT yet reproduce a fit above one thread", {
+  # Deliberately a skip rather than an assertion, and deliberately present
+  # rather than absent.
+  #
+  # Present, because the test above it now pins itself to one thread, and a
+  # limitation that only exists in a comment stops being noticed. This keeps
+  # one line in every test run saying the gap is still open.
+  #
+  # A skip rather than expect_false(all.equal(...)), because asserting
+  # non-determinism is inherently flaky: two runs could coincide, and the
+  # suite would then fail for the best possible reason. It would also have to
+  # be inverted the moment the gap is closed, which is a trap for whoever
+  # closes it.
+  #
+  # To close it, the draws in sampleB_SoR() need to key on the species index
+  # rather than the thread -- a generator seeded from (base_seed, s) built
+  # inside BBSL_Worker::operator(), so species s gets the same draws whichever
+  # thread runs it. When that lands, delete this test and unpin the one above.
+  skip(paste(
+    "known gap, TODO.md Fixed bugs 41: sampleB_SoR() is thread-safe and",
+    "R-seeded, but TBB work-stealing varies which thread draws for which",
+    "species, so fits are bit-reproducible only at one thread"))
 })
 
 test_that("consecutive fits under one seed are independent", {

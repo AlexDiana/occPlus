@@ -1,0 +1,86 @@
+url: https://alexdiana.github.io/occJSDM/
+template:
+  bootstrap: 5
+
+reference:
+- title: Fit and simulate
+  desc: >
+    The core workflow: simulate data with known truth, fit a model, predict
+    to new sites.
+  contents:
+  - runOccJSDM
+  - simulateOccJSDMData
+  - predictNewSites
+
+- title: Diagnostics
+  desc: MCMC convergence and model fit.
+  contents:
+  - computeDiagnostics
+  - returnConvergenceDiagnostics
+  - plotTraceplot
+  - extractWAIC
+
+- title: Occupancy and detection probabilities
+  desc: >
+    The latent occupancy state and how it is estimated from noisy
+    observations.
+  contents:
+  - computeConditionalOccupancyProbs
+  - computePredictiveOccupancyProbs
+  - computeConditionalSamplePresenceProbs
+  - computeAverageCollectionProbs
+  - returnOccupancyRates
+  - plotOccupancyRates
+  - returnLatentPresences
+  - plotLatentPresences
+  - returnOccupancyGradient
+  - plotOccupancyGradient
+  - plotCumulativeSpeciesDetections
+
+- title: Detection rates by stage
+  desc: >
+    False-positive and false-negative rates for the two-stage
+    field-collection/PCR detection process.
+  contents:
+  - plotDetectionRates
+  - plotCollectionRates
+  - plotStage1FPRates
+  - plotStage2FPRates
+  - plotFPTPStage2Rates
+
+- title: Covariate effects
+  contents:
+  - returnCovariateEffect
+  - plotCovariateEffect
+  - returnOccupancyCovariates
+  - plotOccupancyCovariates
+  - returnCollectionCovariates
+  - plotCollectionCovariates
+  - returnTraitsCoeff
+  - plotTraitsCoefficients
+
+- title: JSDM structure
+  desc: Factor loadings, ordination, residual species correlation.
+  contents:
+  - returnFactorLoadings
+  - plotFactorLoadings
+  - plotBiplot
+  - returnOrdinationScores
+  - plotOrdinationScores
+  - returnResidualCorrelationMatrix
+  - plotResidualCorrelationMatrix
+  - returnVariancePartitioning
+  - plotVariancePartitioning
+
+- title: Example data
+  desc: Shipped with the package; used by the vignettes.
+  contents:
+  - sampledata
+  - sampleresults
+
+- title: Internal
+  desc: >
+    Documented but not exported. Listed here only because pkgdown requires
+    every man page to appear in the reference index somewhere.
+  contents:
+  - thinOutput

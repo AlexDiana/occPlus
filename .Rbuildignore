@@ -11,3 +11,9 @@
 ^PARALLELISATION$
 ^\.claude$
 ^CLAUDE\.md$
+^_config\.yml$
+^_pkgdown\.yml$
+^docs$
+^pkgdown$
+^\.github$
+^vignettes/articles$

@@ -2,13 +2,13 @@
 
 Plan for the "extensive testing on simulated datasets" item under *MEE paper / Doug to dos* in `TODO.md`. Drafted 27 July 2026.
 
-[Guide to the test suite](https://claude.ai/code/artifact/ad3d46eb-1fd4-49b5-b795-6b71474ef1d5 "Guide to the test suite")
+The plain-language guide to the test suite is now a pkgdown article in this repository, `vignettes/articles/validation.Rmd`, superseding the [original Claude artifact](https://claude.ai/code/artifact/ad3d46eb-1fd4-49b5-b795-6b71474ef1d5 "Guide to the test suite"). The site it belongs to is built but not published; see "The documentation site" in `AGENTS.md`.
 
-**Status as of 31 July 2026: the suite is built, and the grid plus four targeted experiments have been run.** The pre-fix grid (27-28 July) found four defects. The post-fix re-run (29 July) is the current table in §12 and added two more findings. Four targeted experiments followed: the M ladder (§13), the tighter-`beta_theta`-prior arms (§13.8), the prior-variance arms (§14), and the `ncov_theta = 0` discriminator (§15, run at R = 50 and confirmed at R = 200). Between them they disproved three hypotheses, narrowed one finding to a specific parameter row, and traced most of another. Sections marked *OPEN* still need a decision or a measurement.
+**Status as of 2 August 2026: the suite is built, and the grid plus five targeted experiments have been run.** The pre-fix grid (27-28 July) found four defects. The post-fix re-run (29 July) is the current table in §12 and added two more findings. Five targeted experiments followed: the M ladder (§13), the tighter-`beta_theta`-prior arms (§13.8), the prior-variance arms (§14), the `ncov_theta = 0` discriminator (§15, run at R = 50 and confirmed at R = 200), and Alex's `model = "continuous"` discriminator (§16). Between them they disproved four hypotheses, narrowed one finding to a specific parameter row, and traced another to its source. Sections marked *OPEN* still need a decision or a measurement.
 
-**Reading order if you are new to this:** §12 for the headline results, then §15.4-§15.6, which are the most recent and supersede parts of §12's attributions. §13.7 and §14.7 are the intermediate experiments. §1-§9 are the design and are mostly settled.
+**Reading order if you are new to this:** §12 for the headline results, then §15.4-§15.6 and §16.4-§16.5, which are the most recent and supersede parts of §12's attributions. §13.7 and §14.7 are the intermediate experiments. §1-§9 are the design and are mostly settled.
 
-**Two findings are open and both are now sharply localised.** `beta_theta` (the *slope overconfidence* item in `TODO.md` group B) undercovers only on the collection-covariate *slopes*; its intercept row covers at 0.968 (§15.5). `B0` (the *bias doubled* item) carries a bias of which 70% is downstream of those slopes and the rest is a real residual, 3.3 SE from zero at R = 200 (§15.6). Both now need a sampler-level look rather than more simulation.
+**One finding is open, and it is sharply localised.** `beta_theta` (the *slope overconfidence* item in `TODO.md` group B) undercovers only on the collection-covariate *slopes*; its intercept row covers at 0.968 (§15.5). It needs a sampler-level look rather than more simulation. `B0` (the *bias doubled* item) has since been traced to it: §16.4 finds `B0` unbiased in both arms where `beta_theta` is absent entirely, which removes the evidence for an independent `B0` defect and reduces that item to "downstream of the slopes". One unlooked-for finding is recorded but not filed, `B0` undercovering in the `continuous` arm (§16.5); it wants confirming at a second configuration first.
 
 **A note on citing TODO items.** Group B items are cited here by *subject*, never by position. Positions have been renumbered four times and every numeric reference broke each time, in some cases silently repointing at an unrelated item. See "Cross-referencing TODO items" in `AGENTS.md`.
 
@@ -307,9 +307,9 @@ Also: pooling coverage across species within a block buys precision, but those i
 
 3.  ~~`beta_theta` and `resid_cor` sit below nominal.~~ **RESOLVED and both traced.** `resid_cor` is the `reparamFactorModel()` item in `TODO.md` group B, confirmed by a paired re-run in which only 104 of 49,978 coverage decisions flipped. `beta_theta` was partly the prior mean (*Fixed bugs* 25); the residue is the slope-overconfidence item in group B, and simulation has now taken it as far as it can go. Ruled out: under-identification, prior width, pseudo-replication (§13, §14). Established: the defect sits on the **slopes** only, since the intercept row covers at 0.968 with the slopes removed (§15.5). What is left is a sampler-level question about the Polya-Gamma update, filed for Alex.
 
-4.  *OPEN.* **Presentation of tier-3 results for the paper.** Still deferred. The summary object feeds either a short pkgdown article or the manuscript directly.
+4.  *MOSTLY RESOLVED 2 August 2026.* **Presentation of tier-3 results for the paper.** The write-up is a pkgdown article, `vignettes/articles/validation.Rmd`. What is still open is only whether to publish the site while the group B items are open, and whether the manuscript quotes it or restates it.
 
-7.  *OPEN.* **The `B0` residual** (the *bias doubled* item in `TODO.md` group B). Removing the collection-covariate slopes removes 70% of the bias, but a remainder survives at 3.3 SE from zero at R = 200 (§15.6). So fixing item 4 will recover most of `B0` but not all of it, and the item cannot be closed as purely downstream. Cause not identified.
+7.  ~~The `B0` residual.~~ **RESOLVED 2 August 2026, as far as simulation can take it** (§16.4). Removing the collection-covariate slopes leaves a -0.0633 remainder at 3.3 SE (§15.6), which had been the only evidence for an independent `B0` defect. Alex's `model = "continuous"` discriminator settles it: `B0` is unbiased in both arms where `beta_theta` is absent entirely (+0.0066 at 1.2 SE here, +0.0122 at 1.0 SE in `binary`), on two likelihoods and two branches of the sampler. The remainder is better explained by `B0`/`theta`-intercept confounding at `M = 2` than by a defect, so the item reduces to downstream of the slope defect. Not quantitatively verified, and §16.2 says why that is accepted.
 
 5.  *OPEN, and the case keeps strengthening.* **SBC** (§7). Three separate instances now of a fixed truth conflicting with an informative prior: `sigma_b` reading 1.000 because it is prior-dominated, `p` collapsing where the true value sits far into a `Beta(5, 1)` tail, and `theta0` overcovering. All are artefacts of choosing truth independently of the prior, and SBC cannot produce them by construction.
 
@@ -395,6 +395,8 @@ Nine of ten cells moved more negative: base -0.113 -> -0.208, `occupancy` -0.024
 The all-cell average of 0.944 is misleading. Per cell it is **0.978-0.985 in nine cells** (was 0.938-0.959) and **0.602 in `low_information`** (was 0.477). So it moved from mildly under to distinctly over, except where information is thin.
 
 Overcoverage is the safe direction. This entry originally guessed the widened `diag(2)` prior variance had overshot; §14.7 disproved that directly, and the M ladder (§13.7) instead points at Stage 1 under-identification, which relaxes as M rises.
+
+**Revised 2 August, see the addendum in §14.7.** Two corrections. The §14.7 disproof covers `b_betatheta`'s prior *variance* only; `42198d9` also corrected its *mean* from 1 to 0, and that half was never tested. And the framing "moved from mildly under to distinctly over" understates what happened: over the same cells, mean absolute bias fell from 0.0175 to 0.0020 while interval width rose 25%. `theta0` became essentially unbiased, and its pre-fix near-nominal coverage was a downward bias offsetting narrow intervals rather than a healthy state.
 
 ### 12.4 What holds
 
@@ -671,6 +673,16 @@ A **20-fold** reduction in the prior variance moved coverage by 0.006. The paire
 
 That is outcome 2 of 14.4, so the next test is `theta0`'s own `Beta(1, 20)` prior, which already has `listPriors$a_theta0`/`b_theta0` hooks and needs no code change. Given 14.5's priority argument, that is worth doing only if it can ride along with another run.
 
+**Both conclusions in the two paragraphs above were revised on 2 August. Read them with this.**
+
+*The disproof covers half the change.* As this section itself notes further down, `42198d9` widened `B_betatheta`'s variance from `diag(1)` to `diag(2)` **and corrected its mean from 1 to 0**. Only the variance was varied here. So "coupling through `b_betatheta` is not what makes `theta0` overcover" is established for the variance and untested for the mean, and the mean is the half that would plausibly shift a biased estimate.
+
+*And the `theta0` prior arm is the wrong follow-up.* Re-reading the two saved runs on identical data (`simstudy-20260728-175534.rds` pre-fix, `simstudy-20260729-143756.rds` post-fix), across all cells but `low_information`: coverage 0.938-0.959 to 0.978-0.985, mean interval width 0.113 to 0.143 (+25%), and **mean absolute bias 0.0175 to 0.0020**, a factor of nine. `theta0`'s point estimate went from clearly biased to essentially unbiased, which was never recorded.
+
+That reframes the finding. Pre-fix coverage near nominal was a coincidence: the `Beta(1, 20)` prior mean of 0.0476 sits below the truth mean of 0.06, pulling estimates down, and intervals that were too narrow offset that bias almost exactly. The fixes removed the bias and left the width. `theta0`'s own prior never changed, so it cannot explain a change in behaviour, and the posterior is not prior-dominated in either run -- 0.68 of the prior's 95% width pre-fix, 0.86 post-fix. Tightening it would narrow the interval and mechanically improve coverage while explaining nothing.
+
+**The arm worth running, if this is ever revisited, is `b_betatheta`'s prior mean.** It tests the untested half and would account for the bias improvement and the width increase together. See TODO.md group B.
+
 ### `B0`: an unplanned diagnosis, and the most useful thing here
 
 `B0`'s bias responds strongly and monotonically to the same knob: -0.160 at var = 2, -0.106 at 0.5, -0.044 at 0.1. Paired, that is +0.054 (2.1 SE) and +0.116 (4.0 SE).
@@ -799,3 +811,62 @@ What remains is whatever handles the covariate columns specifically in the Polya
 **The 15.5 narrowing holds at four times the replicates.** `beta_theta` intercept-only coverage is **0.968** with SE 0.013, against 0.763 with the slopes present. Nominal on any reading. The overconfidence is specific to the covariate columns, and that conclusion no longer rests on 50 fits.
 
 **A cost note for future planning.** This took 39.9 min against a 30 min projection scaled linearly from the R = 50 run. The arithmetic no longer holds: RcppParallel now spawns TBB threads *inside* each PSOCK worker, so 5 workers oversubscribe the 4 performance cores. Load average ran at 15 with cpu/wall at 6.0x. Per-fit throughput therefore falls as worker count rises, and "fits/min x cores" over-predicts. Measure rather than extrapolate until the interaction between `--cores` and the internal threading is characterised.
+
+## 16. `B0` with no `beta_theta` at all: Alex's actual discriminator
+
+**Alex's correction to 15, given 2 August 2026:** *"Actually I wasn't too clear, my suggestion was to run the model with `model = "continuous"` since that part of the sampler would use `B0` only. Using the occupancy model, we still sample the intercept of `beta_theta` so indetermination between `B0` and `beta_theta` still affects the estimate."*
+
+### 16.1 Why `nocollcov` did not settle it
+
+15.3 chose `ncov_theta = 0` deliberately, to change one thing rather than many, and 15.6 read the surviving -0.0633 bias (3.3 SE) as a real residual after the slopes were removed. Alex's point is that the arm cannot support that reading, because setting `ncov_theta = 0` removes the slope columns but **necessarily keeps the intercept row**, `logit(theta_baseline)`.
+
+In an occupancy model that intercept and `B0` sit on the same chain: `psi` governs how often a site is occupied, `theta` how often an occupied site yields a positive sample, and the product is close to what the data sees. At `M = 2` there is very little information separating them. So the residual is equally consistent with `B0`/`beta_theta`-intercept confounding as with a defect in `B0` itself, and 15.6 did not distinguish those.
+
+### 16.2 The arm
+
+`model = "continuous"`: `z ~ Normal(eta, tau)` observed directly. No detection stage, no latent `w`, no `p`/`q`/`theta0`, and **no `beta_theta` of any kind**. `B0` is estimated straight from the Gaussian likelihood. Verified at setup: `beta_theta_output` and `theta0_output` come back `NULL`, and the blocks that map are `B0`, `B`, `G`, `sigma_b`, `tau` and `resid_cor`.
+
+**What it is and is not.** `binary` already removes `beta_theta`, and 15.1 discounted it for changing many things at once; `continuous` has exactly the same weakness and it is not claimed otherwise. Its value is that it is a *different likelihood and a different branch of the sampler* than `binary` -- Gaussian conjugate updates rather than the Polya-Gamma path -- so two independent readings agreeing is worth more than either alone. This is corroboration, not a controlled contrast. The controlled contrast Alex's point calls for does not exist in this model family, because there is no way to keep the two-stage structure while removing the `theta` intercept.
+
+### 16.3 Run configuration, and why it is not the default
+
+Run at R = 200 to match 15.6, with **`RCPP_PARALLEL_NUM_THREADS=1`**.
+
+This is not a performance choice. `41abe69` introduced a data race on R's RNG inside `BBSL_Worker` (TODO.md group B, the `BBSL_Worker` item): `sampleB_SoR()` draws via `arma::randn()`, which `ARMA_RNG_ALT` routes to R's global RNG, and it is now called from every TBB worker thread. Measured: two fits under one `set.seed()` differ by 4.34 on `B0` and 0.63 on `p`. The race can perturb the posterior itself, not merely the draw order, which is the same order of magnitude as the -0.0633 this section is trying to measure.
+
+**One thread eliminates the race rather than working around it.** With a single thread there is no concurrent access to the RNG state, so none of the failure modes can occur; this is not a measurement taken under a live defect. It follows that no run here is waiting on the race being fixed. Anything that needs race-free numbers can be run at one thread today, and a later re-run on fixed multi-threaded code would give *different* numbers again, both valid, because per-thread streams assign draws differently at each thread count (see `src/rng.h`).
+
+At one thread the sampler is bit-for-bit reproducible again (verified: `max diff 0` through `simstudy_replicate()`), and replicate-level parallelism is unaffected because that is process-level. Throughput did not suffer -- 6 single-threaded workers ran marginally faster than 4 workers with TBB threads inside them, consistent with the oversubscription noted in 15.6.
+
+**Consequence for comparability.** These numbers are not directly comparable to 15.4/15.6, which were produced at the default thread count and therefore under the race. Nothing in this section should be read as a paired contrast against `nocollcov`; the `base`/`nocollcov`/`binary` figures are quoted for orientation only, and re-establishing them race-free is work that belongs with the group B item, not here.
+
+### 16.4 Results (2 August 2026)
+
+**Run:** 200 fits, 20.2 min on 6 single-threaded workers, 0 failures.
+
+**`B0` bias, continuous arm:**
+
+| arm | `beta_theta` | `B0` bias | SE | from zero |
+|---|---|---|---|---|
+| `base` | slopes + intercept | -0.2078 | 0.0307 | 6.8 SE |
+| `nocollcov` | intercept only | -0.0633 | 0.0192 | 3.3 SE |
+| `binary` | none at all | +0.0122 | 0.0119 | 1.0 SE |
+| **`continuous`** | **none at all** | **+0.0066** | **0.0056** | **1.2 SE** |
+
+**`B0` is unbiased when `beta_theta` is absent entirely.** Two arms with no `beta_theta`, on two different likelihoods and two different branches of the sampler, both land within 1.2 SE of zero. That is the corroboration 16.2 was after: `binary`'s clean result was not an artefact of its many other differences, because `continuous` differs from `binary` in most of those same respects and agrees anyway.
+
+**This supports Alex's reading of the `nocollcov` residual.** The -0.0633 at 3.3 SE was the only evidence for a `B0` defect surviving removal of the slopes, and 16.1 gives a mechanism for it that is not a defect: `B0` and `beta_theta`'s retained intercept are confounded at `M = 2`. With both no-`beta_theta` arms at zero, the confounding explanation is the more economical one, and the `B0` item reduces to "downstream of the `beta_theta` slope defect".
+
+**All four rows are race-free, so the comparison stands as it is.** An earlier draft of this section claimed the first three were measured under the `BBSL_Worker` race and wanted re-running; that was wrong on the dates. `nocollcov`'s R = 200 run is `simstudy-20260731-181122.rds`, written 31 July 18:11, and `41abe69` introduced the race on 2 August 01:08 -- about 31 hours later. The `base` and `binary` figures are older still. Only `continuous` was run after the regression existed, and it was run at one thread precisely so that it would not be affected.
+
+**What the comparison does not establish.** "Confounding" is a mechanism, not a measurement: nothing here shows that `B0`/`theta`-intercept confounding produces a bias of exactly -0.0633 in `nocollcov`. What is established is that `B0` is unbiased in both arms where `beta_theta` is absent entirely, which removes the only evidence that had pointed to an independent `B0` defect. That is enough to make the confounding account the better-supported one, and not enough to call it quantitatively verified.
+
+### 16.5 An unlooked-for finding: `B0` undercovers in `continuous`
+
+`B0` coverage in this arm is **0.879**, against a nominal 0.95 and a coverage SE of about 1.5% at R = 200. That is roughly 4.7 SE low, and it is the **lowest `B0` coverage of any cell measured**: the production grid runs 0.892 (`low_information`) to 0.956, with `binary` at 0.942.
+
+The bias is zero, so this is not the estimate being wrong; it is the interval being too narrow. Note the direction of surprise -- `continuous` is the *only* model type that also estimates the residual variance `tau`, and `tau` carries its own bias here (+0.0370, coverage 0.921), so the extra variance component is being under-propagated into `B0`'s interval rather than widening it.
+
+Not investigated further, and deliberately not filed as a group B item yet: this is one arm, at one configuration, on a model type the package's users are least likely to be running, and it was found while looking for something else. It wants confirming at a second configuration before it is called a defect. Recorded here so it is not lost.
+
+The other blocks in this arm, for completeness: `B` covers 0.943 (bias 0.0003), `G` 0.954 (-0.0008), `resid_cor` 0.703 (0.0003, consistent with the known `reparamFactorModel()` defect measuring 0.74-0.77 elsewhere), `sigma_b` 1.000 (prior-dominated by construction).
