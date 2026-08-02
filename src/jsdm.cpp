@@ -1001,47 +1001,6 @@ arma::vec sampleB_SoR(arma::mat X, arma::mat &invB, arma::vec &b,
 }
 
 // [[Rcpp::export]]
-arma::vec sampleB_SoR_TS(arma::mat X, arma::mat &invB, arma::vec &b,
-                      arma::vec &k, arma::vec Omega,
-                      arma::mat &X_s_index,
-                      arma::mat &Ks,
-                      int X_centers) {
-
-  // It is assumed that XtOmegaX_SoR and XtK_SoR are thread-safe
-  // and do not modify shared state or call R's RNG.
-  arma::mat XtOmegaX = XtOmegaX_SoR(X, X_centers, Omega, X_s_index, Ks);
-  arma::mat tXk = XtK_SoR(X, X_s_index, Ks, k, X_centers);
-
-  arma::mat Lambda_B = XtOmegaX + invB;
-  arma::vec mu_B = tXk + invB * b;
-
-  arma::mat L = arma::trans(arma::chol(Lambda_B));
-  arma::vec tmp = arma::solve(arma::trimatl(L), mu_B);
-  arma::vec alpha = arma::solve(arma::trimatu(arma::trans(L)), tmp);
-
-  // ---------------------------------------------------------
-  // THREAD-SAFE RNG
-  // Using thread_local ensures each worker thread gets its own
-  // independent generator, initialized only once per thread.
-  // ---------------------------------------------------------
-  thread_local std::random_device rd;
-  thread_local std::mt19937 gen(rd());
-  std::normal_distribution<double> dist(0.0, 1.0);
-
-  arma::vec z(invB.n_cols);
-  for(size_t i = 0; i < z.n_elem; ++i) {
-    z[i] = dist(gen);
-  }
-  // ---------------------------------------------------------
-
-  arma::vec v = arma::solve(arma::trimatu(arma::trans(L)), z);
-
-  arma::vec result = v + alpha;
-
-  return result;
-}
-
-// [[Rcpp::export]]
 arma::mat spatEffectMeanCpp(arma::cube& Bs_output,
                             arma::mat& Ks,
                             arma::mat& Xs_centers) {

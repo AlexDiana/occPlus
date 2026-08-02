@@ -514,24 +514,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// sampleB_SoR_TS
-arma::vec sampleB_SoR_TS(arma::mat X, arma::mat& invB, arma::vec& b, arma::vec& k, arma::vec Omega, arma::mat& X_s_index, arma::mat& Ks, int X_centers);
-RcppExport SEXP _occJSDM_sampleB_SoR_TS(SEXP XSEXP, SEXP invBSEXP, SEXP bSEXP, SEXP kSEXP, SEXP OmegaSEXP, SEXP X_s_indexSEXP, SEXP KsSEXP, SEXP X_centersSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< arma::mat >::type X(XSEXP);
-    Rcpp::traits::input_parameter< arma::mat& >::type invB(invBSEXP);
-    Rcpp::traits::input_parameter< arma::vec& >::type b(bSEXP);
-    Rcpp::traits::input_parameter< arma::vec& >::type k(kSEXP);
-    Rcpp::traits::input_parameter< arma::vec >::type Omega(OmegaSEXP);
-    Rcpp::traits::input_parameter< arma::mat& >::type X_s_index(X_s_indexSEXP);
-    Rcpp::traits::input_parameter< arma::mat& >::type Ks(KsSEXP);
-    Rcpp::traits::input_parameter< int >::type X_centers(X_centersSEXP);
-    rcpp_result_gen = Rcpp::wrap(sampleB_SoR_TS(X, invB, b, k, Omega, X_s_index, Ks, X_centers));
-    return rcpp_result_gen;
-END_RCPP
-}
 // spatEffectMeanCpp
 arma::mat spatEffectMeanCpp(arma::cube& Bs_output, arma::mat& Ks, arma::mat& Xs_centers);
 RcppExport SEXP _occJSDM_spatEffectMeanCpp(SEXP Bs_outputSEXP, SEXP KsSEXP, SEXP Xs_centersSEXP) {
@@ -631,7 +613,6 @@ static const R_CallMethodDef CallEntries[] = {
     {"_occJSDM_KsBproduct", (DL_FUNC) &_occJSDM_KsBproduct, 3},
     {"_occJSDM_XtOmegaX_SoR", (DL_FUNC) &_occJSDM_XtOmegaX_SoR, 5},
     {"_occJSDM_sampleB_SoR", (DL_FUNC) &_occJSDM_sampleB_SoR, 8},
-    {"_occJSDM_sampleB_SoR_TS", (DL_FUNC) &_occJSDM_sampleB_SoR_TS, 8},
     {"_occJSDM_spatEffectMeanCpp", (DL_FUNC) &_occJSDM_spatEffectMeanCpp, 3},
     {"_occJSDM_sample_BBsL_cpp", (DL_FUNC) &_occJSDM_sample_BBsL_cpp, 16},
     {"_occJSDM_sample_BBsL_parallel", (DL_FUNC) &_occJSDM_sample_BBsL_parallel, 16},
