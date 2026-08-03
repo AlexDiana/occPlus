@@ -265,6 +265,27 @@ html[data-bs-theme="dark"] .occjsdm-report {
 .occjsdm-report .finding p { font-size: 0.92rem; color: var(--ink-soft); }
 .occjsdm-report .finding h3 { color: var(--ink); }
 
+.occjsdm-report .fig {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.occjsdm-report .fig img {
+  width: 100%;
+  height: auto;
+  border-radius: 6px;
+  border: 1px solid var(--rule);
+  /* the PNGs are rendered on a fixed white background; a light card behind
+     them keeps that from looking like a mistake against a dark page */
+  background: #fff;
+  padding: 0.5rem;
+}
+.occjsdm-report .fig figcaption {
+  font-size: 0.85rem;
+  color: var(--ink-faint);
+  max-width: 40rem;
+}
+
 .occjsdm-report footer {
   border-top: 1px solid var(--rule);
   padding-top: 1.25rem;
@@ -481,6 +502,32 @@ html[data-bs-theme="dark"] .occjsdm-report {
   </section>
 
   <section>
+    <h2>Coverage, at full resolution</h2>
+    <p>
+      The tables above summarise across scenarios. Here is every cell: one panel per
+      parameter, one point per scenario, with a 95% interval on the coverage estimate
+      itself (&plusmn;1.96 standard errors on the underlying binomial proportion).
+      <code>beta_theta</code> sits left of the dashed nominal line in every single
+      scenario &mdash; not just on average &mdash; while <code>theta0</code> and
+      <code>sigma_b</code> sit at or above it almost everywhere. <code>low_information</code>
+      is the one point pulling <code>p</code> down to the floor.
+    </p>
+    <figure class="fig">
+      <img
+        src="figures/coverage-by-block.png"
+        alt="Grid of coverage plots, one panel per parameter block, points for each of the ten scenarios with 95% error bars, against a dashed nominal-0.95 line."
+      >
+      <figcaption>
+        Coverage by parameter, across all ten scenarios. Source data:
+        <code>dev/simstudy/results/</code>, produced by
+        <code>dev/simstudy/run_study.R</code>; see the footer for the run that generated
+        it. Pre-rendered rather than computed at build time, since the underlying CSV is
+        not checked in.
+      </figcaption>
+    </figure>
+  </section>
+
+  <section>
     <h2>What &ldquo;coverage&rdquo; means</h2>
     <p>
       The model doesn&rsquo;t just report a number for, say, species 3&rsquo;s response
@@ -535,6 +582,19 @@ html[data-bs-theme="dark"] .occjsdm-report {
         </tbody>
       </table>
     </div>
+    <figure class="fig">
+      <img
+        src="figures/coverage-by-scenario.png"
+        alt="Grid of coverage plots, one panel per scenario, points for each parameter block with 95% error bars, against a dashed nominal-0.95 line."
+      >
+      <figcaption>
+        The same measurements, grouped the other way: one panel per scenario, so you can
+        read off which parameters misbehave together within a single design.
+        <code>low_information</code> is the one scenario where the whole panel shifts
+        left rather than a single parameter failing on its own &mdash; thin data
+        degrades everything downstream of detection, not just detection itself.
+      </figcaption>
+    </figure>
   </section>
 
   <section>
