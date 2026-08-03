@@ -156,7 +156,6 @@ No open items. The one item this section held, the `listPriors$b_betatheta_slope
 
     ALEX TO DISABLE IT FOR NOW, BUT LET'S KEEP IT THERE
 
-
 ## **D. Dead and broken internal code (Alex)**
 
 Ten dead functions were moved to `deprecated/` on 30 July (*Fixed bugs* 37). What remains is below.
