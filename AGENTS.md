@@ -177,39 +177,13 @@ Baseline as of 30 July 2026, after the missing-imports work (*Fixed bugs* 36): *
 
 ## Cross-referencing TODO items
 
-**Reference `Fixed bugs N` for fixed items, and the *subject* for open ones.
-Never `group X item N`.** Fixed bugs entries are append-only and never
-renumber, so they are a stable anchor. Group A/B/C/D positions shift every
-time an item is added, fixed or removed, which silently repoints every
-reference to it. Open items have no stable number and are not going to get
-one, so cite them by what they are about: "the `sample_ls()` item in group B",
-"the `beta_theta` slope item", "the `b_betatheta` variance decision". That
-reads better anyway, because it tells the reader the subject without a lookup.
+**Reference `Fixed bugs N` for fixed items, and the *subject* for open ones. Never `group X item N`.** Fixed bugs entries are append-only and never renumber, so they are a stable anchor. Group A/B/C/D positions shift every time an item is added, fixed or removed, which silently repoints every reference to it. Open items have no stable number and are not going to get one, so cite them by what they are about: "the `sample_ls()` item in group B", "the `beta_theta` slope item", "the `b_betatheta` variance decision". That reads better anyway, because it tells the reader the subject without a lookup.
 
-**This has now gone wrong four times, and the fourth was the worst.** On 1
-August every positional reference in the three docs was checked against the
-current list and most were wrong, several pointing at unrelated items: `l_s`
-was cited as "group B item 2" when `sample_ls()` is item 1; `beta_theta` was
-"item 4" throughout after it had become item 3; `thinOutput()` was cited as a
-group B item when it lives in *Fixed bugs*; the refit gate in the CRAN plan
-named three items by numbers from one era and glossed them with subjects from
-an older one, so the numbers and the words disagreed; and a PLAN reference to
-"group D item 1" for chain parallelisation pointed at the dead-code item. All
-were converted to subject references. Two of them were in `R/` source
-comments, so this leaks out of the docs.
+**This has now gone wrong four times, and the fourth was the worst.** On 1 August every positional reference in the three docs was checked against the current list and most were wrong, several pointing at unrelated items: `l_s` was cited as "group B item 2" when `sample_ls()` is item 1; `beta_theta` was "item 4" throughout after it had become item 3; `thinOutput()` was cited as a group B item when it lives in *Fixed bugs*; the refit gate in the CRAN plan named three items by numbers from one era and glossed them with subjects from an older one, so the numbers and the words disagreed; and a PLAN reference to "group D item 1" for chain parallelisation pointed at the dead-code item. All were converted to subject references. Two of them were in `R/` source comments, so this leaks out of the docs.
 
-The first three times, for the record. Group B once had a gap at items 5 and 6,
-where two fixes had been deleted with no Fixed-bugs entry, and the gap was the
-only evidence they had happened. Three code comments in `R/output.R` and
-`R/jsdmfun.R` pointed at "group C item 1" and "group C item 5", both of which
-had since moved to Fixed bugs, so the numbers resolved to unrelated items; they
-now cite `Fixed bugs 31/32` and `Fixed bugs 33`. And on 30 July, removing a
-fixed stub from group C renumbered three items underneath it at once.
+The first three times, for the record. Group B once had a gap at items 5 and 6, where two fixes had been deleted with no Fixed-bugs entry, and the gap was the only evidence they had happened. Three code comments in `R/output.R` and `R/jsdmfun.R` pointed at "group C item 1" and "group C item 5", both of which had since moved to Fixed bugs, so the numbers resolved to unrelated items; they now cite `Fixed bugs 31/32` and `Fixed bugs 33`. And on 30 July, removing a fixed stub from group C renumbered three items underneath it at once.
 
-When an item is fixed: write the Fixed bugs entry first, then delete the item
-from its group entirely. Do not leave a struck-through stub behind. The Fixed
-bugs list is the record, the group lists are the work queue, and an item should
-be in exactly one of them.
+When an item is fixed: write the Fixed bugs entry first, then delete the item from its group entirely. Do not leave a struck-through stub behind. The Fixed bugs list is the record, the group lists are the work queue, and an item should be in exactly one of them.
 
 **Related, and the reason `TODO.md` now has no tables.** RStudio recomputes a pipe table's separator row from the cell contents and the available width, switching between padding to content width and redistributing across the line at a width threshold. So editing any cell can rewrite the separators of the whole table, producing one-line diffs nobody authored; `873f419` is an example. Confirmed with pandoc: at `--columns=72` a wide table's separators are divided equally across the line, and at `--columns=200` they are padded to true content width. `TODO.md` uses bullet lists instead, which have no width-derived formatting and so are stable. `PLAN.md` keeps its tables and accepts the churn, because tabular data earns them there.
 
@@ -313,6 +287,7 @@ To restore automatic deployment on push, put back the two lines recorded in the 
   **Same session, four other threads tied off.** The `runOccJSDM()` scaffold had gone live a fourth time (`522b89e`, minutes after Alex's own fix in `11981a1`); re-fixed, and this time with a regression test rather than only a manual fix, since four occurrences of the identical defect is a pattern, not bad luck. Two of group C's "assorted smaller items" Alex marked fixed were verified rather than trusted -- (a) turned out moot on inspection (`maxP` is never read outside `two_stage` branches, so the described crash path does not exist as the code now stands) and (e) checked directly against the roxygen. The `b_betatheta_slope_var` hook was approved by Alex and closed. `B0`'s doubled-bias item was closed by his decision, explicitly not by the quantitative proof that was never available, with the coverage sub-finding it also carried split out as its own item since his decision did not address it. `TODO.md` trimmed accordingly per Doug's standing instruction that TODO carry conclusions, not investigation history.
 
 - **2 August 2026: three commits, and the most useful one was a discovery rather than a task.** `089b421` deprecated `sampleB_SoR_TS()` and `b34b36a` landed the pkgdown scaffolding with the workflow deliberately manual-trigger only; both are covered above. Between them, `a9c723b` fixed something nobody had filed. Checking the Actions tab showed `pages-build-deployment` running on every push, because Pages had been enabled with source `main`/root, which meant Jekyll was publishing `TODO.md`, `AGENTS.md` and `CLAUDE.md` as pages on the public site. Verified live at `alexdiana.github.io/occJSDM/TODO.html` before acting and verified 404 after. The repository is public, so nothing was newly exposed, but a rendered site presence and search indexing were nobody's decision. **The lesson worth keeping:** the pkgdown workflow was assumed to be the only publishing path, and at the time it was not even committed to any branch. Check what Pages is actually configured to serve before reasoning about what publishes.
+
 - **This session, 1 August 2026: doc maintenance, and it found that `PLAN.md` §12 had been deleted.** The whole "Results of the full run" section -- the headline R = 100 coverage table for all ten cells, the pre-fix table at 12.6, and the `B0`/`theta0` findings -- was removed by `a8f9725` on 30 July, a commit of mine whose message described only the TODO rewrite and said nothing about deleting it. Nine references to §12 survived across the three docs, including `PLAN.md`'s own "reading order if you are new to this: §12 for the current results", which would have sent Alex to a section that was not there.
 
   **Restored, and verified rather than trusted.** Every figure in the table was re-derived from `dev/simstudy/results/simstudy-20260729-143756.csv` before restoring: all ten cells, 155,578 checks, coverage and `B0` bias per scenario all match the deleted text exactly. The stale `group A item` references inside it were rewritten to group B, and 12.1-12.3 now carry forward pointers to §14.7 and §15, which have since superseded two of their three attributions.

@@ -37,3 +37,4 @@ TODO.html
 # pkgdown build output. Regenerated from _pkgdown.yml + the R docs +
 # vignettes via pkgdown::build_site(); never a deliverable to commit.
 docs
+.posit/assistant
