@@ -56,10 +56,7 @@ No open items. The one item this section held, the `listPriors$b_betatheta_slope
 
 ## **B. Inference-affecting bugs (wrong numbers, silently) (Alex)**
 
-1.  **`sample_ls()` scores the wrong density, so the GP length-scale is never recovered.** `R/jsdmfun.R:1054`. Under the SoR 
-approximation the fitted field `SE = Ks(l_s) %*% Bs` is a deterministic function of `Bs` and `l_s`, but `sample_ls()` treats `SE` 
-as a GP draw and scores it under `N(0, sigma_s^2 K(l_s))` with `SE` held fixed. That is not the conditional posterior, and it 
-is self-defeating: `SE` was already smoothed at the current `l_s`, so it scores better under ever-smoother covariances.
+1.  **`sample_ls()` scores the wrong density, so the GP length-scale is never recovered.** `R/jsdmfun.R:1054`. Under the SoR approximation the fitted field `SE = Ks(l_s) %*% Bs` is a deterministic function of `Bs` and `l_s`, but `sample_ls()` treats `SE` as a GP draw and scores it under `N(0, sigma_s^2 K(l_s))` with `SE` held fixed. That is not the conditional posterior, and it is self-defeating: `SE` was already smoothed at the current `l_s`, so it scores better under ever-smoother covariances.
 
     **Measured:** `idx_ls` rails at the top of `l_s_grid` for every true `l_s` tried (0.074, 0.171, 0.300), with real spatial signal present. The profiled log-likelihood rises monotonically from -376 at `l_s = 0.01` to -154 at `l_s = 0.30`.
 
@@ -71,26 +68,15 @@ is self-defeating: `SE` was already smoothed at the current `l_s`, so it scores 
 
     ALEX TO CHECK
 
-2.  **`reparamFactorModel()` breaks residual covariance = `t(L) %*% L`, inflating reported species correlations.** `R/jsdmfun.R:48`. 
-The rotation preserves `U %*% L` (verified to 4e-16) so the linear predictor is untouched, but it moves scale out of `U` into `L`, and 
-`returnResidualCorrelationMatrix()` computes `cov2cor(t(L) %*% L)` from the reparameterised `L`. Measured `Var(U)` afterwards is
-`diag(0.23, 2.01)`, not the identity.
+2.  **`reparamFactorModel()` breaks residual covariance = `t(L) %*% L`, inflating reported species correlations.** `R/jsdmfun.R:48`. The rotation preserves `U %*% L` (verified to 4e-16) so the linear predictor is untouched, but it moves scale out of `U` into `L`, and `returnResidualCorrelationMatrix()` computes `cov2cor(t(L) %*% L)` from the reparameterised `L`. Measured `Var(U)` afterwards is `diag(0.23, 2.01)`, not the identity.
 
     **Measured:** correlations move by up to 0.612, consistently toward the extremes.
 
-    **Impact:** `returnResidualCorrelationMatrix()` and `plotResidualCorrelationMatrix()` overstate co-occurrence. 
-    This is the headline JSDM output.
+    **Impact:** `returnResidualCorrelationMatrix()` and `plotResidualCorrelationMatrix()` overstate co-occurrence. This is the headline JSDM output.
 
-    **Fix, two options.** (a) Rotate by `Q` alone, dropping the `diag(diag(R))` scaling, so both the identifiability constraint and 
-    the covariance identity hold. (b) Keep the scaling and compute the correlation as `t(L) %*% Var(U) %*% L`. (a) is simpler 
-    and preserves the output contract.
+    **Fix, two options.** (a) Rotate by `Q` alone, dropping the `diag(diag(R))` scaling, so both the identifiability constraint and the covariance identity hold. (b) Keep the scaling and compute the correlation as `t(L) %*% Var(U) %*% L`. (a) is simpler and preserves the output contract.
 
-    **REOPENED 2 August 2026: the simulation evidence for this item has been withdrawn.** It previously cited `resid_cor` 
-    covering at 0.74-0.77 across the grid, and a paired re-run in which only 104 of 49,978 coverage decisions flipped. The 2 August
-    re-run shows that statistic is degenerate: coverage equals one minus the share of true correlations sitting at exactly ±1, the credible
-    intervals span almost the whole of [-1, 1] (median width 1.999 on a scale bounded by 2), and a truth-determined statistic cannot
-    move when the sampler changes, so the paired result never discriminated. `PLAN.md` §17 has the measurements and §17.6 what 
-    would make the statistic informative.
+    **REOPENED 2 August 2026: the simulation evidence for this item has been withdrawn.** It previously cited `resid_cor` covering at 0.74-0.77 across the grid, and a paired re-run in which only 104 of 49,978 coverage decisions flipped. The 2 August re-run shows that statistic is degenerate: coverage equals one minus the share of true correlations sitting at exactly ±1, the credible intervals span almost the whole of [-1, 1] (median width 1.999 on a scale bounded by 2), and a truth-determined statistic cannot move when the sampler changes, so the paired result never discriminated. `PLAN.md` §17 has the measurements and §17.6 what would make the statistic informative.
 
     **This does not refute the item.** The code-level argument above is about a per-factor rescaling surviving `cov2cor()` and is untouched. What has gone is the independent evidence for it, so it now rests on reading the transform alone. Your note was that this is a non-issue for logistic models since only the correlation is recoverable; the premise is right, and the reply had been that the measured numbers were already correlations. That reply is no longer available. Full exchange in AGENTS.
 
@@ -170,17 +156,6 @@ The rotation preserves `U %*% L` (verified to 4e-16) so the linear predictor is 
 
     ALEX TO DISABLE IT FOR NOW, BUT LET'S KEEP IT THERE
 
-2.  **Assorted smaller items.** (a) and (e) closed as *Fixed bugs* 44.
-
-    FIXED (b) `d <- get_param(listParams, "n_factors")` defaults to 0, and the cap at `:716` uses `ncol(OTU)`, which is `NULL` for a single-species vector: `if (d > NULL)` errors.
-
-    (c) `reparamFactorModel(A_output, C_output)` (`:1273`) assumes `qr.Q()` is square; when `ncov_psi < gt` it is not, and `diag(diag(R_current), nrow = d)` recycles.
-
-    (c) is fixed with the new line " gt_default <- floor(sqrt(min(S, ncov_psi)))" so that gt <= ncov_psi always
-
-    FIXED (d) The spatial-covariate numeric check at `:540` runs before the "names present in `data$info`" check at `:544`, so a mistyped name gives `undefined columns selected` rather than the intended message.
-
-   ALEX: ALL FIXED
 
 ## **D. Dead and broken internal code (Alex)**
 
@@ -240,7 +215,7 @@ Ten dead functions were moved to `deprecated/` on 30 July (*Fixed bugs* 37). Wha
     >
     > occJSDM extends the occPlus two-stage eDNA occupancy model of Ji et al. (2025, *Ecology Letters*, <doi:10.1111/ele.70302>) by adding a JSDM layer. Unusually for an occupancy model, false positives are estimated explicitly at both the field and lab stages and separately for each species and each primer.
     >
-    > Note this is **beta software**.
+    > Note this is still **beta software**. Feedback, feature requests, and bug reports are very welcome.
     >
     > Highlights:
     >
@@ -250,9 +225,7 @@ Ten dead functions were moved to `deprecated/` on 30 July (*Fixed bugs* 37). Wha
     > - MCMC fitting with diagnostics, variance partitioning, ordination, and pairwise residual correlation outputs built in.
     > - occJSDM leverages the taxonomic breadth of eDNA datasets by using ordination (each site's position on the latent axes, and each species' loadings on those axes) to predict species occupancies. Thus, each species' predicted occupancy at a site is informed by the estimated occupancies of the other species at that site, thereby using co-occurrence structure. We also allow species to borrow strength from other species sharing similar traits, including inferred traits, in contrast to the classical approach of having rare species borrow strength from abundant species, as is used in multi-species occupancy models.
     >
-    > Vignettes included for data simulation and model fitting/interpretation.
-    >
-    > Feedback, feature requests, and bug reports are very welcome.
+    > Vignettes and articles included on data simulation, model fitting/interpretation, and model performance.
 
 # **MEE paper**
 
@@ -272,35 +245,22 @@ Ten dead functions were moved to `deprecated/` on 30 July (*Fixed bugs* 37). Wha
 
 7.  **Performance of `runOccJSDM()`**
 
-ALEX NOTE: Most of the MCMC steps have now been parallelised, with the only exception of sample_U_cpp. 
-The rest is mostly stuff. It would also worth investigating a faster to compute the variancePartitioning or the WAIC.
+ALEX NOTE: Most of the MCMC steps have now been parallelised, with the only exception of sample_U_cpp. The rest is mostly stuff. It would also worth investigating a faster to compute the variancePartitioning or the WAIC.
 
 **Profiled by Alex, 31 July 2026, which answers the "nothing here has been profiled" caveat this list used to carry.** Comparing each MCMC step with `microbenchmark()`:
 
 - **`sample_betatheta_cpp_parallel()` is the slowest step**, decisively.
-- **The parallelisation achieves little speedup**, and is inert on macOS because it uses OpenMP rather than RcppParallel. 
-This independently corroborates the measurement below: `SHLIB_OPENMP_CXXFLAGS` is empty on Doug's machine, so every `#pragma omp` 
-compiles to a no-op and the "parallel" samplers run serially. Alex has since moved two samplers to RcppParallel in `8f9f315` for this reason.
+- **The parallelisation achieves little speedup**, and is inert on macOS because it uses OpenMP rather than RcppParallel. This independently corroborates the measurement below: `SHLIB_OPENMP_CXXFLAGS` is empty on Doug's machine, so every `#pragma omp` compiles to a no-op and the "parallel" samplers run serially. Alex has since moved two samplers to RcppParallel in `8f9f315` for this reason.
 - **Within that step, `sample_Omega_cpp()` dominates**: it draws `N x S` Polya-Gamma variables per iteration.
-- **Alex's suggestion: consider an alternative Polya-Gamma sampler.** That is the lever with the best expected return, 
-and it is a different kind of work from the parallelisation items below, which redistribute the same cost rather than reducing it.
+- **Alex's suggestion: consider an alternative Polya-Gamma sampler.** That is the lever with the best expected return, and it is a different kind of work from the parallelisation items below, which redistribute the same cost rather than reducing it.
 
-**This reorders the list.** Items A and B parallelise around a step whose cost is dominated by PG sampling; 
-making the PG draw cheaper would benefit every configuration, including single-core and macOS, where the parallelisation 
-currently does nothing. Worth settling the PG question before investing in either.
+**This reorders the list.** Items A and B parallelise around a step whose cost is dominated by PG sampling; making the PG draw cheaper would benefit every configuration, including single-core and macOS, where the parallelisation currently does nothing. Worth settling the PG question before investing in either.
 
 The items below are ordered by expected speedup per unit of effort as originally written.
 
-**Before profiling, check whether OpenMP is even on.** Measured 29 July 2026 on the macOS development machine: 
-`R CMD config SHLIB_OPENMP_CXXFLAGS` is *empty*, so the `$(SHLIB_OPENMP_CXXFLAGS)` in `src/Makevars` expands to nothing, 
-every `#pragma omp` compiles to a no-op, and `nm -u src/occJSDM.so | grep -c '__kmpc\|_GOMP'` returns 0. 
-The package is running single-threaded here despite `libomp.dylib` appearing in `otool -L` (pulled in transitively by R's own libraries, not by us).
+**Before profiling, check whether OpenMP is even on.** Measured 29 July 2026 on the macOS development machine: `R CMD config SHLIB_OPENMP_CXXFLAGS` is *empty*, so the `$(SHLIB_OPENMP_CXXFLAGS)` in `src/Makevars` expands to nothing, every `#pragma omp` compiles to a no-op, and `nm -u src/occJSDM.so | grep -c '__kmpc\|_GOMP'` returns 0. The package is running single-threaded here despite `libomp.dylib` appearing in `otool -L` (pulled in transitively by R's own libraries, not by us).
 
-
-Consequences: the parallel sections are currently dead weight on this machine, the thread-safety bug of Fixed bugs 26
-could never have manifested locally, and any timing measured here says nothing about a Linux build where OpenMP *is* active.
-Worth confirming what Alex's machine and CRAN's check farm do before investing in items 1 and 2 below -- the payoff differs completely 
-between the two cases.
+Consequences: the parallel sections are currently dead weight on this machine, the thread-safety bug of Fixed bugs 26 could never have manifested locally, and any timing measured here says nothing about a Linux build where OpenMP *is* active. Worth confirming what Alex's machine and CRAN's check farm do before investing in items 1 and 2 below -- the payoff differs completely between the two cases.
 
 A.  **Parallelise over chains -- but use a PSOCK cluster, not `mclapply()`.** The `for (chain in 1:nchain)` loop (`R/runOccJSDM.R:895`) is serial and embarrassingly parallel; each chain touches only its own `*_output_chain` arrays, so running the chains in separate *processes* gives close to an `nchain`-fold speedup and sidesteps the RNG thread-safety problem in bug A.2 entirely (each process has its own RNG state). Portability constraints, though:
 
@@ -322,8 +282,9 @@ F.  **Vectorise the starting-value loops.** `R/runOccJSDM.R:946-961` and `:974-9
 
 G.  **Do not allocate posterior arrays that are never filled.** The `summarisedLatentPresences = FALSE` half of this was resolved by the fix in Fixed bugs 15 (`w_output_chain` / `theta_output_chain` are now written rather than allocated and abandoned), so what remains is the sizing question: `Bs_output` (`ps x S x niter x nchain`) and `U_output` (`n x d x niter x nchain`) are the two largest components of the 62 MB `sampleresults.rda`; a `keep =` argument selecting which blocks to retain, or storing the latent-factor blocks pre-thinned, would address both the runtime allocation and the CRAN size blocker.
 
-H.  **Reduce the repeated `arma::inv()` calls in the samplers.** `sample_beta_cpp()` (`src/functions.cpp:249-253`), `sampleB()` and `sampleBuniv()` (`src/jsdm.cpp:579-583`, `:600-604`) each call `arma::inv(B)` twice plus `arma::inv(arma::trimatl(L))`, executed `S` or `n` times per iteration. In every caller `B` is diagonal, so this is a dense general inverse of a diagonal matrix. `sampleB_SoR()` (`src/jsdm.cpp:817-839`) already shows the right pattern: take the precision directly as an argument, and draw via a triangular solve against a standard normal instead of forming the inverse Cholesky factor explicitly.
-```
+H.  **Reduce the repeated `arma::inv()` calls in the samplers.** `sample_beta_cpp()` (`src/functions.cpp:249-253`), `sampleB()` and `sampleBuniv()` (`src/jsdm.cpp:579-583`, `:600-604`) each call `arma::inv(B)` twice plus `arma::inv(arma::trimatl(L))`, executed `S` or `n` times per iteration. In every caller `B` is diagonal, so this is a dense general inverse of a diagonal matrix. `sampleB_SoR()` (`src/jsdm.cpp:817-839`) already shows the right pattern: take the precision directly as an argument, and draw via a triangular solve against a standard normal instead of forming the inverse Cholesky factor explicitly. \`\`\`
+
+<!-- -->
 
 8.  **Make the parallel sampler reproducible at any thread count, by keying the draws on species rather than on thread.** This is a design change in your sampler, which is why it is here rather than being applied.
 
@@ -617,6 +578,14 @@ Items 16 and 18 are marked **partially fixed**: the crash in each is gone, but p
 46. ~~**`B0`'s bias doubled between the pre- and post-fix runs.**~~ **CLOSED BY DECISION 2 August 2026** (Alex: "we can close the point on B0 and assume that the bias is only due to the confounding with beta_theta"). Not closed by elimination -- the quantitative link was never established, only that `B0` is unbiased in both arms tested with `beta_theta` absent entirely (`binary` +0.0122 at 1.0 SE, `continuous` +0.0066 at 1.2 SE, `PLAN.md` 16.4), against -0.0633 at 3.3 SE with only the intercept present. Alex accepted that as sufficient. Full investigation, including the two hypotheses tested and ruled out along the way, in `AGENTS.md`.
 
     The coverage sub-finding this item also carried (`continuous` at 0.879 against nominal, `PLAN.md` 16.5) was not addressed by this decision and is carried forward as its own item in group B.
+
+47. ~~**Three assorted smaller items (C2b, C2c, C2d), all verified fixed (Alex).**~~
+
+    **(b) `d > NULL` errors on single-species input.** `get_param(listParams, "n_factors")` returns 0 by default; the old cap `if (d > ncol(OTU))` errored when `OTU` was a single-species vector because `ncol()` returns `NULL`. Fixed by branching first on `ncol(OTU) > 1`; the `else` branch sets `d <- 0` with a message. `R/runOccJSDM.R:759-770`.
+
+    **(c) `reparamFactorModel(A_output, C_output)` fails when `gt > ncov_psi`.** `C_output` is `[gt x ncov_psi]`; when `gt > ncov_psi`, `qr.Q()` returns a non-square `[gt x ncov_psi]` matrix and `Q %*% diag(diag(R), nrow = gt)` fails on conformability. Fixed by `gt_default <- floor(sqrt(min(S, ncov_psi)))`, which ensures the default `gt <= ncov_psi`. A caller who manually sets `listParams$n_lattrait > ncov_psi` could still trigger it, but that is a usage error. `R/runOccJSDM.R:773`.
+
+    **(d) Spatial-covariate `is.numeric` check ran before the names-present check.** A mistyped `spatCovariates` name gave `undefined columns selected` rather than the intended "Covariate names provided not in data\$info". Fixed by reordering: the `%in% colnames(data$info)` check (`:570`) now precedes `sapply(data_info[,spatCovariates], is.numeric)` (`:574`). `R/runOccJSDM.R:570-576`.
 
 # **Completed work**
 
