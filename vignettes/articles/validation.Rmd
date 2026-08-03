@@ -499,6 +499,41 @@ html[data-bs-theme="dark"] .occjsdm-report {
       systematically pulled down. Its interval coverage, further down, is a perfectly
       respectable 0.949, which tells you nothing about either problem.
     </p>
+    <p>
+      The table above is the <code>base</code> scenario alone. Here is bias and error at
+      full resolution &mdash; one panel per parameter, one point per scenario &mdash; the
+      same pairing used for coverage further down.
+    </p>
+    <figure class="fig">
+      <img
+        src="figures/bias-by-block.png"
+        alt="Grid of bias plots, one panel per parameter block, points for each of the ten scenarios with approximate 95% error bars, against a dashed zero line."
+      >
+      <figcaption>
+        Bias by parameter, across all ten scenarios. <code>B0</code> is negative in every
+        scenario, not just on average, and worst in <code>low_information</code>.
+        <code>beta_theta</code> swings positive there too, while everything else stays
+        close to the dashed zero line. Source data: <code>dev/simstudy/results/</code>,
+        produced by <code>dev/simstudy/run_study.R</code>; see the footer for the run that
+        generated it. Pre-rendered rather than computed at build time, since the underlying
+        CSV is not checked in.
+      </figcaption>
+    </figure>
+    <figure class="fig">
+      <img
+        src="figures/rmse-by-block.png"
+        alt="Grid of RMSE plots, one panel per parameter block, points for each of the ten scenarios, each panel on its own x-axis scale."
+      >
+      <figcaption>
+        RMSE by parameter, across all ten scenarios &mdash; raw error, on each parameter&rsquo;s
+        own scale, not the normalised <b>nRMSE</b> in the table above. Each panel has its
+        own x-axis, so compare scenarios <em>within</em> a panel, not the numbers <em>across</em>
+        panels. <code>low_information</code> is the outlier throughout &mdash; worst or
+        near-worst in every block that has it as an option &mdash; consistent with the
+        bias picture: thin data degrades this scenario across the board, not through one
+        failing parameter.
+      </figcaption>
+    </figure>
   </section>
 
   <section>
