@@ -164,7 +164,7 @@ Every code change Claude made, newest first. None has had human review beyond Do
 
 ## **C. Crashes, unreachable code paths, and API bugs (Alex)**
 
-No open items. The one item this section held, `thinOutput()`, is closed as *Fixed bugs* 48.
+No open items. `thinOutput()` has been fixed and moved to group A, where it is awaiting Alex's review; the record is *Fixed bugs* 48. The assorted smaller items this section also held closed as *Fixed bugs* 44 and 47.
 
 ## **D. Dead and broken internal code (Alex)**
 
