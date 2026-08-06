@@ -77,10 +77,3 @@ reference:
   contents:
   - sampledata
   - sampleresults
-
-- title: Internal
-  desc: >
-    Documented but not exported. Listed here only because pkgdown requires
-    every man page to appear in the reference index somewhere.
-  contents:
-  - thinOutput

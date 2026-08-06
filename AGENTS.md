@@ -312,6 +312,8 @@ pkgdown::build_site()
 
 Writes to `docs/`, which is gitignored and in `.Rbuildignore` and is never committed. Open `docs/index.html` to view it. `pkgdown::check_pkgdown()` validates `_pkgdown.yml` against the package's actual topics without building anything, and is the fast check after editing the reference index.
 
+**The reference index is coupled to `man/`, so roxygen changes can break it.** Adding `@noRd` to a function deletes its `.Rd` file on the next `devtools::document()`, and `build_site()` then aborts with `reference[N].contents[M] (name) must be a known topic name or alias`. That is what happened when `thinOutput()` was marked `@noRd` on 6 August 2026: it had been listed in an "Internal" section of `_pkgdown.yml`, which was removed along with the man page. Run `check_pkgdown()` after any change to a roxygen block that affects whether a topic exists. Topics marked `\keyword{internal}` (`setOccJSDMSeed`) and the package-level `occJSDM-package` topic are exempt and do not need listing.
+
 `vignettes/articles/` is pkgdown-only: articles there are built into the site but do not ship in the package. The simulation-study write-up, `validation.Rmd`, lives there for that reason.
 
 Two things to expect on a full build. pkgdown runs every `@examples` block, so it will fail on the group B functions that error unconditionally until those are fixed or `@examples`-guarded. And pkgdown renders every root-level `.md` into the site's home section, with no config option to exclude specific files (`package_mds()` in the pkgdown source), which is why the workflow deletes `AGENTS.md`, `CLAUDE.md` and `TODO.md` from the checkout before building. That step is the pkgdown counterpart of `_config.yml`, and needs the same syncing.
