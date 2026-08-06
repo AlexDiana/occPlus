@@ -450,3 +450,61 @@ test_that("Fixed bugs 38: the debugging scaffold in runOccJSDM() stays commented
   live <- grep("^\\s*data\\s*=\\s*occ_data_effort", readLines(f, warn = FALSE), value = TRUE)
   expect_length(live, 0)
 })
+
+test_that("Fixed bugs 16: thinOutput() thins the iteration axis and nothing else", {
+  # Three defects, two of which were worse than TODO.md group C recorded.
+  #
+  # The killer: jsdm_output is a *list* of 17 parameter arrays, so
+  # length(dim(x)) was 0, it matched no branch, and fell through to
+  # print("Dimension not recognised") -- which returns its argument, so the
+  # entire list was replaced by that character string. WAIC, a scalar, was
+  # destroyed the same way. Separately, the 2-D branch thinned by row, which
+  # for the posterior-mean matrices means dropping *sites*.
+  #
+  # The fixture keeps niter (20), n (40), S (4) and nchain (2) mutually
+  # distinct on purpose. An earlier ad-hoc check used niter == n == 40, which
+  # makes a [sites x species] mean indistinguishable from an iteration array
+  # by shape alone and hides the whole bug.
+  fit <- fixture_twostage()
+  ro <- fit$results_output
+
+  niter <- dim(ro$jsdm_output$B0_output)[2]
+  nchain <- dim(ro$jsdm_output$B0_output)[3]
+  skip_if_not(niter != FIXTURE_N && FIXTURE_S != nchain,
+              "fixture dims collide; test cannot discriminate")
+
+  thinned <- thinOutput(fit, thin = 5)$results_output
+  keep <- length(seq(1, niter, by = 5))
+
+  # jsdm_output survives as a list, with every element thinned on the
+  # second-to-last axis whatever its rank.
+  expect_type(thinned$jsdm_output, "list")
+  expect_length(thinned$jsdm_output, length(ro$jsdm_output))
+  for (nm in names(ro$jsdm_output)) {
+    d_before <- dim(ro$jsdm_output[[nm]])
+    d_after <- dim(thinned$jsdm_output[[nm]])
+    k <- length(d_before)
+    expect_equal(d_after[k - 1L], keep, info = nm)          # iteration axis thinned
+    expect_equal(d_after[-(k - 1L)], d_before[-(k - 1L)], info = nm)  # others intact
+  }
+
+  # The scalar WAIC is numeric and untouched, not a character string.
+  expect_type(thinned$WAIC, "double")
+  expect_equal(thinned$WAIC, ro$WAIC)
+
+  # Posterior-mean matrices keep every site/sample. Thinning these by row was
+  # the originally-documented defect.
+  for (nm in c("z_output", "psi_output", "w_output", "theta_output")) {
+    if (length(dim(ro[[nm]])) == 2L) {
+      expect_equal(dim(thinned[[nm]]), dim(ro[[nm]]), info = nm)
+      expect_equal(thinned[[nm]], ro[[nm]], info = nm)
+    }
+  }
+
+  # Retained draws are the right ones, not merely the right count.
+  expect_equal(thinned$jsdm_output$B0_output,
+               ro$jsdm_output$B0_output[, seq(1, niter, by = 5), , drop = FALSE])
+
+  # thin = 1 is exactly the identity.
+  expect_identical(thinOutput(fit, thin = 1)$results_output, ro)
+})

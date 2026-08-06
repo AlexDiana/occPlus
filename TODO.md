@@ -52,7 +52,13 @@ output: html_document
 
 Every code change Claude made, newest first. None has had human review beyond Doug asking for it. All are recoverable from git; revert or rework freely. Each says what to check. Full detail for each is in *Fixed bugs*, which is the record; this section is the queue.
 
-No open items. The one item this section held, the `listPriors$b_betatheta_slope_var` hook, is closed as *Fixed bugs* 45.
+1.  **`thinOutput()` rewritten.** **FIXED 4 August 2026** (Claude; `R/output.R`, `man/thinOutput.Rd` deleted, `tests/testthat/test-regression-bugs.R`). Full detail in *Fixed bugs* 48. It had three defects, of which the worst was undocumented: it replaced the entire `jsdm_output` list, and the scalar `WAIC`, with the character string "Dimension not recognised", because `print()` returns its argument and the return value was being assigned.
+
+    **The one thing worth your eye is the rule the fix rests on.** Every array is thinned on its **second-to-last axis**, on the assumption that `runOccJSDM()` always stores iterations there with `nchain` last. That is true of all 27 arrays today, checked individually. Iteration arrays are told apart from posterior means by requiring the last two extents to equal `(niter, nchain)` as a pair. If you add an output whose axes are ordered differently, it will be silently left unthinned rather than mangled -- safe, but wrong, and nothing will complain.
+
+    **Two decisions left open, both yours.** It is still unexported, per your "disable it for now, but let's keep it there" on the original item, so using it means `occJSDM:::thinOutput()`. And it now has no caller anywhere: the CRAN plan step that wanted it (option (a), thinning `sampleresults.rda`) is superseded by refitting small instead, which fixes the correctness problem thinning cannot. Keeping it is defensible, deleting it is defensible; it should not just drift.
+
+    ALEX TO REVIEW
 
 ## **B. Inference-affecting bugs (wrong numbers, silently) (Alex)**
 
@@ -158,13 +164,7 @@ No open items. The one item this section held, the `listPriors$b_betatheta_slope
 
 ## **C. Crashes, unreachable code paths, and API bugs (Alex)**
 
-1.  **`thinOutput()`: two of the three original defects remain.** The crash is gone and `thin` is honoured, but (a) the 2-D branch thins **by row** (`R/output.R:57`), silently dropping *sites* from the `psi_output`/`w_output`/`theta_output` posterior-mean matrices, whose rows are sites and not iterations; and (b) the scalar `WAIC` falls through to `print("Dimension not recognised")` and becomes `NULL`.
-
-    Also: it is no longer in `NAMESPACE` but `man/thinOutput.Rd` still ships a `\usage` block, so the manual documents a function users cannot call. Either re-export or drop the `.Rd`.
-
-    Note the CRAN plan's option for shrinking `sampleresults.rda` depends on this working, so it is not simply deletable.
-
-    ALEX TO DISABLE IT FOR NOW, BUT LET'S KEEP IT THERE
+No open items. The one item this section held, `thinOutput()`, is closed as *Fixed bugs* 48.
 
 ## **D. Dead and broken internal code (Alex)**
 
@@ -182,7 +182,7 @@ Ten dead functions were moved to `deprecated/` on 30 July (*Fixed bugs* 37). Wha
 
     The wrappers need different handling: **do not edit `RcppExports.R`**, it is generated. Remove the `// [[Rcpp::export]]` tag in the C++ and re-run `Rcpp::compileAttributes()`.
 
-    Two things the scan flags that must **not** be deleted: `.onLoad()` (zero callers because R itself calls it; removing it would drop the `mc.cores` cap set for CRAN compliance) and `thinOutput()` (uncallable today, but the `thinOutput()` item in group C and the CRAN plan depend on it).
+    One thing the scan flags that must **not** be deleted: `.onLoad()`, which has zero callers because R itself calls it; removing it would drop the `mc.cores` cap set for CRAN compliance. `thinOutput()` also shows up as dead and is a genuine judgement call rather than an oversight: it is correct and tested as of *Fixed bugs* 48, but unexported and with no caller, since the CRAN plan step that wanted it has been superseded by refitting small instead. Delete it or keep it deliberately; do not let it fall out with the batch.
 
     CLAUDE TO DO AFTER THE SAMPLER REWRITE LANDS
 
@@ -387,7 +387,7 @@ Items 16 and 18 are marked **partially fixed**: the crash in each is gone, but p
 
 15. ~~**`summarisedLatentPresences = FALSE` errors on two-stage models.**~~ **FIXED.** Now correctly allocates and writes `w_output_chain` and `theta_output_chain`. `R/runOccJSDM.R:1152`.
 
-16. ~~**`thinOutput()` cannot run at all.**~~ **PARTIALLY FIXED.** The function still exists (`R/output.R:18`) and now runs: `niter` is read from `fitModel$results_output$jsdm_output$B0_output` instead of the long-gone `beta_ord_output`, and the `thin` argument is honoured rather than hard-coding `by = 5`. **Two of the three original defects remain** -- the 2-D branch still thins by row, and the scalar `WAIC` still falls through to `print("Dimension not recognised")`. Tracked as **the `thinOutput()` item in group C** above.
+16. ~~**`thinOutput()` cannot run at all.**~~ **PARTIALLY FIXED, and fully closed 4 August 2026 as *Fixed bugs* 48.** The function still exists and now runs: `niter` is read from `fitModel$results_output$jsdm_output$B0_output` instead of the long-gone `beta_ord_output`, and the `thin` argument is honoured rather than hard-coding `by = 5`. Two of the three original defects survived this fix, plus a third nobody had spotted; all are closed by *Fixed bugs* 48. Read that entry, not this one, for current status.
 
 17. ~~**`computeDiagnostics()` runs on `psi_output`.**~~ **FIXED.** Added `psi_output` to the skip list to avoid meaningless diagnostics. `R/diagnostics.R:403-404`.
 
@@ -599,6 +599,18 @@ Items 16 and 18 are marked **partially fixed**: the crash in each is gone, but p
     **(c) `reparamFactorModel(A_output, C_output)` fails when `gt > ncov_psi`.** `C_output` is `[gt x ncov_psi]`; when `gt > ncov_psi`, `qr.Q()` returns a non-square `[gt x ncov_psi]` matrix and `Q %*% diag(diag(R), nrow = gt)` fails on conformability. Fixed by `gt_default <- floor(sqrt(min(S, ncov_psi)))`, which ensures the default `gt <= ncov_psi`. A caller who manually sets `listParams$n_lattrait > ncov_psi` could still trigger it, but that is a usage error. `R/runOccJSDM.R:773`.
 
     **(d) Spatial-covariate `is.numeric` check ran before the names-present check.** A mistyped `spatCovariates` name gave `undefined columns selected` rather than the intended "Covariate names provided not in data\$info". Fixed by reordering: the `%in% colnames(data$info)` check (`:570`) now precedes `sapply(data_info[,spatCovariates], is.numeric)` (`:574`). `R/runOccJSDM.R:570-576`.
+
+48. ~~**`thinOutput()` destroyed `jsdm_output` and `WAIC`, and dropped sites from the posterior-mean matrices.**~~ **FIXED 4 August 2026** (Claude; `R/output.R`, `man/thinOutput.Rd`, `tests/testthat/test-regression-bugs.R`). Closes the `thinOutput()` item that was group C item 1, and completes *Fixed bugs* 16.
+
+    **Three defects, two of them worse than the item recorded.** `jsdm_output` is a *list* of 17 parameter arrays, so `length(dim(x))` was 0, it matched no branch, and fell through to `print("Dimension not recognised")` -- which returns its argument, so the whole list was replaced by that character string. The scalar `WAIC` was destroyed identically, becoming a character string rather than the `NULL` the item predicted. Only the third, 2-D matrices thinned by row and so losing sites, was as described.
+
+    **The fix rests on one rule:** across every array `runOccJSDM()` stores, the iteration axis is the second-to-last, with `nchain` last -- uniformly true at 4-D, 3-D and 2-D, so no branching on rank is needed. Iteration arrays are told apart from posterior means by requiring the last two extents to equal `(niter, nchain)` as a pair; matching the last alone would misfire whenever `S == nchain`. The four posterior-mean elements are also exempted by name when 2-D, which removes the residual case where `n == niter` and `S == nchain` coincide. Anything unrecognised is now returned untouched instead of being replaced, and both `print()` calls are gone (they were also CRAN audit item 17).
+
+    **Verified on real fits**, with `niter`, `n`, `N`, `S` and `nchain` deliberately all distinct -- an earlier ad-hoc check had `niter == n == 40`, which makes a `[sites x species]` mean indistinguishable from an iteration array by shape and hides the entire bug. All 17 `jsdm_output` elements thin on the correct axis with other extents intact; `WAIC` stays numeric and unchanged; the mean matrices keep every site; retained draws are the right iterations (max difference 0, not merely the right count); `thin = 1` is exactly the identity. Both `summarisedLatentPresences` settings, since `z_output`/`psi_output` are 2-D means under one and 4-D arrays under the other, and must be thinned in the second case and not the first. Guarded by a tier-1 regression test.
+
+    **Left unexported deliberately**, per Alex's "disable it for now, but let's keep it there" on the original item. The stale `man/thinOutput.Rd`, which documented a `\usage` block for a function not in `NAMESPACE`, is deleted; the roxygen now carries `@noRd`.
+
+    **Worth knowing before relying on this:** the CRAN plan's option (a) for shrinking `sampleresults.rda` was the only consumer, and `AGENTS.md` records option (b) -- refit small -- as strictly better, which "removes the dependency on `thinOutput()` entirely". So this is a correct function with no current caller. Fixed rather than deleted because a silently-destructive function is worse to leave in place than either alternative, but deleting it remains a reasonable call.
 
 # **Completed work**
 

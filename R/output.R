@@ -1,3 +1,67 @@
+#' Thin one element of a fitted model's output.
+#'
+#' Recursive helper for [thinOutput()]. Not exported.
+#'
+#' The rule: across every array `runOccJSDM()` stores, the iteration axis is
+#' the **second-to-last**, with `nchain` last. That holds uniformly --
+#' 4-D `[., ., niter, nchain]`, 3-D `[., niter, nchain]`, and 2-D
+#' `[niter, nchain]` (`sigmab_output` and friends inside `jsdm_output`) -- so
+#' one rule covers all of them and there is no need to branch on
+#' dimensionality.
+#'
+#' What must NOT be thinned is anything that merely happens to be an array.
+#' `results_output` also holds posterior *means* (`psi_output`, `w_output`,
+#' `theta_output`, and `z_output` when `summarisedLatentPresences = TRUE`),
+#' which are `[sites x species]` or `[samples x species]`. Thinning those by
+#' row silently drops sites, which is what this function used to do.
+#'
+#' They are told apart by requiring the last two extents to equal
+#' `(niter, nchain)`. That is deliberately a *pair* test: matching only the
+#' last extent would misfire whenever `S == nchain`, which is common. The pair
+#' test can only be fooled if `n == niter` AND `S == nchain` at once, so the
+#' named posterior-mean elements are additionally exempted by the caller.
+#'
+#' @param x An element of `results_output` (array, list, or scalar).
+#' @param idx Iteration indices to keep.
+#' @param niter,nchain Expected extents of the last two axes.
+#' @param exempt Element names never to thin, however shaped.
+#' @param nm Name of this element, for the exemption check.
+#'
+#' @return `x`, thinned on its iteration axis if it has one, unchanged if not.
+#' @noRd
+thinElement <- function(x, idx, niter, nchain, exempt = character(0), nm = "") {
+
+  # Recurse into nested lists. jsdm_output is one, holding 17 parameter
+  # arrays; the previous version treated it as an array, matched no branch,
+  # and replaced the whole list with the return value of print(), i.e. the
+  # string "Dimension not recognised".
+  if (is.list(x)) {
+    out <- lapply(seq_along(x), function(j) {
+      thinElement(x[[j]], idx, niter, nchain, exempt, names(x)[j])
+    })
+    names(out) <- names(x)
+    return(out)
+  }
+
+  if (nm %in% exempt) return(x)
+
+  d <- dim(x)
+
+  # Scalars and vectors have no dim: WAIC lands here. Previously it hit the
+  # same print() fall-through as jsdm_output and became a character string.
+  if (is.null(d) || length(d) < 2L) return(x)
+
+  # Not iteration-indexed (a posterior-mean matrix, or anything unrecognised):
+  # leave it exactly as it is rather than guessing.
+  k <- length(d)
+  if (d[k] != nchain || d[k - 1L] != niter) return(x)
+
+  # Thin the second-to-last axis, whatever the rank.
+  args <- rep(list(quote(expr = )), k)
+  args[[k - 1L]] <- idx
+  do.call(`[`, c(list(x), args, list(drop = FALSE)))
+}
+
 #' thinOutput
 #'
 #' Thins the MCMC output.
@@ -5,6 +69,14 @@
 #' @details
 #' Returns the same fitModel object, but with the MCMC iterations in
 #' `results_output` thinned, keeping only every `thin`-th iteration.
+#'
+#' Only iteration-indexed arrays are touched. Posterior-mean matrices
+#' (`psi_output`, `w_output`, `theta_output`, and `z_output` when the fit was
+#' run with `summarisedLatentPresences = TRUE`) are returned unchanged, as is
+#' the scalar `WAIC`, since none of them has an iteration axis to thin.
+#'
+#' Note that `fitModel$infos` records no iteration count, so nothing outside
+#' `results_output` needs updating to stay consistent with the thinned arrays.
 #'
 #' @param fitModel Output from the function runOccJSDM
 #' @param thin Thinning interval; every `thin`-th iteration is kept (default 5)
@@ -15,62 +87,38 @@
 #' @import dplyr
 #' @import ggplot2
 #'
+#' @noRd
 thinOutput <- function(fitModel, thin = 5){
 
-  niter <- dim(fitModel$results_output$jsdm_output$B0_output)[2]
+  B0 <- fitModel$results_output$jsdm_output$B0_output
+  if (is.null(dim(B0)) || length(dim(B0)) != 3L) {
+    stop("thinOutput(): cannot read iteration count from jsdm_output$B0_output")
+  }
+  niter  <- dim(B0)[2]
+  nchain <- dim(B0)[3]
+
+  if (!is.numeric(thin) || length(thin) != 1L || is.na(thin) || thin < 1) {
+    stop("thinOutput(): 'thin' must be a single number >= 1")
+  }
+
   idx_thinned <- seq(1, niter, by = thin)
 
-  results_output <- fitModel$results_output
+  # Posterior means, never thinnable. Named as a second guard: the shape test
+  # in thinElement() would only misclassify these if n == niter and
+  # S == nchain simultaneously, but that is cheap to rule out outright.
+  mean_elements <- c("z_output", "psi_output", "w_output", "theta_output")
 
-  results_output_thinned <- lapply(1:length(results_output), function(i){
-
-    nameElem <- names(results_output)[i]
-
-    x <- results_output[[i]]
-
-    if(nameElem == "z_output"){
-
-      if(length(dim(x))== 4){
-
-        x[,,idx_thinned,,drop=F]
-
-      } else if(length(dim(x))== 2){
-
-        x
-
-      } else {
-
-        print("Dimension not recognised")
-
-      }
-
-    } else {
-
-      if(length(dim(x)) == 4){
-
-        x[,,idx_thinned,,drop=F]
-
-      } else if (length(dim(x)) == 3) {
-
-        x[,idx_thinned,,drop=F]
-
-      } else if (length(dim(x)) == 2) {
-
-        x[idx_thinned,,drop=F]
-
-      } else {
-
-        print("Dimension not recognised")
-
-      }
-
-    }
-
+  ro <- fitModel$results_output
+  thinned <- lapply(seq_along(ro), function(i) {
+    nm <- names(ro)[i]
+    # The mean elements are 4-D (and genuinely thinnable) when the fit stored
+    # full posteriors, so exempt them only when they are not iteration-shaped.
+    ex <- if (nm %in% mean_elements && length(dim(ro[[i]])) == 2L) nm else character(0)
+    thinElement(ro[[i]], idx_thinned, niter, nchain, exempt = ex, nm = nm)
   })
+  names(thinned) <- names(ro)
 
-  names(results_output_thinned) <- names(results_output)
-
-  fitModel$results_output <- results_output_thinned
+  fitModel$results_output <- thinned
 
   fitModel
 
