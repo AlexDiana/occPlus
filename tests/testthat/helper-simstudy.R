@@ -635,6 +635,37 @@ simstudy_occupancy_rows <- function(fit, sim, scenario, replicate) {
          "). Has summarisedLatentPresences changed?")
   }
 
+  # What DRIVES each species' occupancy, carried alongside how well it was
+  # recovered. Free at this point: the simulator has already computed the
+  # partition, and eta is the truth we are scoring against anyway.
+  #
+  # This exists because "why do species differ in psi_cor?" turned out to have
+  # a clear answer that none of the stored columns could express. Measured over
+  # 1000 species-fits of `base` on 10 August 2026: psi_cor correlates +0.73
+  # with the environmental share and -0.64 with the biotic share, and 0.61 of
+  # its variance is explained once sd_eta joins them. Prevalence, the obvious
+  # suspect, comes in at -0.01.
+  #
+  # The mechanism is structural rather than a defect. The environmental part of
+  # eta is X %*% B, where X is known and B pools across every site, so it is
+  # well identified. The biotic part is U %*% L, and U is one row per site
+  # informed only by that site's own observations. A species living mostly in U
+  # is being reconstructed from the weakest-identified part of the model.
+  #
+  # sd_eta earns its place separately: a species whose true occupancy barely
+  # varies across sites has no pattern to recover, and psi_cor then correlates
+  # noise against noise. That is a property of the statistic, not of the model.
+  jp <- sim$true_params$jsdmParams_true
+  vp <- jp$varPart
+  eta <- jp$eta
+
+  # varPart's first three columns are a genuine decomposition summing to 1.
+  # Do NOT substitute var(component)/var(eta): the components are correlated
+  # and that ratio exceeded 1 by two orders of magnitude when first tried,
+  # because X %*% B is large and cancelled by the rest.
+  has_vp <- !is.null(vp) && all(c("Environmental", "Spatial", "Biotic") %in%
+                                colnames(vp)) && nrow(vp) == S
+
   data.frame(
     scenario  = scenario$label,
     replicate = replicate,
@@ -645,6 +676,10 @@ simstudy_occupancy_rows <- function(fit, sim, scenario, replicate) {
                        stats::cor(psi_est[, s], psi_true[, s]), numeric(1)),
     auc       = vapply(seq_len(S), function(s)
                        occrec_auc(psi_est[, s], z_true[, s]), numeric(1)),
+    sd_eta     = if (!is.null(eta)) apply(eta, 2, stats::sd) else NA_real_,
+    share_env  = if (has_vp) vp[, "Environmental"] else NA_real_,
+    share_spat = if (has_vp) vp[, "Spatial"]       else NA_real_,
+    share_lat  = if (has_vp) vp[, "Biotic"]        else NA_real_,
     stringsAsFactors = FALSE
   )
 }

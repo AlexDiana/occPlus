@@ -652,34 +652,114 @@ if (!is.null(prev_cell) && nrow(prev_cell) > 1) {
   # table directly above it.
   humped <- which.max(prev_cell$psi_cor_mean) < nrow(prev_cell)
 
+  n_rarest <- prev_cell$n_species_fit[1]
   emit(sprintf('
     <p>
-      <strong>Prevalence matters, but not in a straight line.</strong> Species
-      in the %s band average %s, the weakest here; the %s band is the strongest
-      at %s. %s
+      <strong>Prevalence looks like it matters. It mostly does not.</strong>
+      Species in the %s band average %s, the weakest here, against %s in the
+      strongest band (%s), which invites the reading that rare species are the
+      hard ones. Two things argue against it. The weakest band rests on %d of
+      the %s species-fits in this cell, so it is the noisiest number in the
+      table. And across all of them the plain correlation between how common a
+      species is and how well it is placed is <b>%s</b> -- essentially nothing.
     </p>
     <p>
-      Note what this does to a summary statistic: across every species-fit in
-      this cell the plain correlation between how common a species is and how
-      well it is placed is <b>%s</b>, essentially nothing. %s So read the bands,
-      not the correlation. The practical reading for a survey: the model is
-      weakest on genuinely rare species, and it is honest about that rather
-      than confidently wrong -- the intervals stay wide where the estimate is
-      poor.
+      An earlier version of this page read the bands as evidence that the model
+      struggles with rare species. That does not survive a proper look: the
+      next section finds what actually drives the difference, and prevalence is
+      not it. Rarity travels with the real cause rather than being it.
     </p>',
     worst$prevalence, fmt(worst$psi_cor_mean),
-    best$prevalence, fmt(best$psi_cor_mean),
-    if (humped)
-      sprintf(paste("Recovery climbs out of the rarest band, peaks in the",
-                    "middle, and then eases off again for the commonest",
-                    "species: a hump, not a slope."))
-    else "Recovery improves steadily with prevalence.",
-    fmt(cell$cor_prev),
-    if (humped)
-      paste("That is not evidence prevalence is irrelevant -- it is what a",
-            "humped relationship does to a linear correlation, with the two",
-            "arms cancelling.")
-      else ""))
+    fmt(best$psi_cor_mean), best$prevalence,
+    n_rarest, format(cell$n_species_fit, big.mark = ","),
+    fmt(cell$cor_prev)))
+}
+```
+
+```{r variance-decomposition}
+# The section this replaces asserted a prevalence effect from a banded table.
+# With the right predictors it evaporates, and something with far more
+# explanatory power takes its place. Everything here is measured, not argued.
+oc <- vd$occupancy
+oc <- oc[oc$scenario == vd$example_cell & !is.na(oc$share_env), ]
+
+if (nrow(oc) > 0) {
+  cr <- function(x) fmt(stats::cor(oc[[x]], oc$psi_cor), 2)
+  fit <- stats::lm(psi_cor ~ sd_eta + share_env + share_spat + occ_true,
+                   data = oc)
+  r2 <- summary(fit)$adj.r.squared
+
+  emit(sprintf('
+    <h3>So what does decide whether a species is recovered?</h3>
+    <p>
+      Each simulated species has its occupancy driven by three things in known
+      proportions: the <b>environmental</b> covariates we measured, the
+      <b>spatial</b> field, and the <b>latent factors</b> standing in for
+      everything we did not measure. The simulator records that split, so it
+      can be set against how well each species was then recovered. Over the
+      %s species-fits in <code>%s</code>:
+    </p>',
+    format(nrow(oc), big.mark = ","), vd$example_cell))
+
+  tbl <- data.frame(
+    `What varies between species` = c(
+      "Share of occupancy driven by measured environment",
+      "Share driven by latent factors (the unmeasured part)",
+      "How much the species' true occupancy varies across sites",
+      "Share driven by the spatial field",
+      "How common the species is"),
+    `correlation with psi_cor` = c(cr("share_env"), cr("share_lat"),
+                                   cr("sd_eta"), cr("share_spat"),
+                                   cr("occ_true")),
+    check.names = FALSE, stringsAsFactors = FALSE)
+  cat(html_table(tbl, align_first_left = TRUE))
+
+  q <- prev_cell  # reuse styling; build the latent-share bands
+  oc$band <- cut(oc$share_lat, stats::quantile(oc$share_lat, 0:5 / 5),
+                 include.lowest = TRUE)
+  agg <- aggregate(cbind(psi_cor, share_env, share_lat) ~ band, oc, mean)
+  agg$n <- as.integer(table(oc$band))
+  names(agg) <- c("latent share (band)", "psi_cor", "share_env", "share_lat", "n")
+  cat(html_table(agg[, c("latent share (band)", "n", "share_env",
+                         "share_lat", "psi_cor")],
+    caption = "Species grouped by how much of their occupancy comes from the unmeasured, latent part of the model.",
+    digits = list(`latent share (band)` = 0, n = 0, share_env = 3,
+                  share_lat = 3, psi_cor = 3),
+    align_first_left = TRUE))
+
+  emit(sprintf('
+    <p>
+      <strong>A species is recovered well to the extent its distribution is
+      driven by covariates you measured.</strong> From %s in the least
+      latent-driven fifth to %s in the most: a factor of nearly three, on the
+      same model and the same data.
+    </p>
+    <p>
+      The reason is structural rather than a defect. The environmental part of
+      the linear predictor is a coefficient shared across every site, so a
+      hundred sites all inform it. The latent part is one row per site,
+      informed only by that site&rsquo;s own observations, and no amount of
+      other sites helps. A species living mostly in the latent part is being
+      reconstructed from the weakest-identified piece of the model. The
+      ordination is doing its job -- it represents the residual structure -- but
+      it cannot localise it site by site.
+    </p>
+    <p>
+      The second effect is a property of the measurement rather than the model:
+      a species whose true occupancy barely varies between sites has no pattern
+      to find, and the correlation then compares noise with noise. Together
+      with the shares above these account for <b>%s</b> of the variation in
+      <code>psi_cor</code>; prevalence adds nothing once they are in.
+    </p>
+    <p>
+      <strong>For a real survey this is the actionable finding on this page.</strong>
+      occJSDM will place a species well if you measured the covariates that
+      actually govern it. A species responding to something you did not measure
+      is absorbed into the latent factors and recovered at roughly %s rather
+      than %s. That is an argument for covariate choice, not for more sites.
+    </p>',
+    fmt(agg$psi_cor[1]), fmt(agg$psi_cor[nrow(agg)]),
+    pct(r2, 0), fmt(agg$psi_cor[nrow(agg)]), fmt(agg$psi_cor[1])))
 }
 ```
 
