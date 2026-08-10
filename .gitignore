@@ -7,6 +7,12 @@ inst/doc
 # a file whose parent directory is excluded, so this must exclude dev/'s
 # *contents* (/dev/*) rather than the directory itself, then re-include the
 # subdirectory. Study output stays ignored -- it is large and regenerable.
+#
+# One exception inside that exception: dev/simstudy/validation-data.rds IS
+# tracked. It is the compact bundle the validation article renders from,
+# written by export_validation_data.R, and the article cannot build without
+# it on a fresh checkout. Kept small on purpose -- the 155k-row per-element
+# table is dropped, only the summaries and the occupancy rows are carried.
 /dev/*
 !/dev/simstudy/
 /dev/simstudy/results/

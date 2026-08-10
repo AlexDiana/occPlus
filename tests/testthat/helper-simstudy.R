@@ -72,6 +72,60 @@ simstudy_scenarios <- function() {
     mk("binary",            model = "binary")
   ,
 
+    # --- Community-feature contrasts (PLAN.md 18) -----------------------
+    #
+    # These answer "how well does occJSDM handle a community WITH this
+    # feature against one WITHOUT it", which the ten cells above cannot: they
+    # each draw independent truths, so any difference between them carries the
+    # variance of two separate simulated worlds on top of the effect.
+    #
+    # All five set `seed_label = "base"`, so they pair against the existing
+    # `base` cell without altering it -- `base` has no seed_label, so its key
+    # is already the string "base" and every historical result stays
+    # comparable.
+    #
+    # The pairing is exact for any arm holding P and S, because draw_truth()
+    # consumes RNG sized only by P*S (p, q) and S (theta0, theta_baseline).
+    # All five hold both, so all five draw a bit-identical truth. What differs
+    # per arm is how much of that truth remains comparable element-wise:
+    # detcov_none drops beta_theta's slope rows, and env_none/env_rich change
+    # B's dimension, so those blocks cannot be differenced element-wise even
+    # though the detection-side truths match exactly. PLAN.md 18.4 has the
+    # table.
+    #
+    # NOT production cells by default, same as the M ladder: name them.
+
+    # The spatial contrast, and the cell whose name matches what it does.
+    # `traits_isolated` above is the arm that actually turns the spatial field
+    # off; its name says the opposite. Renaming it would break comparability
+    # with runs on disk, so this cell is added rather than that one renamed.
+    mk("no_spatial",    useSpatField = FALSE, n_supportpoints = NULL,
+                        seed_label = "base"),
+
+    # Environmental covariate count. Never varied anywhere before: ncov_psi is
+    # 2 in all 21 existing cells, so nothing in the study has ever spoken to
+    # how covariate richness affects recovery.
+    #
+    # env_none needs the occCov guard in simstudy_fit() -- seq_len(0) yields
+    # character(0), which is not what runOccJSDM() wants. Whether the
+    # *simulator* tolerates ncov_psi = 0 is unverified; g = 0 already errors
+    # outright, so treat the first run of this cell as a test of the cell.
+    mk("env_none",      ncov_psi = 0L, seed_label = "base"),
+    mk("env_rich",      ncov_psi = 4L, seed_label = "base"),
+
+    # Detection covariates as a production contrast. `nocollcov` below sets the
+    # same flag but pairs against itself, which answers the B0-bias question it
+    # was built for and not this one.
+    mk("detcov_none",   ncov_theta = 0L, seed_label = "base"),
+
+    # Weak detection with n held at 100. This is what makes low_information
+    # interpretable: that cell drops n to 40 AND weakens detection AND cuts
+    # support points, so its damage is unattributable. Against this arm, the
+    # remaining difference is sample size alone.
+    mk("weak_detection", p_range = c(0.1, 0.3),
+                         theta_baseline_range = c(0.05, 0.2),
+                         seed_label = "base"),
+
     # --- M ladder (PLAN.md 13) -----------------------------------------
     #
     # Not production cells: these answer whether group B items 4-6 are code
@@ -80,9 +134,9 @@ simstudy_scenarios <- function() {
     #
     # **They are NOT inert, and a previous version of this comment said they
     # were.** run_study.R takes this entire list whenever --scenarios is
-    # empty, so a bare `Rscript run_study.R` runs all 21 cells, not the 10
-    # production ones -- roughly 9 h instead of 2 h 45 m. That misreading cost
-    # a wasted launch on 2 August. The production grid must be named:
+    # empty, so a bare `Rscript run_study.R` runs every cell defined here, not
+    # the 10 production ones -- many hours instead of 2 h 45 m. That misreading
+    # cost a wasted launch on 2 August. The production grid must be named:
     #
     #   --scenarios=base,binary,d_overfit,d_underfit,low_information,
     #               occupancy,primers_3,spatial_isolated,species_20,
@@ -262,7 +316,12 @@ simstudy_fit <- function(sim, scenario,
     listParams$n_supportpoints <- scenario$n_supportpoints
   }
 
-  occCov <- paste0("X_psi.EnvCov.", seq_len(scenario$ncov_psi))
+  # ncov_psi = 0 gives seq_len(0), hence character(0), which is not the same
+  # thing as "no covariates" to runOccJSDM(). Mirrors the collCov branch just
+  # below, which already handles the analogous ncov_theta = 0 case. Needed by
+  # the env_none cell (PLAN.md 18.6).
+  occCov <- if (scenario$ncov_psi > 0)
+    paste0("X_psi.EnvCov.", seq_len(scenario$ncov_psi)) else NULL
   # A scenario with ncov_theta = 0 has no X_theta column at all: the simulator
   # produces a 1 x S beta_theta (the intercept row only). Passing
   # collCovariates regardless errors with "Covariate names provided not in
@@ -677,10 +736,17 @@ simstudy_summarise <- function(rows) {
 #' the single fit the tier-2 table reports.
 #'
 #' `psi_cor_q05`/`q95` are the interval to quote. `share_ok` uses the same 0.30
-#' cut as the tier-2 assertion so the two are comparable. `cor_prev` is the
-#' correlation between a species' true prevalence and how well it was
-#' recovered, which is the quantitative form of "rare species are the hard
-#' ones" -- previously an eyeball reading of one ten-row table.
+#' cut as the tier-2 assertion so the two are comparable.
+#'
+#' `cor_prev` correlates a species' true prevalence with how well it was
+#' recovered. **Do not read it as "rare species are the hard ones".** The
+#' 10 August R = 100 run measured it at between -0.07 and +0.005 in every cell,
+#' while the prevalence bands differ substantially: recovery climbs from the
+#' rarest band, peaks in the middle, then eases off again for the commonest
+#' species. A linear correlation across a humped relationship cancels to
+#' nothing. It is kept because a *large* value would be informative and its
+#' absence is itself worth recording; use
+#' `simstudy_occupancy_by_prevalence()` for the actual shape.
 simstudy_summarise_occupancy <- function(occ, cut = 0.30) {
   if (is.null(occ) || nrow(occ) == 0L) return(NULL)
   sp <- split(seq_len(nrow(occ)), occ$scenario)

@@ -931,3 +931,115 @@ Three changes, in rough order of cost.
 3. **Raise the simulated `d`**, or draw loadings so that collinearity is rare, so the truth spans the interior rather than piling up at the boundary. This changes what the grid measures and wants a decision rather than a patch.
 
 Until at least 1 and 2 are done, `resid_cor` should not be quoted as evidence for or against anything.
+
+------------------------------------------------------------------------
+
+## 18. Community-feature scenarios: what the grid varies, and what it does not (10 August 2026)
+
+### 18.1 What prompted it
+
+Doug asked for the testsuite to show how well occJSDM recovers different *ecological community features* -- with and without spatial autocorrelation, with and without trait effects, under different environmental and detection covariate effects -- rather than only how well it recovers parameter blocks. This section audits what the grid already answers, and specifies the cells that would answer the rest.
+
+The distinction matters because the two are not the same question. A parameter block is a slice through every scenario; a community feature is a property of the *dataset*, and the grid can only speak to it if some cell varies that property and another holds it fixed.
+
+### 18.2 What the ten production cells actually vary
+
+One factor at a time from `SIMSTUDY_BASE`, not factorial:
+
+- `spatial_isolated`: `fit_traits = FALSE`
+- `traits_isolated`: `useSpatField = FALSE`
+- `primers_3`: `P = 2 -> 3`
+- `species_20`: `S = 10 -> 20`
+- `d_underfit` / `d_overfit`: simulated and fitted `d` deliberately mismatched
+- `occupancy` / `binary`: the collapsed study designs
+- `low_information`: `n = 40`, weak `p_range` and `theta_baseline_range`, `n_supportpoints = 8`
+
+### 18.3 What is not varied anywhere
+
+Verified by listing every `mk()` override in `simstudy_scenarios()`:
+
+- **`ncov_psi` is 2 in every cell**, production and diagnostic. Nothing in the study speaks to environmental covariate count or strength.
+- **`ncov_theta` is 1 in every production cell.** It varies only in `nocollcov`, a diagnostic arm excluded from production runs.
+- **`g` and `gt` are 2 everywhere.** Trait count is never varied.
+- **Detection strength varies in exactly one cell**, `low_information`, where it moves together with `n` and `n_supportpoints`. Three factors at once, so nothing there is attributable.
+- **Prevalence is never a design factor.** It varies only incidentally within cells, which is what `simstudy_occupancy_by_prevalence()` exploits, but no cell is built to be a rare-species community. The 10 August run makes the case for one: recovery differs sharply across prevalence bands (0.37 in (0.1, 0.2] against 0.66 in (0.3, 0.5] for `base`), and the incidental spread gives only 18 species-fits in the rarest band against 516 in the commonest.
+- **The prevalence relationship is humped, not monotonic, and this corrects an assumption made when section 18 was first written.** `cor_prev` was described here as the quantitative form of "rare species are the hard ones". Measured, it sits between -0.07 and +0.005 in every cell -- essentially zero -- while the bands plainly differ, because recovery climbs out of the rarest band, peaks in the middle and eases off again for the commonest species. The two arms cancel. Quote the bands; do not quote `cor_prev` as evidence either way.
+
+### 18.4 Three structural problems
+
+**1. The production cells are not paired, and this is the expensive one.** Only the M ladder and `nocollcov` set `seed_label`; each of the ten production cells draws independent truths. So "spatial on against spatial off" compares `base` with `traits_isolated` across different simulated worlds, and the contrast carries the variance of two independent truth draws on top of any real effect. At R = 100 that swamps precisely the modest effects a community-feature question is about.
+
+The fix costs nothing: `seed_label` already exists and the M ladder already uses it. `draw_truth()` consumes RNG sized only by `P * S` (for `p` and `q`) and `S` (for `theta0` and `theta_baseline`), so **any arm holding `P` and `S` fixed, with unchanged `p_range` and `theta_baseline_range`, draws a bit-identical truth**. That is a strictly stronger pairing than the M ladder gets, where `M` and `K` necessarily change the data volume.
+
+Pairing strength by arm, and it is not uniform:
+
+| Arm | Pairing against `base` |
+|--------------------|-------------------------------------------------|
+| `no_spatial` | Exact. Same truth, same dimensions. The clean contrast. |
+| `detcov_none` | Truths identical; `beta_theta` loses its slope rows, so that block is not comparable element-wise. |
+| `env_none`, `env_rich` | Detection truths identical; `B` changes dimension, so `B` is not comparable element-wise. |
+| `weak_detection` | Same RNG stream, but the ranges differ by construction, so `p` and `theta_baseline` values differ. Paired in design, not in truth. |
+
+**2. `spatial_isolated` and `traits_isolated` are named backwards.** `spatial_isolated` does not touch the spatial setting -- it sets `fit_traits = FALSE`. `traits_isolated` is the one that sets `useSpatField = FALSE`. The names describe what is left *isolated*, which reads as the opposite of the flag. Anyone reading a results table will get these the wrong way round. Renaming breaks comparability with runs already on disk, so the safe move is to keep the labels and add the explicit `no_spatial` cell, which says what it does.
+
+**3. There is no trait-free dataset, so the with/without-traits contrast is not what it sounds like.** `fit_traits = FALSE` drops traits at *fit* time; the data still contains them. That arm measures **misspecification**, not absence. A genuinely trait-free dataset cannot be generated: `simulateOccJSDMData()` errors at `g = 0` with "length of 'dimnames' \[2\] not equal to array extent", verified and recorded at the top of the scenario grid. Until that is fixed, no cell can answer "how does occJSDM do on a community with no trait structure".
+
+### 18.5 What is blocked, and must be said in the vignette
+
+**Spatial autocorrelation recovery is the one feature the study cannot report on at all.** `l_s` is excluded from every table because it is not recoverable (`sample_ls()` scores the wrong density, TODO.md group B). `sigma_bs` is excluded as prior-dominated, and the residual spatial term it would scale is set to an exact zero matrix by the simulator, so it generates nothing. The spatial cells therefore answer only *does everything else stay calibrated when a spatial field is present*, which is a much weaker claim than the section title in the article currently invites. **Say so explicitly rather than letting the reader infer the stronger one.**
+
+`resid_cor` is degenerate at `d = 2` for the reasons in section 17, so co-occurrence structure is not meaningfully measured either.
+
+### 18.6 The cells to add
+
+Five one-line definitions plus one guard. All hold `P` and `S` at base, so all pair against `base` via `seed_label = "base"`, which leaves `base` itself untouched and comparable with every run already on disk.
+
+1. `no_spatial` -- `useSpatField = FALSE`, `n_supportpoints = NULL`. The exact-paired spatial contrast, and the cell whose name matches its behaviour.
+2. `env_none` -- `ncov_psi = 0`. Does occupancy recovery survive with no environmental information at all, leaving only the latent factors?
+3. `env_rich` -- `ncov_psi = 4`. Does it degrade as the covariate space grows relative to `n`?
+4. `detcov_none` -- `ncov_theta = 0`, paired to `base` rather than to itself as `nocollcov` is. Promotes the diagnostic arm into production so detection-covariate presence becomes a reportable contrast.
+5. `weak_detection` -- `p_range` and `theta_baseline_range` lowered to `low_information`'s values, **with `n` held at 100**. This is what unconfounds `low_information`: the difference between the two cells is then sample size alone.
+
+`env_none` needs a guard in `simstudy_fit()`. It builds `occCov` from `seq_len(ncov_psi)`, which at 0 yields `character(0)`; the existing `collCov` branch already handles the analogous `ncov_theta = 0` case by passing `NULL`, and `occCov` needs the same. **Whether the simulator tolerates `ncov_psi = 0` at all is unverified** -- the `g = 0` precedent shows it does not always tolerate a zero dimension, so treat the first run of that cell as a test of the cell itself.
+
+**`rare_species` is specified but not added, because the knob does not exist.** Nothing in the scenario spec controls occupancy prevalence: `draw_truth()` draws only `p`, `q`, `theta0` and `theta_baseline`, and `B0` is realised downstream by `simulateOccJSDMData()`. A rare-species cell needs a `B0_range` threaded through the spec, `draw_truth()` and the simulator. Note the trap if it is added: any new draw in `draw_truth()` must keep RNG consumption independent of the factors being paired on, or every `seed_label` pairing silently becomes a lie (see the note on `simstudy_seed_for()`). Until then, prevalence is only observable post hoc, which is what the prevalence banding added on 10 August does.
+
+### 18.7 Cost
+
+Five cells at R = 100, roughly 17 minutes each on 5 cores, so about **1 h 25 m on top of the current 2 h 50 m**. The 15-cell grid runs in roughly 4 h 15 m.
+
+### 18.8 What the vignette should show, and how much is already possible
+
+**Most of it needs no new fits.** `validation-data.rds` already carries `accuracy` and `occupancy_summary` for *every* scenario; the article currently shows accuracy for `base` alone and occupancy pooled. A community-feature section is a filtering exercise over data the current run already produces.
+
+What it should contain, in order:
+
+1. **One row per community feature, not per parameter block**: the contrast, the paired difference in occupancy recovery (`psi_cor`), and the paired difference in coverage. Paired arms can quote a difference; unpaired ones must not, and the table should mark which is which.
+2. **Occupancy recovery per scenario**, which answers "does the model still find the species when this feature is present" in the terms a user thinks in.
+3. **An explicit statement of what is not tested**: spatial range, residual correlation structure, trait-free communities. A reader who sees a spatial cell pass will otherwise conclude the spatial model is validated.
+
+------------------------------------------------------------------------
+
+## 19. Two runner fixes, queued behind the 10 August run
+
+Both are in `run_study.R` and both were found while that run was in flight. Neither is applied yet: editing the file does not disturb a running job, but it moves `HEAD`, and this run stamps its provenance at completion.
+
+### 19.1 Checkpoint files are keyed on a truncated argument string
+
+`ckpt_path` is built from `substr(gsub("[^A-Za-z0-9]+", "-", which_sc), 1, 40)`. Two things follow.
+
+**It is order-dependent, not grid-dependent.** The same ten cells listed in a different order give a different filename, so `--resume` silently fails to find an existing checkpoint. Observed directly: the 2 August run wrote `checkpoint-base-spatial-isolated-traits-isolated-pr.rds` and the 10 August run wrote `checkpoint-base-binary-d-overfit-d-underfit-low-inf.rds`, for the same ten cells.
+
+**Truncation can collide.** The 15-cell grid of section 18.6, listed with the production ten first, truncates to exactly the 10 August name. A `--resume` on that grid would load the 10-cell checkpoint, skip those replicates and emit a results file mixing two code states under one provenance SHA. That is the staleness failure this whole exercise exists to prevent, arriving through the back door.
+
+There is a quieter third: `ckpt_append()` always `rbind`s onto whatever `ckpt_load()` returns, **including when `--resume` was not passed**. The current run's final `.rds` is unaffected, because it assembles from `res` rather than the checkpoint, but a colliding name leaves the checkpoint polluted for the next person who does resume.
+
+**Fix:** key on a short hash of the *sorted* scenario labels plus `R`, `nburn`, `niter` and `nchain`, keeping a readable prefix for browsability. Store the key inside the checkpoint and refuse to append when it does not match, so a mismatched resume is impossible rather than unlikely.
+
+### 19.2 Provenance is captured at the end of the run, not the start
+
+The `provenance` block reads `git rev-parse HEAD` and `git status --porcelain` after the fits finish. For a multi-hour run that records whatever `HEAD` is when the run *ends*, which is not necessarily the code that produced the numbers.
+
+This bit the 10 August run: section 18 and the five new cells were written while it was in flight, so its recorded SHA is ahead of the code that actually ran and `git_dirty` is `TRUE` for reasons that have nothing to do with the sampler. The numbers are still sound -- nothing touched `R/` or `src/` -- but the block no longer means what it claims, which for a field whose entire purpose is to pin down provenance is worse than it sounds.
+
+**Fix:** snapshot the git state immediately after `devtools::load_all()`, before any fitting, and carry it forward. Record both that and the state at write time, so a divergence shows up rather than being silently resolved in favour of the wrong one.
