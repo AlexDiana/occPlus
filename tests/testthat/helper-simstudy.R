@@ -126,6 +126,37 @@ simstudy_scenarios <- function() {
                          theta_baseline_range = c(0.05, 0.2),
                          seed_label = "base"),
 
+    # Does more of the same data help? 3x the sites, everything else held.
+    #
+    # The prediction this tests, and it is not a simple one. Species-level
+    # parameters (B0, B, G, the loadings) pool across sites, so they should
+    # sharpen, and rare species should gain most: a species at 10% prevalence
+    # has ~10 occupied sites at n = 100 and ~30 at n = 300, and the 10 August
+    # run put the weakest recovery in exactly that band (psi_cor 0.366 in
+    # (0.1, 0.2] against 0.655 mid-range). But the latent site scores U are
+    # n x d, one row per site, each informed only by that site's own
+    # observations -- so tripling n gives three times as many U rows each
+    # estimated from as much data as before, and the site-specific half of
+    # eta does not improve at all. Expect the systematic part to sharpen and
+    # psi_cor to lift by less than the extra data would naively suggest.
+    #
+    # Calibration may well go the OTHER way, and that is the more interesting
+    # half. The M ladder already ran this experiment on a different axis and
+    # it went backwards: beta_theta coverage falls 0.747 -> 0.579 as M goes
+    # 2 -> 20, and q falls 0.945 -> 0.614 as K goes 3 -> 30, both with flat
+    # bias. That is intervals shrinking around a bias that is not shrinking.
+    # Whether n behaves like M and K is unknown -- they enter the detection
+    # stage and n enters the occupancy stage -- but "more data fixes
+    # calibration" is an assumption this model has already falsified twice.
+    #
+    # n_supportpoints stays at 20, deliberately, so the model specification is
+    # held fixed and only the data grows. Note the cost: 300 sites over the
+    # same domain with the same knot count is a relatively coarser spatial
+    # approximation, so a null or negative result on the spatial-adjacent
+    # blocks should be read with that in mind rather than as "more sites did
+    # not help".
+    mk("sites_300", n = 300L, seed_label = "base"),
+
     # --- M ladder (PLAN.md 13) -----------------------------------------
     #
     # Not production cells: these answer whether group B items 4-6 are code
