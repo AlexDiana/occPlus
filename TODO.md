@@ -218,7 +218,9 @@ Ten dead functions were moved to `deprecated/` on 30 July (*Fixed bugs* 37). Wha
 
 ## **E. Draft of beta version listserv announcement (Doug)**
 
-1.  Listserv announcement (beta release), drafted July 20 2026:
+**No `NEWS.md` for the beta, decided 10 August 2026.** occJSDM gets one when it is released as 0.2.0. That makes this announcement the only place a user is told what is currently broken, since `TODO.md` and `AGENTS.md` are both excluded from the build and from the site, and the validation article is pkgdown-only and unpublished. The "current limitations" block below is therefore load-bearing rather than throat-clearing, and it has to stay in step with group B. Rationale in `AGENTS.md`, CRAN plan item 22.
+
+1.  Listserv announcement (beta release), drafted July 20 2026; limitations block added 10 August 2026:
 
     > Subject: New R package (beta) - occJSDM, a combined occupancy and joint species distribution model
     >
@@ -237,6 +239,12 @@ Ten dead functions were moved to `deprecated/` on 30 July (*Fixed bugs* 37). Wha
     > - occJSDM not only fits a two-stage occupancy model (both field and PCR replicates required), but if given simpler study designs, can collapse to a classical occupancy model (field replicates only) or to a pure JSDM (no replicates).
     > - MCMC fitting with diagnostics, variance partitioning, ordination, and pairwise residual correlation outputs built in.
     > - occJSDM leverages the taxonomic breadth of eDNA datasets by using ordination (each site's position on the latent axes, and each species' loadings on those axes) to predict species occupancies. Thus, each species' predicted occupancy at a site is informed by the estimated occupancies of the other species at that site, thereby using co-occurrence structure. We also allow species to borrow strength from other species sharing similar traits, including inferred traits, in contrast to the classical approach of having rare species borrow strength from abundant species, as is used in multi-species occupancy models.
+    >
+    > Current limitations, all three being worked on:
+    >
+    > - **Spatial field.** The Gaussian-process range parameter is not currently recovered, which biases the spatial term of any fit that uses it. We suggest leaving the spatial field off (`useSpatField = FALSE`) in this release.
+    > - **Residual species correlations.** These are currently biased toward the extremes, by up to 0.6 in our simulations. Read `returnResidualCorrelationMatrix()` and `plotResidualCorrelationMatrix()` for the sign and structure of co-occurrence rather than for calibrated magnitudes.
+    > - **Collection-covariate slopes.** Credible intervals on the Stage 1 collection covariates (`returnCollectionCovariates()`, `plotCollectionCovariates()`) are narrower than they should be: about 77% coverage against a nominal 95% in simulation, and it worsens as replication increases.
     >
     > Vignettes and articles included on data simulation, model fitting/interpretation, and model performance.
 
@@ -339,7 +347,9 @@ H.  **Reduce the repeated `arma::inv()` calls in the samplers. NOT DONE, but a m
 
     **ALEX: the Pages repoint needs admin**, which Doug does not have. Until then `alexdiana.github.io/occJSDM` serves the README via Jekyll rather than the pkgdown site.
 
-    **Two things to settle before publishing.** pkgdown builds every `@examples` block, so the first real build will fail on the group B functions that error unconditionally (`predictNewSites()` among them) unless they are `@examples`-guarded first. And decide whether to publish at all while the `reparamFactorModel()`, `beta_theta` slope and `B0` bias items are open: the site would document functions whose credible intervals are currently overconfident, without saying so anywhere a reader would see.
+    **One thing to settle before publishing, not two. Corrected 10 August 2026.** This item used to say the first build would fail on functions that error unconditionally, `predictNewSites()` among them. That is wrong twice over: `predictNewSites()` was fixed as *Fixed bugs* 34, and pkgdown does not evaluate `\dontrun{}` blocks, which is 22 of the 24 example blocks in `man/`. The two live ones are `str()`, `head()` and one `plotDetectionRates()` call on shipped data. **There is no example-driven build blocker.**
+
+    **What is still open is the judgement call.** Publishing while the `sample_ls()`, `reparamFactorModel()` and `beta_theta` slope items stand means the site documents functions whose output is currently biased or whose intervals are overconfident. The beta's disclosure now lives in the listserv announcement (group E), which the site does not carry, so publishing puts the documentation somewhere the caveats are not. Either say so on the site or accept the gap knowingly.
 
 # **Future versions**
 
