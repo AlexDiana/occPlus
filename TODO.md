@@ -90,6 +90,10 @@ Every code change Claude made, newest first. None has had human review beyond Do
 
     **This does not refute the item.** The code-level argument above is about a per-factor rescaling surviving `cov2cor()` and is untouched. What has gone is the independent evidence for it, so it now rests on reading the transform alone. Your note was that this is a non-issue for logistic models since only the correlation is recoverable; the premise is right, and the reply had been that the measured numbers were already correlations. That reply is no longer available. Full exchange in AGENTS.
 
+    **Confirmed on a second independent run, 10 August 2026, and on every cell rather than two.** Predicted coverage (one minus the share of true correlations at exactly ±1) equals measured coverage to three decimal places in **nine of the ten** production cells, spanning 0.752 to 0.980. The statistic is degenerate everywhere, not just where it was first noticed.
+
+    **The tenth cell is the one worth knowing about.** `d_overfit` predicts 0.760 and measures 0.756, and it is the only cell whose intervals are not effectively the whole range: median width 1.79 against 2.00 in the other nine. So it is the single cell where `resid_cor` coverage carries any signal at all, and even there it is marginal. Anyone acting on `PLAN.md` §17.6 should start from why that cell differs.
+
     ALEX TO MAKE A DECISION, now on the code argument alone
 
 3.  **`beta_theta` intervals are overconfident, and it gets worse with more data.** Coverage 0.77 at the production `M = 2`, falling monotonically to 0.58 at `M = 20`, while bias stays small and flat. Shrinking intervals around a bias that is not shrinking is the signature of a real defect being exposed by more information, not fixed by it.
@@ -114,9 +118,13 @@ Every code change Claude made, newest first. None has had human review beyond Do
 
     ALEX TO DECIDE THE VALUE (or that fixing the slope defect supersedes this)
 
-5.  **`B0` coverage undercovers by 4.7 SE in the `continuous` arm, and has not been chased.** 0.879 against nominal 0.95 (`PLAN.md` 16.5), the lowest `B0` coverage of any cell measured, bias zero so the interval is too narrow rather than the estimate wrong. Split out of the `B0` bias item below when that one closed, since Alex's decision addressed the bias, not this. One arm, one configuration, found while looking for something else -- wants confirming at a second configuration before it is called a defect.
+5.  **`B0` coverage undercovers by 4.7 SE in the `continuous` arm, and has not been chased.** 0.879 against nominal 0.95 (`PLAN.md` 16.5), bias zero so the interval is too narrow rather than the estimate wrong. Split out of the `B0` bias item below when that one closed, since Alex's decision addressed the bias, not this. One arm, one configuration, found while looking for something else -- wants confirming at a second configuration before it is called a defect.
 
-    CLAUDE OR ALEX TO CONFIRM AT A SECOND CONFIGURATION
+    **Correction, 10 August 2026: this item claimed 0.879 was "the lowest `B0` coverage of any cell measured". It was not, and was not when written.** `low_information` sat at 0.865 in the same 2 August run the claim was drawn from, and measures 0.871 in the 10 August re-run. Two independent runs, so the low reading there is real rather than noise.
+
+    **That does not discharge the request above.** `low_information` is degraded across the board -- `p` covers at 0.113 in that cell -- so `B0` sagging there is unsurprising and probably a different phenomenon from `continuous`, where every other block was healthy. What is wanted is still a second *clean* configuration. The correction is to the superlative, not to the item.
+
+    CLAUDE OR ALEX TO CONFIRM AT A SECOND CLEAN CONFIGURATION
 
 6.  **`theta0`'s intervals are \~25% wider than they need to be, and that is the price of its bias being fixed.** Coverage 0.978-0.985 post-fix against 0.938-0.959 pre-fix (`PLAN.md` 12.3). The all-cell average of 0.944 hides it, because `low_information` pulls it down at 0.602.
 
@@ -329,15 +337,20 @@ H.  **Reduce the repeated `arma::inv()` calls in the samplers. NOT DONE, but a m
 
 2.  **extensive testing on simulated datasets** -- **suite built and the R = 100 study run; three things remain.** What exists is summarised under *Completed* below; the authoritative specification and the results table are in `dev/simstudy/PLAN.md`.
 
-    (a) **Re-run once the `sample_ls()`, `reparamFactorModel()` and `beta_theta` slope items in group B are fixed.** This is the evidence the fixes worked. Without it they rest on the same code-reading that this exercise showed to be unreliable, and the R = 100 table in `PLAN.md` §12 is already partly stale -- it predates Alex's `42198d9`, which corrected the collection-covariate prior, so `beta_theta` should improve markedly. One command, a few hours:
+    (a) **Re-run once the `sample_ls()`, `reparamFactorModel()` and `beta_theta` slope items in group B are fixed.** This is the evidence the fixes worked. Without it they rest on the same code-reading that this exercise showed to be unreliable. Still outstanding: none of the three is fixed.
 
-        ```         
-        Rscript dev/simstudy/run_study.R --cores=5 --caffeinate
+    **A re-run did happen on 10 August 2026, but not this one.** Its purpose was different: six commits had touched `R/` and `src/` since the 2 August study, including `522b89e`'s new parallel sampler, so the published numbers described code that no longer existed. Result: **nothing moved.** Zero of 83 scenario-by-block cells shifted beyond 2 SE, and every per-block mean coverage change was under 0.003 against a measurement SE of 0.022. The old numbers were stale in provenance, not in fact. Scope: every fit runs at one thread, where the new parallel worker reduces to serial, so this says nothing about the multi-threaded path where group B items 8 and 9 bite.
+
+    **That makes the fix-verification re-run cheaper to read, not redundant.** There is now a clean baseline measured on current code, so the next comparison isolates the fixes instead of confounding them with six commits of drift. Name the production grid explicitly -- a bare invocation takes every cell defined in `helper-simstudy.R`, not the ten production ones, which is hours of wasted compute and has happened once already:
+
+        ```
+        Rscript dev/simstudy/run_study.R --R=100 --cores=5 --caffeinate \
+          --scenarios=base,binary,d_overfit,d_underfit,low_information,occupancy,primers_3,spatial_isolated,species_20,traits_isolated
         ```
 
     (b) **Decide the replicate count for the paper.** R = 100 was chosen to *detect* defects and did so decisively. Asserting *nominal* coverage in print is a claim about the absence of a small deviation and wants R = 200-500 (`PLAN.md` §9). The runner takes `R` as an argument.
 
-    (c) **Decide how the results are presented** (`PLAN.md` open item 4). Largely settled: the write-up is now a pkgdown article at `vignettes/articles/validation.Rmd`, superseding the private Claude artifact, so it sits with the package and is citable as supplementary material. It is not published yet; see item 3.
+    (c) ~~**Decide how the results are presented**~~ **SETTLED 10 August 2026.** The write-up is the pkgdown article at `vignettes/articles/validation.Rmd`, and it is now *generated*: every table, figure and number renders from `dev/simstudy/validation-data.rds` rather than being typed in. So presentation is no longer a standing decision -- a re-run plus `export_validation_data.R` refreshes the whole document, and the article cannot silently disagree with the data it describes. Not published yet; see item 3.
 
     **One constraint carried from the bug list:** `l_s` is excluded from coverage checks because it is not recoverable while the `sample_ls()` item in group B is open, so no cell of the study speaks to spatial range. Two earlier constraints have since lapsed -- `sigma_h` is now sampled (Fixed bugs 24) and the OpenMP RNG race is closed (Fixed bugs 26), so tier 1's "structural assertions only" rule can be revisited once reproducibility is confirmed on a multi-threaded platform.
 
