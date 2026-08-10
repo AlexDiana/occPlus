@@ -1051,3 +1051,66 @@ This bit the 10 August run: section 18 and the five new cells were written while
 **Fixed 10 August.** The git state is snapshotted immediately after `devtools::load_all()`, before the first fit, and carried forward to the write step. `git_sha`, `git_branch` and `git_dirty` now mean *the code that ran*.
 
 The state at write time is recorded alongside it as `git_sha_at_write` and `git_dirty_at_write`, with `git_moved_during_run` as the flag to read first. Recording both rather than replacing one with the other is the point: a run that had commits land underneath it now says so, instead of the divergence being silently resolved in favour of whichever field was written last.
+
+------------------------------------------------------------------------
+
+## 20. Does more data help? Two paired cells, two different answers (10 August 2026)
+
+Doug asked, ceteris paribus, whether 300 sites would fit better than 100, and separately whether fitting more latent factors would help the species that are latent-driven. Both were run at R = 100 against `base`.
+
+### 20.1 `sites_300`: yes, substantially
+
+`psi_cor` **0.622 to 0.715**, about 8 SE on 1000 species-fits per arm. Accuracy improves across every block that was not already saturated:
+
+| block | nRMSE base | nRMSE 300 | r base | r 300 |
+|-------|------------|-----------|--------|-------|
+| `p` | 0.822 | **0.418** | 0.798 | 0.929 |
+| `q` | 0.833 | **0.554** | 0.719 | 0.875 |
+| `B` | 0.511 | **0.384** | 0.861 | 0.923 |
+| `B0` | 0.868 | 0.812 | 0.539 | 0.595 |
+
+Cost: 66 minutes against `base`'s \~15, so roughly **4.4x for 3x the sites**. Mildly superlinear, consistent with the spatial term growing as sites x knots while other steps grow with sites alone. Worth knowing before scaling to a real survey with `useSpatField = TRUE`.
+
+### 20.2 The gain is largest for latent-driven species, which refutes the prediction made when the cell was written
+
+| latent share band | base | sites_300 | difference |
+|-------------------|-------|-----------|------------|
+| lowest (environment-driven) | 0.812 | 0.874 | +0.062 |
+| | 0.760 | 0.818 | +0.058 |
+| | 0.603 | 0.693 | +0.090 |
+| highest (latent-driven) | 0.332 | 0.461 | **+0.129** |
+
+The scenario comment predicted the opposite: that species-level parameters would sharpen while the latent half stayed flat, because `U` is one row per site informed only by that site's own observations, and more sites add nothing to any individual `U_i`.
+
+**That reasoning was half right and therefore wrong.** `U_i` is indeed local, but a latent-driven species depends on `U %*% L`, and `L` is a **shared** `d x S` parameter estimated across every site -- exactly like `B`. Tripling the sites sharpens `L` considerably. The prediction wrote off the whole biotic pathway on the strength of one of its two components.
+
+### 20.3 `fit_d4`: no effect, and it overturns an earlier reading
+
+`base` with `fit_d = 4` against its simulated `d = 2`, paired on bit-identical truths so the comparison can be taken per species.
+
+| latent band | n | mean difference | p |
+|-------------|-----|-----------------|------|
+| lowest | 250 | +0.001 | 0.75 |
+| | 250 | +0.007 | 0.21 |
+| | 250 | +0.003 | 0.51 |
+| highest | 250 | +0.001 | 0.85 |
+
+Nothing anywhere. Aggregate `psi_cor` 0.622 to 0.625.
+
+**This refutes a reading taken from `d_overfit` and `species_20` earlier the same day.** Both are unpaired comparisons against `base`, and both appeared to show extra latent capacity helping latent-driven species (+0.035 and +0.023) while costing environment-driven ones (\~-0.02), with a monotone sign flip across four bands. The argument made at the time was that two independent routes landing on the same pattern was unlikely to be chance.
+
+**The argument was wrong, and the way it was wrong is worth keeping.** The two comparisons were not independent: both used the same `base` arm, so both inherit whatever band-wise noise `base` carries, and their agreement is close to guaranteed rather than surprising. Band-assignment artefacts were checked separately and account for at most \~0.01 of the difference, so the shared reference is doing the work. A paired design removes exactly this, and when it does, the effect disappears.
+
+**Practical consequence:** on this evidence, fitting more latent factors than the data contains does not help any class of species. Note also that occJSDM has no adaptive shrinkage on the loadings -- `L` is sampled in the same block as the regression coefficients with a fixed-variance normal prior -- so unused dimensions are paid for rather than switched off. That is an argument for the regularisation item under *Future versions*, not for raising `d` today.
+
+### 20.4 The finding neither question asked for
+
+`beta_theta` coverage falls **0.761 to 0.646** in `sites_300`. That is a third axis on which more data degrades this parameter's calibration, after M (0.747 to 0.579) and K, and the first one that feeds the **occupancy** stage rather than the detection stage.
+
+It is specific rather than general: in the same run `p` and `G` coverage improve slightly and every accuracy figure improves sharply. Only `beta_theta` moves materially the wrong way. Recorded against TODO.md group B item 3, which until now rested entirely on the M ladder.
+
+### 20.5 Caveats
+
+`sites_300` is **not** paired with `base` despite sharing a `seed_label`. `draw_truth()`'s own draws match, but `simulateOccJSDMData()` consumes RNG in quantities that depend on `n`, so everything downstream of it diverges. Confirmed by comparing `occ_true`: identical for `fit_d4`, different for `sites_300`. The comparison is therefore distributional over R = 100 per arm, which at 8 SE is ample for the headline but means the band-level numbers carry more noise than `fit_d4`'s.
+
+Neither cell says anything about the multi-threaded configuration: both ran at one thread per fit, like every other result here.

@@ -98,6 +98,10 @@ Every code change Claude made, newest first. None has had human review beyond Do
 
 3.  **`beta_theta` intervals are overconfident, and it gets worse with more data.** Coverage 0.77 at the production `M = 2`, falling monotonically to 0.58 at `M = 20`, while bias stays small and flat. Shrinking intervals around a bias that is not shrinking is the signature of a real defect being exposed by more information, not fixed by it.
 
+    **Replicated on a third data axis, 10 August 2026, and this is the strongest evidence the item has.** Until now everything rested on the M and K ladders, both of which add data to the *detection* stage. The `sites_300` cell triples the number of sites, which feeds the *occupancy* stage instead, and `beta_theta` coverage falls **0.761 to 0.646** (`PLAN.md` §20). Same direction, comparable magnitude, different pathway.
+
+    **It is not a general degradation, which is what makes it diagnostic.** In the same run, accuracy improves sharply everywhere -- `p` nRMSE 0.822 to 0.418, `q` 0.833 to 0.554, `B` 0.511 to 0.384 -- and coverage of `p` and `G` improves slightly. Only `beta_theta` moves materially the wrong way. More information is making every estimate better while making this one parameter's intervals more confidently wrong, which is the signature the item has claimed from the start.
+
     **Narrowed 31 July: the defect is in the *slopes*, not in `beta_theta` as a block.** Refitting `base` with `ncov_theta = 0`, so only the intercept row remains, gives `beta_theta` coverage of **0.968** (SE 0.013, R = 200), i.e. nominal, against 0.763 with the slopes present (`PLAN.md` 15.5, 15.6). Whatever is wrong is specific to the covariate columns.
 
     **Four candidate causes now ruled out**, each by measurement: Stage 1 under-identification (more data makes it worse, not better); the slope prior's width (tightening it 20-fold at `M = 2` moves coverage the wrong way); pseudo-replication in `X_theta` (it is drawn per sample, not per site); and the intercept path (nominal once the slopes are gone).
