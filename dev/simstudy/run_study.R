@@ -89,6 +89,38 @@ if (keepawake) {
 suppressMessages(devtools::load_all(pkg_root, quiet = TRUE))
 source(file.path(pkg_root, "tests", "testthat", "helper-simstudy.R"))
 
+# --- git state, captured NOW ---------------------------------------------
+#
+# Immediately after load_all(), before a single fit runs, because this is the
+# code that produces the numbers. See PLAN.md 19.2.
+#
+# It used to be read at the end of the script. For a multi-hour run that
+# records whatever HEAD happens to be when the run *finishes*, which is not
+# the same thing. The 10 August run demonstrated it: PLAN.md 18 and five new
+# scenario cells were committed while it was in flight, so it recorded a SHA
+# ahead of the code that ran and a dirty flag set by documentation edits. The
+# numbers were fine; the field whose whole purpose is to say which code
+# produced them was not.
+git_out <- function(...) {
+  v <- suppressWarnings(try(
+    system2("git", c("-C", pkg_root, ...), stdout = TRUE, stderr = FALSE),
+    silent = TRUE))
+  if (inherits(v, "try-error") || length(v) == 0L) NA_character_ else v[1]
+}
+
+git_state <- function() {
+  st <- suppressWarnings(try(
+    system2("git", c("-C", pkg_root, "status", "--porcelain"),
+            stdout = TRUE, stderr = FALSE), silent = TRUE))
+  list(sha    = git_out("rev-parse", "HEAD"),
+       branch = git_out("rev-parse", "--abbrev-ref", "HEAD"),
+       # A dirty tree means the SHA does not fully describe what ran, which
+       # matters more than the SHA itself for reproducing a result.
+       dirty  = if (inherits(st, "try-error")) NA else length(st) > 0L)
+}
+
+git_at_start <- git_state()
+
 # Pin the in-fit thread count. Set the environment variable as well as calling
 # setThreadOptions(), because the variable is what propagates to the PSOCK
 # workers' fresh R sessions, where the fits actually run; the call alone would
@@ -152,10 +184,46 @@ run_one <- function(k) {
 # same replicate, not a fresh draw.
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 
-ckpt_path <- file.path(out_dir, sprintf("checkpoint-%s.rds",
-                                        if (nzchar(which_sc))
-                                          substr(gsub("[^A-Za-z0-9]+", "-", which_sc), 1, 40)
-                                        else "all"))
+# The checkpoint identity: a hash of what actually determines whether two runs
+# are resumable into each other. See PLAN.md 19.1.
+#
+# This replaces `substr(gsub(...), 1, 40)` over the raw --scenarios string,
+# which had two failure modes, both observed rather than theorised:
+#
+#   * Order-dependent. The same ten cells listed in a different order produced
+#     a different filename, so --resume silently missed an existing
+#     checkpoint. The 2 August and 10 August runs of the identical grid wrote
+#     `checkpoint-base-spatial-isolated-traits-isolated-pr.rds` and
+#     `checkpoint-base-binary-d-overfit-d-underfit-low-inf.rds`.
+#   * Truncation collided. The 15-cell grid of PLAN.md 18.6, listed with the
+#     production ten first, truncates to exactly the 10 August name. Resuming
+#     it would have skipped those replicates and produced a results file
+#     mixing two code states under one provenance SHA.
+#
+# Sorted labels, because order is not part of the grid's identity. R and the
+# MCMC settings, because a checkpoint from a different chain length is not
+# resumable into this run even though its (scenario, replicate) keys match.
+ckpt_labels <- sort(vapply(scenarios, function(s) s$label, ""))
+ckpt_key <- sprintf("%s|R=%d|nburn=%d|niter=%d|nchain=%d",
+                    paste(ckpt_labels, collapse = ","),
+                    R_reps, nburn, niter, MCMCparams$nchain)
+
+# A short, stable digest of that key. tools::md5sum() works on files, not
+# strings, so hash via a tempfile rather than taking a dependency on digest
+# just for this.
+ckpt_hash <- local({
+  tf <- tempfile(); on.exit(unlink(tf), add = TRUE)
+  writeLines(ckpt_key, tf)
+  substr(unname(tools::md5sum(tf)), 1, 8)
+})
+
+# Human-readable prefix so the directory stays browsable, plus the hash which
+# is what actually identifies the grid.
+ckpt_path <- local({
+  pretty <- substr(gsub("[^A-Za-z0-9]+", "-",
+                        paste(ckpt_labels, collapse = "-")), 1, 32)
+  file.path(out_dir, sprintf("checkpoint-%s-%s.rds", pretty, ckpt_hash))
+})
 
 ckpt_load <- function() {
   if (!file.exists(ckpt_path)) return(NULL)
@@ -165,12 +233,26 @@ ckpt_load <- function() {
     message("  checkpoint unreadable, ignoring: ", ckpt_path)
     return(NULL)
   }
+  # Belt and braces over the hashed filename: the key travels inside the file
+  # too, so a hash collision or a hand-renamed file still cannot be resumed
+  # into the wrong grid.
+  if (!is.null(out$key) && !identical(out$key, ckpt_key)) {
+    stop("checkpoint ", basename(ckpt_path), " was written for a different ",
+         "grid or MCMC setting.\n  stored:  ", out$key,
+         "\n  current: ", ckpt_key,
+         "\nRefusing to use it. Delete it or use a different --out.")
+  }
   out
 }
 
 ckpt_append <- function(bundle) {
+  # ckpt_load() is called unconditionally here, not only under --resume, which
+  # is why a colliding filename used to leave a polluted checkpoint behind for
+  # the next resumer even when the current run's own results were clean. The
+  # key check above now makes that impossible rather than merely unlikely.
   prev <- ckpt_load()
-  saveRDS(list(params    = rbind(prev$params,    bundle$params),
+  saveRDS(list(key       = ckpt_key,
+               params    = rbind(prev$params,    bundle$params),
                occupancy = rbind(prev$occupancy, bundle$occupancy)),
           ckpt_path)
 }
@@ -316,24 +398,20 @@ occ_prev    <- simstudy_occupancy_by_prevalence(occ)
 # been run against, so the article went stale invisibly and the drift was only
 # found by comparing timestamps against the git log by hand. The article now
 # prints this block, so a reader can see the answer instead of assuming it.
-git_out <- function(...) {
-  v <- suppressWarnings(try(
-    system2("git", c("-C", pkg_root, ...), stdout = TRUE, stderr = FALSE),
-    silent = TRUE))
-  if (inherits(v, "try-error") || length(v) == 0L) NA_character_ else v[1]
-}
+git_at_write <- git_state()
 
 provenance <- list(
-  git_sha    = git_out("rev-parse", "HEAD"),
-  git_branch = git_out("rev-parse", "--abbrev-ref", "HEAD"),
-  # A dirty tree means the SHA above does not fully describe what ran, which
-  # matters more than the SHA itself for reproducing a result.
-  git_dirty  = {
-    st <- suppressWarnings(try(
-      system2("git", c("-C", pkg_root, "status", "--porcelain"),
-              stdout = TRUE, stderr = FALSE), silent = TRUE))
-    if (inherits(st, "try-error")) NA else length(st) > 0L
-  },
+  # The code that ran, captured before the first fit. This is the field to
+  # quote when asking "which version produced these numbers".
+  git_sha    = git_at_start$sha,
+  git_branch = git_at_start$branch,
+  git_dirty  = git_at_start$dirty,
+  # And the state when the results were written. Recorded separately rather
+  # than overwriting the above, so a run that had commits land underneath it
+  # says so instead of silently resolving in favour of the wrong one.
+  git_sha_at_write     = git_at_write$sha,
+  git_dirty_at_write   = git_at_write$dirty,
+  git_moved_during_run = !identical(git_at_start$sha, git_at_write$sha),
   pkg_version = as.character(utils::packageVersion("occJSDM")),
   r_version   = paste(R.version$major, R.version$minor, sep = "."),
   platform    = R.version$platform,

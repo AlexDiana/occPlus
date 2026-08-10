@@ -1020,9 +1020,9 @@ What it should contain, in order:
 
 ------------------------------------------------------------------------
 
-## 19. Two runner fixes, queued behind the 10 August run
+## 19. Two runner fixes, found in flight and applied after the 10 August run
 
-Both are in `run_study.R` and both were found while that run was in flight. Neither is applied yet: editing the file does not disturb a running job, but it moves `HEAD`, and this run stamps its provenance at completion.
+Both are in `run_study.R`, both were found while that run was in flight, and both are now applied. They were deliberately held until it finished: editing the file does not disturb a running job, but it moves `HEAD`, and that run was still stamping its provenance at completion.
 
 ### 19.1 Checkpoint files are keyed on a truncated argument string
 
@@ -1034,7 +1034,13 @@ Both are in `run_study.R` and both were found while that run was in flight. Neit
 
 There is a quieter third: `ckpt_append()` always `rbind`s onto whatever `ckpt_load()` returns, **including when `--resume` was not passed**. The current run's final `.rds` is unaffected, because it assembles from `res` rather than the checkpoint, but a colliding name leaves the checkpoint polluted for the next person who does resume.
 
-**Fix:** key on a short hash of the *sorted* scenario labels plus `R`, `nburn`, `niter` and `nchain`, keeping a readable prefix for browsability. Store the key inside the checkpoint and refuse to append when it does not match, so a mismatched resume is impossible rather than unlikely.
+**Fixed 10 August.** Keyed on an md5 of the *sorted* scenario labels plus `R`, `nburn`, `niter` and `nchain`, with a readable 32-character prefix kept for browsability: `checkpoint-base-binary-78fc0390.rds`. The key string itself is stored inside the file, and `ckpt_load()` stops rather than returning anything when it does not match the current run.
+
+Verified by construction, not by inspection:
+
+- Same two cells in reversed order resumed the *same* checkpoint and reported "nothing left to run". Under the old scheme that was a different filename and a full re-run.
+- Same cells at `nburn`/`niter` 60 instead of 80 produced a different hash, so the two do not collide.
+- A checkpoint whose stored key disagreed with the run was refused with both keys printed, rather than silently appended to.
 
 ### 19.2 Provenance is captured at the end of the run, not the start
 
@@ -1042,4 +1048,6 @@ The `provenance` block reads `git rev-parse HEAD` and `git status --porcelain` a
 
 This bit the 10 August run: section 18 and the five new cells were written while it was in flight, so its recorded SHA is ahead of the code that actually ran and `git_dirty` is `TRUE` for reasons that have nothing to do with the sampler. The numbers are still sound -- nothing touched `R/` or `src/` -- but the block no longer means what it claims, which for a field whose entire purpose is to pin down provenance is worse than it sounds.
 
-**Fix:** snapshot the git state immediately after `devtools::load_all()`, before any fitting, and carry it forward. Record both that and the state at write time, so a divergence shows up rather than being silently resolved in favour of the wrong one.
+**Fixed 10 August.** The git state is snapshotted immediately after `devtools::load_all()`, before the first fit, and carried forward to the write step. `git_sha`, `git_branch` and `git_dirty` now mean *the code that ran*.
+
+The state at write time is recorded alongside it as `git_sha_at_write` and `git_dirty_at_write`, with `git_moved_during_run` as the flag to read first. Recording both rather than replacing one with the other is the point: a run that had commits land underneath it now says so, instead of the divergence being silently resolved in favour of whichever field was written last.
