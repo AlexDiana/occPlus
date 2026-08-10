@@ -16,6 +16,11 @@ inst/doc
 /dev/*
 !/dev/simstudy/
 /dev/simstudy/results/
+# Outputs of make_occupancy_maps.R and occupancy_maps.Rmd. Both regenerate in
+# about 90 seconds from the sources beside them, and the rendered report is
+# 3.6 MB of embedded figures. The sources are tracked; the outputs are not.
+/dev/simstudy/mapdata.rds
+/dev/simstudy/occupancy_maps.html
 # deprecated/ IS tracked: it is the record of superseded code (occPlus-era
 # functions, the old vignette, functions_old.cpp), kept in git and excluded
 # from the build via ^deprecated$ in .Rbuildignore. Its existing contents were

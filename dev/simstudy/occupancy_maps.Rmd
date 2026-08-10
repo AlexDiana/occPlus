@@ -1,0 +1,143 @@
+---
+title: "occJSDM: occupancy maps, truth against prediction"
+output:
+  html_document:
+    self_contained: true
+    theme: null
+    css: occupancy_maps.css
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE,
+                      dev = "png", dpi = 170)
+library(ggplot2)
+# Paths resolve from the package root, wherever this is rendered from, so the
+# document works from a clean checkout. knitr sets the working directory to
+# this file's own directory, hence the walk up.
+root <- local({
+  d <- normalizePath(".", mustWork = FALSE)
+  for (i in 1:6) {
+    if (file.exists(file.path(d, "DESCRIPTION"))) break
+    if (identical(dirname(d), d)) break
+    d <- dirname(d)
+  }
+  d
+})
+map_rds <- file.path(root, "dev/simstudy/mapdata.rds")
+if (!file.exists(map_rds))
+  stop("dev/simstudy/mapdata.rds not found. Run first:\n",
+       "  RCPP_PARALLEL_NUM_THREADS=1 Rscript dev/simstudy/make_occupancy_maps.R")
+m <- readRDS(map_rds)
+ps <- m$per_species
+long <- m$long
+# Newest occupancy summary from whatever study run is on disk.
+csv <- local({
+  f <- list.files(file.path(root, "dev/simstudy/results"),
+                  pattern = "^simstudy-occupancy-.*\\.csv$", full.names = TRUE)
+  if (length(f) == 0)
+    stop("no simstudy-occupancy-*.csv in dev/simstudy/results. ",
+         "Run dev/simstudy/run_study.R first.")
+  read.csv(f[order(file.mtime(f), decreasing = TRUE)][1],
+           stringsAsFactors = FALSE)
+})
+
+theme_map <- theme_minimal(base_size = 11) +
+  theme(panel.grid = element_blank(),
+        axis.text = element_blank(), axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        strip.text = element_text(face = "bold", size = 10),
+        legend.position = "bottom",
+        legend.key.width = unit(2.2, "cm"),
+        legend.key.height = unit(0.35, "cm"))
+```
+
+## What you are looking at
+
+One simulated dataset: **100 sites, 10 species**, the `base` scenario, replicate 1 of the R = 100 study. Every site has a real 2-D coordinate, so occupancy can be drawn as an actual map.
+
+The left column is the **truth** we simulated. The right column is what `runOccJSDM()` recovered, knowing none of it. Rings mark sites where the species genuinely is present.
+
+```{r maps, fig.width=9, fig.height=11.5}
+sel <- ps$species[order(-ps$psi_cor)][c(1, 4, 7, 10)]
+lab <- setNames(
+  sprintf("species %d  |  present at %.0f%% of sites  |  psi_cor %.2f",
+          ps$species, 100 * ps$occ_true, ps$psi_cor), ps$species)
+
+d <- long[long$species %in% sel, ]
+d$panel <- factor(lab[as.character(d$species)], levels = lab[as.character(sel)])
+
+dl <- rbind(
+  transform(d[, c("panel","x","y","z_true")], value = d$psi_true,
+            what = "TRUTH: simulated occupancy probability"),
+  transform(d[, c("panel","x","y","z_true")], value = d$psi_est,
+            what = "MODEL: estimated occupancy probability"))
+dl$what <- factor(dl$what, levels = c("TRUTH: simulated occupancy probability",
+                                      "MODEL: estimated occupancy probability"))
+
+ggplot(dl, aes(x, y)) +
+  geom_point(aes(colour = value), size = 3.1) +
+  geom_point(data = dl[dl$z_true == 1, ], shape = 21, size = 4.4,
+             colour = "grey15", stroke = 0.35, fill = NA) +
+  facet_grid(panel ~ what, switch = "y") +
+  scale_colour_viridis_c(name = "probability of occupancy",
+                         limits = c(0, 1), option = "D") +
+  coord_equal() +
+  theme_map +
+  theme(strip.text.y.left = element_text(angle = 0, hjust = 0, size = 9))
+```
+
+Reading these: the model is not trying to reproduce the rings, it is trying to reproduce the left-hand surface. A species is well recovered when the right map has its bright and dark regions in the same places as the left, whatever the overall brightness.
+
+The top row is close to the best this model does. The bottom row is close to the worst, and the failure is visible as a right-hand map that is comparatively flat: the model has spread the species roughly evenly instead of concentrating it where it belongs.
+
+## Every species at once
+
+```{r scatter, fig.width=9, fig.height=4.6}
+long$panel <- factor(sprintf("sp %d  (r = %.2f)", long$species,
+                             ps$psi_cor[match(long$species, ps$species)]),
+  levels = sprintf("sp %d  (r = %.2f)", ps$species[order(-ps$psi_cor)],
+                   ps$psi_cor[order(-ps$psi_cor)]))
+
+ggplot(long, aes(psi_true, psi_est)) +
+  geom_abline(slope = 1, intercept = 0, colour = "grey60",
+              linetype = "dashed", linewidth = 0.4) +
+  geom_point(aes(colour = factor(z_true)), size = 0.85, alpha = 0.8) +
+  scale_colour_manual(values = c("0" = "grey65", "1" = "#2B7A78"),
+                      labels = c("truly absent", "truly present"),
+                      name = NULL) +
+  facet_wrap(~ panel, nrow = 2) +
+  labs(x = "true occupancy probability", y = "estimated") +
+  coord_equal(xlim = c(0, 1), ylim = c(0, 1)) +
+  theme_minimal(base_size = 10) +
+  theme(panel.grid.minor = element_blank(), legend.position = "bottom",
+        strip.text = element_text(face = "bold", size = 8.5))
+```
+
+Each point is one site. The dashed line is perfect recovery. Points hugging it mean the model has the site-by-site pattern right; a horizontal smear means it has settled on roughly one probability everywhere and is telling you nothing about location.
+
+Note that the estimates are compressed toward the middle in every panel: the model rarely commits to a probability near 0 or 1. That is shrinkage, and it is why `psi_cor` is the statistic here rather than agreement on the raw values.
+
+## Across all ten scenarios
+
+This is the part that comes from the CSV: 1000 species-fits per scenario, so each point has 100 datasets behind it rather than one.
+
+```{r scenarios, fig.width=9, fig.height=4.2}
+csv$scenario <- factor(csv$scenario, levels = csv$scenario[order(csv$psi_cor_mean)])
+ggplot(csv, aes(y = scenario)) +
+  geom_vline(xintercept = 0, colour = "grey75", linewidth = 0.4) +
+  geom_errorbarh(aes(xmin = psi_cor_q05, xmax = psi_cor_q95), height = 0,
+                 colour = "grey60", linewidth = 0.6) +
+  geom_point(aes(x = psi_cor_mean), size = 2.6, colour = "#1F5F6B") +
+  geom_point(aes(x = psi_cor_q50), size = 1.5, shape = 21, fill = "white",
+             colour = "#1F5F6B") +
+  labs(x = "psi_cor: how well occupancy is placed (filled = mean, hollow = median, bar = middle 90% of species-fits)",
+       y = NULL) +
+  theme_minimal(base_size = 10) +
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major.y = element_blank(),
+        axis.title.x = element_text(size = 8.5))
+```
+
+Nine of the ten scenarios sit together around 0.58 to 0.67. **`low_information` is the outlier and it is not close**: mean 0.15, and its lower tail runs below zero, meaning a fair number of species-fits place the species *worse than a coin flip*. That cell is 40 sites with weak detection, and it is the configuration to check your own survey against before trusting a map like the ones above.
+
+The wide bars everywhere else are the honest part of this picture. Even in the healthy cells, individual species-fits range from near zero to above 0.9. A single fit tells you much less than its own tidy-looking numbers suggest, which is the whole reason the study fits each scenario a hundred times.

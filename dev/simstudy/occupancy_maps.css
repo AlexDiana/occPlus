@@ -1,0 +1,18 @@
+body { max-width: 60rem; margin: 0 auto; padding: 2.5rem 1.5rem 4rem;
+       font-family: system-ui, -apple-system, "Segoe UI", Helvetica, sans-serif;
+       font-size: 16px; line-height: 1.6; color: #15202B; background: #F7F8F6; }
+h1 { font-family: Georgia, serif; font-size: 2rem; line-height: 1.15;
+     margin: 0 0 1.5rem; letter-spacing: -0.01em; }
+h2 { font-family: Georgia, serif; font-size: 1.3rem; margin: 2.75rem 0 0.75rem;
+     padding-top: 1.25rem; border-top: 1px solid #D8DCD6; }
+p { max-width: 42rem; }
+strong { font-weight: 650; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+       font-size: 0.87em; background: #EBEEE9; padding: 0.1em 0.34em;
+       border-radius: 2px; }
+img { max-width: 100%; height: auto; display: block; margin: 1.25rem 0; }
+@media (prefers-color-scheme: dark) {
+  body { background: #12181C; color: #E4E9E7; }
+  h2 { border-top-color: #2C3740; }
+  code { background: #1E262B; }
+}
