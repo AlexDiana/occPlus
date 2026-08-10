@@ -31,10 +31,23 @@
 # build time. dev/simstudy/results/ is gitignored and this is not: see the
 # comment in .gitignore.
 
+#   --extra=file1.rds,file2.rds
+#
+# folds in single-cell runs that are not part of the production grid, under
+# out$extra_cells, keyed by scenario label. They are kept OUT of `summary`,
+# `accuracy` and `occupancy` on purpose: those drive the "across all ten
+# scenarios" sections, and quietly adding an eleventh cell would corrupt every
+# one of them. Comparison cells are a different kind of thing and travel
+# separately.
+
 args <- commandArgs(trailingOnly = TRUE)
 res_dir <- "dev/simstudy/results"
 
-src <- if (length(args) >= 1L) args[1] else {
+# Positional argument only: anything starting with -- is a flag, and taking
+# args[1] blindly meant --extra= was read as the source filename.
+positional <- args[!grepl("^--", args)]
+
+src <- if (length(positional) >= 1L) positional[1] else {
   f <- list.files(res_dir, pattern = "^simstudy-[0-9-]+\\.rds$",
                   full.names = TRUE)
   if (length(f) == 0L)
@@ -45,6 +58,17 @@ src <- if (length(args) >= 1L) args[1] else {
 
 message("reading ", src)
 r <- readRDS(src)
+
+# Guard against the newest-file default silently picking a single-cell
+# comparison run instead of the production grid. Once cells like sites_300 and
+# fit_d4 exist, "newest" is no longer a safe proxy for "the study".
+if (length(unique(r$rows$scenario)) < 2L && !length(positional)) {
+  stop("the newest results file (", basename(src), ") holds only the '",
+       unique(r$rows$scenario), "' cell, which is a comparison run rather ",
+       "than the production grid.\n  Name the study run explicitly, e.g.\n",
+       "    Rscript dev/simstudy/export_validation_data.R ",
+       "dev/simstudy/results/simstudy-<stamp>.rds", call. = FALSE)
+}
 
 need <- c("summary", "occupancy")
 missing <- need[!need %in% names(r)]
@@ -183,6 +207,52 @@ out <- list(
   provenance              = r$provenance,
   source_file             = basename(src)
 )
+
+# --- optional comparison cells -------------------------------------------
+extra_arg <- {
+  hit <- grep("^--extra=", args, value = TRUE)
+  if (length(hit) == 0) "" else sub("^--extra=", "", hit[1])
+}
+if (nzchar(extra_arg)) {
+  # Needed only on this path: regenerating a truth calls simulateOccJSDMData(),
+  # which lives in the package rather than the helper.
+  suppressMessages(devtools::load_all(".", quiet = TRUE))
+  RNGkind("L'Ecuyer-CMRG")   # the runner's generator; see make_occupancy_maps.R
+  scen_all <- simstudy_scenarios()
+  scen_lab <- vapply(scen_all, function(s) s$label, "")
+
+  out$extra_cells <- list()
+  for (f in strsplit(extra_arg, ",")[[1]]) {
+    e <- readRDS(f)
+    lab <- unique(e$rows$scenario)
+    stopifnot(length(lab) == 1L)
+    oc <- e$occupancy
+
+    # Runs predating the varPart columns need their shares regenerating.
+    # Simulation only, no fitting: the partition is a property of the truth.
+    if (!"share_lat" %in% names(oc) || all(is.na(oc$share_lat))) {
+      message("  regenerating variance shares for ", lab, " ...")
+      sc <- scen_all[[which(scen_lab == lab)]]
+      sh <- do.call(rbind, lapply(sort(unique(oc$replicate)), function(r) {
+        vp <- simstudy_simulate(draw_truth(sc, simstudy_seed_for(sc, r)
+              ))$true_params$jsdmParams_true$varPart
+        data.frame(replicate = r, species = seq_len(nrow(vp)),
+                   sd_eta = NA_real_,
+                   share_env = vp[, "Environmental"],
+                   share_spat = vp[, "Spatial"],
+                   share_lat = vp[, "Biotic"])
+      }))
+      oc <- merge(oc, sh, by = c("replicate", "species"))
+    }
+
+    out$extra_cells[[lab]] <- list(
+      occupancy = oc, summary = e$summary,
+      R = e$R, elapsed_min = e$elapsed_min,
+      provenance = e$provenance, source_file = basename(f))
+    message(sprintf("  + %s: %d occupancy rows, %.0f min",
+                    lab, nrow(oc), e$elapsed_min))
+  }
+}
 
 dest <- file.path("dev", "simstudy", "validation-data.rds")
 saveRDS(out, dest, compress = "xz")

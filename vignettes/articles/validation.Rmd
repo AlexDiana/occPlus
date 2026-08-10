@@ -162,6 +162,72 @@ plot_coverage_by_block <- function() {
     theme_val
 }
 
+#' Distribution of psi_cor across every species-fit, for two survey sizes.
+#'
+#' Drawn as a distribution rather than as means because the means understate
+#' what changes. The top of the range barely moves -- species already recovered
+#' well were near the ceiling -- and almost the whole gain is in the left tail,
+#' i.e. in how often a species comes out unusable. A mean hides that entirely.
+plot_sites_distribution <- function() {
+  ex <- vd$extra_cells[["sites_300"]]
+  if (is.null(ex)) return(NULL)
+  b <- vd$occupancy[vd$occupancy$scenario == vd$example_cell &
+                    !is.na(vd$occupancy$share_lat), ]
+  s <- ex$occupancy[!is.na(ex$occupancy$share_lat), ]
+  if (nrow(b) == 0 || nrow(s) == 0) return(NULL)
+
+  d <- rbind(
+    data.frame(arm = "100 sites", psi_cor = b$psi_cor, share_lat = b$share_lat),
+    data.frame(arm = "300 sites", psi_cor = s$psi_cor, share_lat = s$share_lat))
+  d$arm <- factor(d$arm, levels = c("100 sites", "300 sites"))
+
+  # Bands cut on the pooled distribution so both arms are split identically.
+  br <- stats::quantile(d$share_lat, 0:4 / 4)
+  band_lab <- c(
+    sprintf("Occupancy mostly explained by MEASURED covariates (unmeasured share under %.0f%%)", 100 * br[2]),
+    sprintf("Mostly measured (unmeasured share %.0f to %.0f%%)", 100 * br[2], 100 * br[3]),
+    sprintf("Mixed (unmeasured share %.0f to %.0f%%)", 100 * br[3], 100 * br[4]),
+    sprintf("Occupancy mostly explained by UNMEASURED factors (share over %.0f%%)", 100 * br[4]))
+  d$band <- cut(d$share_lat, br, include.lowest = TRUE, labels = band_lab)
+
+  top <- sprintf("EVERY species-fit: %s datasets x %d species, each survey size",
+                 format(length(unique(b$replicate)), big.mark = ","),
+                 length(unique(b$species)))
+  pd <- rbind(transform(d, panel = top),
+              transform(d, panel = as.character(band)))
+  pd$panel <- factor(pd$panel, levels = c(top, band_lab))
+
+  mu <- aggregate(psi_cor ~ arm + panel, pd, mean)
+  mu$lab <- sprintf("mean %.2f", mu$psi_cor)
+
+  ggplot(pd, aes(psi_cor, fill = arm, colour = arm)) +
+    geom_vline(xintercept = 0, colour = "grey35", linewidth = 0.4) +
+    geom_density(alpha = 0.32, linewidth = 0.55, adjust = 1.1) +
+    geom_vline(data = mu, aes(xintercept = psi_cor, colour = arm),
+               linetype = "dashed", linewidth = 0.45, show.legend = FALSE) +
+    geom_text(data = mu, aes(x = psi_cor, y = Inf, label = lab, colour = arm),
+              vjust = 1.35, hjust = -0.1, size = 2.7, show.legend = FALSE) +
+    facet_wrap(~ panel, ncol = 1, scales = "free_y") +
+    scale_fill_manual(values = c("100 sites" = "#8C8C8C",
+                                 "300 sites" = "#1F5F6B"), name = NULL) +
+    scale_colour_manual(values = c("100 sites" = "#5A5A5A",
+                                   "300 sites" = "#1F5F6B"), name = NULL) +
+    labs(x = paste("How well the species was placed across sites:",
+                   "1 = perfectly, 0 = no information about where it is,",
+                   "below 0 = worse than guessing"),
+         y = "share of species-fits",
+         caption = paste("Solid line at 0 marks the no-information point.",
+                         "Dashed lines are arm means.")) +
+    coord_cartesian(xlim = c(-0.6, 1)) +
+    theme_val +
+    theme(axis.text.y = element_blank(),
+          panel.grid.major.y = element_blank(),
+          strip.text = element_text(face = "bold", size = 8.6, hjust = 0),
+          legend.position = "top",
+          axis.title.x = element_text(size = 8.6),
+          plot.caption = element_text(size = 7.3, colour = "grey45", hjust = 0))
+}
+
 #' The transpose: one panel per scenario, one point per block.
 plot_coverage_by_scenario <- function() {
   d <- vd$summary
@@ -1290,6 +1356,70 @@ emit(sprintf('
     </p>',
   vd$R, fmt(sqrt(0.95 * 0.05 / vd$R), 3),
   format(sum(vd$occupancy_summary$n_species_fit), big.mark = ",")))
+```
+
+```{=html}
+```
+
+```{r sites-comparison, fig.width = 8, fig.height = 9.5, dev = "png", dpi = 160}
+ex <- vd$extra_cells[["sites_300"]]
+if (!is.null(ex)) {
+  b <- vd$occupancy[vd$occupancy$scenario == vd$example_cell &
+                    !is.na(vd$occupancy$share_lat), ]
+  s <- ex$occupancy[!is.na(ex$occupancy$share_lat), ]
+  q <- function(x, p) as.numeric(stats::quantile(x, p))
+
+  emit(sprintf('
+    <h3>Does a bigger survey help?</h3>
+    <p>
+      The same design with <b>three times the sites</b>, 300 against 100, and
+      everything else held: same species, same samples per site, same primers,
+      same PCR replicates. %s replicates each, so this is a comparison between
+      two distributions rather than between two fits.
+    </p>
+    <p>
+      The means move from <b>%s</b> to <b>%s</b>. That understates it, because
+      the gain is not spread evenly: the top of the range hardly shifts (%s to
+      %s at the 95th percentile, since those species were already near the
+      ceiling) while the bottom moves a long way (%s to %s at the 5th). The
+      share of species-fits coming out below 0.3 -- effectively unusable --
+      falls from <b>%s</b> to <b>%s</b>.
+    </p>
+    <p>
+      So what a bigger survey buys is not that every species is placed better.
+      It is that <strong>far fewer species come out unusable</strong>, which for
+      a real survey is the more valuable guarantee. Note also that both
+      distributions are strongly left-skewed with a tail below zero, so a mean
+      on its own always flatters this quantity.
+    </p>',
+    format(ex$R %||% 100, big.mark = ","),
+    fmt(mean(b$psi_cor), 2), fmt(mean(s$psi_cor), 2),
+    fmt(q(b$psi_cor, .95), 2), fmt(q(s$psi_cor, .95), 2),
+    fmt(q(b$psi_cor, .05), 2), fmt(q(s$psi_cor, .05), 2),
+    pct(mean(b$psi_cor < 0.3), 0), pct(mean(s$psi_cor < 0.3), 0)))
+
+  print(plot_sites_distribution())
+
+  emit(sprintf('
+    <p>
+      The panels below the first split species by how much of their occupancy
+      the model can see directly. The shift is modest where occupancy is
+      governed by measured covariates and largest where it is governed by the
+      unmeasured, latent part -- the band where the 100-site distribution has
+      real mass at and below zero. More sites sharpen the shared loadings that
+      the latent pathway depends on, which is why the species with the least
+      directly usable information gain the most.
+    </p>
+    <p>
+      One thing this does <em>not</em> buy: calibration. In the same comparison
+      <code>beta_theta</code> coverage falls from %s to %s. More data makes the
+      estimates better and that parameter&rsquo;s intervals more confidently
+      wrong, which is the open issue described further down.
+    </p>',
+    fmt(vd$summary$coverage[vd$summary$scenario == vd$example_cell &
+                            vd$summary$block == "beta_theta"]),
+    fmt(ex$summary$coverage[ex$summary$block == "beta_theta"])))
+}
 ```
 
 ```{=html}

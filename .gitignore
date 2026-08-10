@@ -49,3 +49,6 @@ TODO.html
 # vignettes via pkgdown::build_site(); never a deliverable to commit.
 docs
 .posit/assistant
+# Stray graphics device output from headless Rscript calls that plot without
+# an explicit device. Never a deliverable.
+Rplots.pdf
