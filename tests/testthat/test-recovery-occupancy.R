@@ -105,19 +105,11 @@ OCCREC_FLOORS <- list(
     why  = "The check above asks whether the truth falls inside the model's stated range. This one asks whether the model's actual answer is close. Both are needed: a range wide enough to contain almost anything will pass the first check while telling you nothing, and only this one would notice.")
 )
 
-#' Probability a random occupied site outranks a random unoccupied one.
-#'
-#' The rank form of the Mann-Whitney U, so ties contribute 0.5 rather than
-#' being dropped. NA when a species is entirely occupied or entirely absent,
-#' since there is then nothing to discriminate between.
-occrec_auc <- function(score, label) {
-  pos <- score[label == 1]
-  neg <- score[label == 0]
-  if (length(pos) == 0L || length(neg) == 0L) return(NA_real_)
-  r <- rank(c(pos, neg))
-  (sum(r[seq_along(pos)]) - length(pos) * (length(pos) + 1) / 2) /
-    (length(pos) * length(neg))
-}
+# `occrec_auc()` and the occ_true/occ_est/psi_cor/auc columns are defined in
+# helper-simstudy.R, not here. They were written here first, but the tier-3
+# study now scores every replicate with the same statistics so the article can
+# report an interval rather than this single fit. Two consumers, one
+# definition: if a metric changes, both move together or neither does.
 
 #' One row per species: occupancy recovery and the drivers behind it.
 #'
@@ -131,10 +123,7 @@ occrec_table <- function() {
   fit <- simstudy_fit(sim, scenario, occrec_mcmc)
 
   S <- scenario$S
-  psi_true <- stats::plogis(sim$true_params$jsdmParams_true$eta)
-  z_true <- sim$true_params$z_true
-  psi_est <- fit$results_output$psi_output
-  z_est <- fit$results_output$z_output
+  occ <- simstudy_occupancy_rows(fit, sim, scenario, replicate = 1L)
 
   # The occupancy drivers: the species intercept B0 and its environmental
   # slopes B. Reuse simstudy_rows() rather than reaching into the posterior
@@ -155,13 +144,11 @@ occrec_table <- function() {
   stopifnot(all(tabulate(drv$species, nbins = S) == 1L + ncov))
 
   tbl <- data.frame(
-    species  = seq_len(S),
-    occ_true = colMeans(z_true),
-    occ_est  = colMeans(z_est),
-    psi_cor  = vapply(seq_len(S), function(s)
-                      stats::cor(psi_est[, s], psi_true[, s]), numeric(1)),
-    auc      = vapply(seq_len(S), function(s)
-                      occrec_auc(psi_est[, s], z_true[, s]), numeric(1)),
+    species  = occ$species,
+    occ_true = occ$occ_true,
+    occ_est  = occ$occ_est,
+    psi_cor  = occ$psi_cor,
+    auc      = occ$auc,
     drv_cov  = vapply(seq_len(S), function(s)
                       mean(drv$covered[drv$species == s]), numeric(1)),
     drv_err  = vapply(seq_len(S), function(s) {

@@ -5,7 +5,12 @@
 #   Rscript dev/simstudy/run_study.R [--R=100] [--cores=8] [--scenarios=a,b]
 #                                    [--out=dev/simstudy/results]
 #                                    [--nburn=1000] [--niter=1000] [--resume]
-#                                    [--caffeinate]
+#                                    [--threads=1] [--caffeinate]
+#
+# --cores is how many replicates run at once, as separate processes.
+# --threads is how many threads each individual fit uses, and defaults to 1;
+# see the note where it is parsed for why that default is not negotiable while
+# TODO.md group B items 8 and 9 are open.
 #
 # --resume picks up from the checkpoint written by a previous invocation with
 # the same --scenarios and --out, skipping replicates already completed.
@@ -39,6 +44,22 @@ which_sc <- getopt("scenarios", "")
 nburn    <- as.integer(getopt("nburn", "1000"))
 niter    <- as.integer(getopt("niter", "1000"))
 
+# Threads *inside* each fit, as distinct from --cores, which is how many
+# replicate processes run at once. Default 1, deliberately.
+#
+# This used to be unset, which meant each of the --cores worker processes also
+# spawned a full TBB pool, and the results carried whatever the default
+# happened to be. Two reasons that is the wrong default here. Bit-reproducibility
+# is only available at one thread, because TBB work-stealing varies which
+# thread draws for which species. And TODO.md group B items 8 and 9 are live
+# defects that fire only above one thread -- every thread seeding identically,
+# and an unsynchronised race on R's global RNG -- so a multi-threaded study
+# would be measuring the statistics of a known-broken sampler.
+#
+# AGENTS.md has long claimed every study number was measured at one thread.
+# Nothing enforced it until now; this line is what makes the claim true.
+threads  <- as.integer(getopt("threads", "1"))
+
 resume   <- any(args == "--resume")
 keepawake<- any(args == "--caffeinate")
 
@@ -68,6 +89,13 @@ if (keepawake) {
 suppressMessages(devtools::load_all(pkg_root, quiet = TRUE))
 source(file.path(pkg_root, "tests", "testthat", "helper-simstudy.R"))
 
+# Pin the in-fit thread count. Set the environment variable as well as calling
+# setThreadOptions(), because the variable is what propagates to the PSOCK
+# workers' fresh R sessions, where the fits actually run; the call alone would
+# only bind this master process, which does no fitting.
+Sys.setenv(RCPP_PARALLEL_NUM_THREADS = as.character(threads))
+RcppParallel::setThreadOptions(numThreads = threads)
+
 scenarios <- simstudy_scenarios()
 if (nzchar(which_sc)) {
   keep <- strsplit(which_sc, ",")[[1]]
@@ -77,8 +105,9 @@ if (nzchar(which_sc)) {
 
 MCMCparams <- list(nchain = 2, nburn = nburn, niter = niter, nthin = 1)
 
-message(sprintf("simstudy: %d scenario(s), R = %d, %d core(s), MCMC %d+%d x 2",
-                length(scenarios), R_reps, n_cores, nburn, niter))
+message(sprintf(
+  "simstudy: %d scenario(s), R = %d, %d core(s), %d thread(s)/fit, MCMC %d+%d x 2",
+  length(scenarios), R_reps, n_cores, threads, nburn, niter))
 
 # --- run -----------------------------------------------------------------
 
@@ -90,17 +119,25 @@ jobs <- do.call(rbind, lapply(seq_along(scenarios), function(i) {
 }))
 jobs <- jobs[sample.int(nrow(jobs)), ]   # mix costs across workers
 
+# simstudy_replicate() returns list(params=, occupancy=): the per-element
+# coverage rows, and the per-species occupancy-recovery rows. They are carried
+# separately all the way to disk because their schemas differ (see the note on
+# simstudy_occupancy_rows()); nothing here ever rbinds one onto the other.
 run_one <- function(k) {
   s <- scenarios[[jobs$scenario_i[k]]]
   r <- jobs$replicate[k]
   out <- try(simstudy_replicate(s, r, MCMCparams = MCMCparams), silent = TRUE)
   if (inherits(out, "try-error")) {
     # One bad replicate must not lose the whole run. Record and continue.
-    return(data.frame(scenario = s$label, replicate = r, block = "ERROR",
-                      element = NA_integer_, truth = NA_real_,
-                      lower = NA_real_, upper = NA_real_,
-                      post_mean = NA_real_, covered = NA_integer_,
-                      stringsAsFactors = FALSE))
+    # Only the params frame carries the ERROR marker, which is what the
+    # failure count and the drop below key on.
+    return(list(
+      params = data.frame(scenario = s$label, replicate = r, block = "ERROR",
+                          element = NA_integer_, truth = NA_real_,
+                          lower = NA_real_, upper = NA_real_,
+                          post_mean = NA_real_, covered = NA_integer_,
+                          stringsAsFactors = FALSE),
+      occupancy = NULL))
   }
   out
 }
@@ -131,9 +168,11 @@ ckpt_load <- function() {
   out
 }
 
-ckpt_append <- function(rows) {
+ckpt_append <- function(bundle) {
   prev <- ckpt_load()
-  saveRDS(rbind(prev, rows), ckpt_path)
+  saveRDS(list(params    = rbind(prev$params,    bundle$params),
+               occupancy = rbind(prev$occupancy, bundle$occupancy)),
+          ckpt_path)
 }
 
 # Progress reporting. Without this the run is silent until it finishes, which
@@ -188,7 +227,8 @@ cluster_cpu_min <- function(cl) {
 }
 
 # Drop jobs already recorded in the checkpoint.
-done_rows <- if (resume) ckpt_load() else NULL
+done_bundle <- if (resume) ckpt_load() else NULL
+done_rows <- done_bundle$params
 if (!is.null(done_rows)) {
   have <- unique(paste(done_rows$scenario, done_rows$replicate, sep = "\r"))
   want <- paste(vapply(jobs$scenario_i, function(i) scenarios[[i]]$label, ""),
@@ -209,9 +249,14 @@ if (n_cores > 1L) {
   # Independent L'Ecuyer streams per worker, on top of the per-replicate seed
   # in simstudy_replicate(). Reproducible and non-overlapping.
   clusterSetRNGStream(cl, 20260727L)
-  clusterExport(cl, c("scenarios", "jobs", "MCMCparams", "pkg_root"),
+  clusterExport(cl, c("scenarios", "jobs", "MCMCparams", "pkg_root", "threads"),
                 envir = environment())
   clusterEvalQ(cl, {
+    # Pin before load_all(), so the setting is in force for every fit this
+    # worker runs. Belt and braces with the exported environment variable:
+    # whichever RcppParallel consults, both say the same number.
+    Sys.setenv(RCPP_PARALLEL_NUM_THREADS = as.character(threads))
+    RcppParallel::setThreadOptions(numThreads = threads)
     suppressMessages(devtools::load_all(pkg_root, quiet = TRUE))
     source(file.path(pkg_root, "tests", "testthat", "helper-simstudy.R"))
     NULL
@@ -226,10 +271,11 @@ if (n_cores > 1L) {
 
   for (ci in seq_along(chunks)) {
     res[[ci]] <- parLapplyLB(cl, chunks[[ci]], run_one)
-    ckpt_append(do.call(rbind, res[[ci]]))
+    ckpt_append(simstudy_bind(res[[ci]]))
     done <- done + length(chunks[[ci]])
     failed_so_far <- failed_so_far +
-      sum(vapply(res[[ci]], function(d) any(d$block == "ERROR"), logical(1)))
+      sum(vapply(res[[ci]], function(d) any(d$params$block == "ERROR"),
+                 logical(1)))
     progress_line(done, n_jobs, t0, failed_so_far, cluster_cpu_min(cl))
   }
   res <- unlist(res, recursive = FALSE)
@@ -240,29 +286,93 @@ if (n_cores > 1L) {
   for (k in seq_len(n_jobs)) {
     res[[k]] <- run_one(k)
     ckpt_append(res[[k]])
-    if (any(res[[k]]$block == "ERROR")) failed_so_far <- failed_so_far + 1L
+    if (any(res[[k]]$params$block == "ERROR")) failed_so_far <- failed_so_far + 1L
     if (k %% 10L == 0L || k == n_jobs) progress_line(k, n_jobs, t0, failed_so_far)
   }
 }
 elapsed <- as.numeric(difftime(Sys.time(), t0, units = "mins"))
 
-rows <- do.call(rbind, res)
+bundle <- simstudy_bind(res)
+rows <- bundle$params
+occ  <- bundle$occupancy
 # Include anything carried over from an earlier, interrupted run.
-if (!is.null(done_rows)) rows <- rbind(done_rows, rows)
+if (!is.null(done_bundle)) {
+  rows <- rbind(done_bundle$params, rows)
+  occ  <- rbind(done_bundle$occupancy, occ)
+}
 failed <- sum(rows$block == "ERROR", na.rm = TRUE)
 rows <- rows[rows$block != "ERROR", , drop = FALSE]
 summary_tbl <- simstudy_summarise(rows)
+occ_summary <- simstudy_summarise_occupancy(occ)
+occ_prev    <- simstudy_occupancy_by_prevalence(occ)
+
+# --- provenance ----------------------------------------------------------
+#
+# Which code produced these numbers, recorded in the results file itself.
+#
+# This exists because of a specific failure. The validation article was written
+# from the 2 August run and then six commits touched R/ and src/ underneath it,
+# including a new parallel sampler; nothing in the results file said what it had
+# been run against, so the article went stale invisibly and the drift was only
+# found by comparing timestamps against the git log by hand. The article now
+# prints this block, so a reader can see the answer instead of assuming it.
+git_out <- function(...) {
+  v <- suppressWarnings(try(
+    system2("git", c("-C", pkg_root, ...), stdout = TRUE, stderr = FALSE),
+    silent = TRUE))
+  if (inherits(v, "try-error") || length(v) == 0L) NA_character_ else v[1]
+}
+
+provenance <- list(
+  git_sha    = git_out("rev-parse", "HEAD"),
+  git_branch = git_out("rev-parse", "--abbrev-ref", "HEAD"),
+  # A dirty tree means the SHA above does not fully describe what ran, which
+  # matters more than the SHA itself for reproducing a result.
+  git_dirty  = {
+    st <- suppressWarnings(try(
+      system2("git", c("-C", pkg_root, "status", "--porcelain"),
+              stdout = TRUE, stderr = FALSE), silent = TRUE))
+    if (inherits(st, "try-error")) NA else length(st) > 0L
+  },
+  pkg_version = as.character(utils::packageVersion("occJSDM")),
+  r_version   = paste(R.version$major, R.version$minor, sep = "."),
+  platform    = R.version$platform,
+  n_cores     = n_cores,
+  # Every fit here is single-threaded within itself; the parallelism is across
+  # replicate processes. Recorded because it is the reason these results say
+  # nothing about the multi-threaded configuration a user gets by default
+  # (TODO.md group B items 8 and 9).
+  rcpp_parallel_threads = threads,
+  # Read back from a worker rather than trusting the master's own setting:
+  # the fits happen there, and a pin that failed to propagate is exactly the
+  # kind of thing that would otherwise go unnoticed.
+  rcpp_parallel_threads_in_worker = if (n_cores > 1L)
+    tryCatch(clusterEvalQ(cl, Sys.getenv("RCPP_PARALLEL_NUM_THREADS"))[[1]],
+             error = function(e) NA_character_) else as.character(threads),
+  scenarios   = vapply(scenarios, function(s) s$label, ""),
+  nburn = nburn, niter = niter, R = R_reps,
+  elapsed_min = elapsed,
+  started  = t0,
+  finished = Sys.time()
+)
 
 # --- write ---------------------------------------------------------------
 
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 stamp <- format(Sys.time(), "%Y%m%d-%H%M%S")
-saveRDS(list(rows = rows, summary = summary_tbl, R = R_reps,
+saveRDS(list(rows = rows, summary = summary_tbl,
+             occupancy = occ, occupancy_summary = occ_summary,
+             occupancy_by_prevalence = occ_prev,
+             R = R_reps,
              MCMCparams = MCMCparams, failed_replicates = failed,
              elapsed_min = elapsed, when = Sys.time(),
+             provenance = provenance,
              sessionInfo = utils::sessionInfo()),
         file.path(out_dir, sprintf("simstudy-%s.rds", stamp)))
 write.csv(summary_tbl, file.path(out_dir, sprintf("simstudy-%s.csv", stamp)),
+          row.names = FALSE)
+write.csv(occ_summary,
+          file.path(out_dir, sprintf("simstudy-occupancy-%s.csv", stamp)),
           row.names = FALSE)
 
 message(sprintf("\ndone in %.1f min; %d replicate(s) failed", elapsed, failed))

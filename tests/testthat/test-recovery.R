@@ -31,16 +31,21 @@
 .recovery_cache <- new.env(parent = emptyenv())
 
 recovery_rows <- function() {
-  if (is.null(.recovery_cache$rows)) {
+  if (is.null(.recovery_cache$bundle)) {
     scenario <- simstudy_scenarios()[[1]]   # base
     scenario$n <- 50L
     scenario$S <- 5L
     scenario$n_supportpoints <- 10L
-    .recovery_cache$rows <- simstudy_scenario(
+    .recovery_cache$bundle <- simstudy_scenario(
       scenario, R = 5L, verbose = FALSE,
       MCMCparams = list(nchain = 2, nburn = 300, niter = 300, nthin = 1))
   }
-  .recovery_cache$rows
+  # simstudy_scenario() returns list(params=, occupancy=). The assertions below
+  # reduce with mean()/min()/cor() over columns that exist only on the params
+  # half, so take that half explicitly rather than letting the occupancy rows
+  # in: they carry no truth or coverage, and the NAs would turn these checks
+  # into silent passes.
+  .recovery_cache$bundle$params
 }
 
 test_that("parameter recovery has not grossly broken (tier 2 canary)", {

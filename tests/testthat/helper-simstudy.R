@@ -76,9 +76,17 @@ simstudy_scenarios <- function() {
     #
     # Not production cells: these answer whether group B items 4-6 are code
     # defects or Stage 1 under-identification. Select them explicitly with
-    # --scenarios=M2,M5,M10,M20,K30; they are otherwise inert because the
-    # runner takes the full list only when --scenarios is empty, so leaving
-    # them here would silently add 5 cells to every full run.
+    # --scenarios=M2,M5,M10,M20,K30.
+    #
+    # **They are NOT inert, and a previous version of this comment said they
+    # were.** run_study.R takes this entire list whenever --scenarios is
+    # empty, so a bare `Rscript run_study.R` runs all 21 cells, not the 10
+    # production ones -- roughly 9 h instead of 2 h 45 m. That misreading cost
+    # a wasted launch on 2 August. The production grid must be named:
+    #
+    #   --scenarios=base,binary,d_overfit,d_underfit,low_information,
+    #               occupancy,primers_3,spatial_isolated,species_20,
+    #               traits_isolated
     #
     # `seed_label` makes all five share a truth at each replicate, so the
     # comparison across arms is paired -- see simstudy_seed_for().
@@ -456,9 +464,110 @@ simstudy_rescor_rows <- function(fit, sim, scenario, replicate) {
   )
 }
 
+# --- Occupancy recovery --------------------------------------------------
+#
+# The parameter blocks above ask whether the sampler recovers coefficients.
+# They never ask the question a user actually has, which is whether the model
+# puts the species in the right places. That is scored here.
+#
+# These statistics live in helper-simstudy.R rather than in
+# test-recovery-occupancy.R, where they were first written, because two
+# callers need them and they must not drift apart: the tier-2 test scores one
+# fit and asserts on it, and the tier-3 study now scores every replicate so
+# the same numbers get an interval instead of resting on a single draw. One
+# definition, two consumers.
+
+#' Probability a random occupied site outranks a random unoccupied one.
+#'
+#' The rank form of the Mann-Whitney U, so ties contribute 0.5 rather than
+#' being dropped. NA when a species is entirely occupied or entirely absent,
+#' since there is then nothing to discriminate between.
+occrec_auc <- function(score, label) {
+  pos <- score[label == 1]
+  neg <- score[label == 0]
+  if (length(pos) == 0L || length(neg) == 0L) return(NA_real_)
+  r <- rank(c(pos, neg))
+  (sum(r[seq_along(pos)]) - length(pos) * (length(pos) + 1) / 2) /
+    (length(pos) * length(neg))
+}
+
+#' One row per species: how well was occupancy itself recovered?
+#'
+#' Scored as point-estimate agreement, not coverage, because there are no
+#' draws to build an interval from: `runOccJSDM()` defaults to
+#' `summarisedLatentPresences = TRUE`, so `psi_output` and `z_output` come
+#' back as n x S running means with no iteration or chain dimension.
+#'
+#' Two metrics, deliberately different in kind. `psi_cor` correlates the
+#' estimated occupancy probability against the true one across sites; its null
+#' value is 0 and it is invariant to the level of psi, so it asks only whether
+#' the model put occupancy in the right *places*. `auc` asks the same question
+#' more forgivingly, on a scale whose null is 0.5; its ceiling is well below 1
+#' because z is a coin flip given psi, so even a perfect psi cannot rank every
+#' site correctly.
+#'
+#' **These rows are deliberately NOT rbind-able onto `simstudy_rows()` output.**
+#' That frame carries `truth`/`lower`/`upper`/`covered` for every row and has
+#' no NAs anywhere; these statistics have no interval and no coverage, so
+#' mixing them would put NAs into columns that `test-recovery.R` reduces with
+#' `mean()`, `min()` and `cor()`, turning three live assertions into silent
+#' NAs. They travel in their own table for that reason.
+simstudy_occupancy_rows <- function(fit, sim, scenario, replicate) {
+  S <- scenario$S
+  psi_true <- stats::plogis(sim$true_params$jsdmParams_true$eta)
+  z_true <- sim$true_params$z_true
+  psi_est <- fit$results_output$psi_output
+  z_est <- fit$results_output$z_output
+
+  empty <- data.frame(scenario = character(0), replicate = integer(0),
+                      species = integer(0), occ_true = numeric(0),
+                      occ_est = numeric(0), psi_cor = numeric(0),
+                      auc = numeric(0), stringsAsFactors = FALSE)
+
+  # The `binary` and `continuous` arms have no latent occupancy state: presence
+  # is observed directly rather than inferred through a detection process, so
+  # the fit returns no psi_output or z_output and the simulator no z_true.
+  # There is nothing to recover and nothing to score, which is different from
+  # being broken -- these cells still contribute their parameter coverage, so
+  # return no occupancy rows rather than failing the replicate.
+  if (length(psi_est) == 0L || length(z_est) == 0L || is.null(z_true)) {
+    return(empty)
+  }
+
+  # Guard the shape rather than trusting it. If a future change to
+  # summarisedLatentPresences hands back a 4-D array instead of an n x S mean,
+  # colMeans() and cor() would still return numbers, just meaningless ones.
+  # Distinct from the case above: something is present but the wrong shape,
+  # which is a regression worth failing loudly on.
+  if (length(dim(psi_est)) != 2L || ncol(psi_est) != S) {
+    stop("simstudy_occupancy_rows(): psi_output is not the expected n x S ",
+         "matrix (got ", paste(dim(psi_est), collapse = " x "), ", S = ", S,
+         "). Has summarisedLatentPresences changed?")
+  }
+
+  data.frame(
+    scenario  = scenario$label,
+    replicate = replicate,
+    species   = seq_len(S),
+    occ_true  = colMeans(z_true),
+    occ_est   = colMeans(z_est),
+    psi_cor   = vapply(seq_len(S), function(s)
+                       stats::cor(psi_est[, s], psi_true[, s]), numeric(1)),
+    auc       = vapply(seq_len(S), function(s)
+                       occrec_auc(psi_est[, s], z_true[, s]), numeric(1)),
+    stringsAsFactors = FALSE
+  )
+}
+
 # --- Orchestration -------------------------------------------------------
 
 #' Run one replicate end to end.
+#'
+#' Returns a **list of two data frames**, not one frame. `params` is the
+#' per-element coverage table that `simstudy_summarise()` consumes;
+#' `occupancy` is the per-species table from `simstudy_occupancy_rows()`.
+#' They are kept apart because their schemas genuinely differ -- see the note
+#' on that function. Callers that only want the old behaviour take `$params`.
 simstudy_replicate <- function(scenario, replicate, MCMCparams = NULL,
                                statistic = statistic_coverage) {
   seed <- simstudy_seed_for(scenario, replicate)
@@ -466,7 +575,10 @@ simstudy_replicate <- function(scenario, replicate, MCMCparams = NULL,
   sim <- simstudy_simulate(truth)
   fit <- if (is.null(MCMCparams)) simstudy_fit(sim, scenario) else
     simstudy_fit(sim, scenario, MCMCparams)
-  simstudy_rows(fit, sim, truth, scenario, replicate, statistic)
+  list(
+    params    = simstudy_rows(fit, sim, truth, scenario, replicate, statistic),
+    occupancy = simstudy_occupancy_rows(fit, sim, scenario, replicate)
+  )
 }
 
 #' Deterministic seed from (scenario label, replicate).
@@ -502,15 +614,30 @@ simstudy_seed_for <- function(scenario, replicate) {
 }
 
 #' Run R replicates of one scenario.
+#'
+#' Returns the same two-component list as `simstudy_replicate()`, with each
+#' component stacked over replicates.
 simstudy_scenario <- function(scenario, R = 100L, MCMCparams = NULL,
                               statistic = statistic_coverage,
                               verbose = TRUE) {
-  rows <- vector("list", R)
+  reps <- vector("list", R)
   for (r in seq_len(R)) {
     if (verbose) message(sprintf("[%s] replicate %d/%d", scenario$label, r, R))
-    rows[[r]] <- simstudy_replicate(scenario, r, MCMCparams, statistic)
+    reps[[r]] <- simstudy_replicate(scenario, r, MCMCparams, statistic)
   }
-  do.call(rbind, rows)
+  simstudy_bind(reps)
+}
+
+#' Stack a list of two-component replicate results into one such result.
+#'
+#' Used by both `simstudy_scenario()` and the parallel runner, so the two
+#' cannot disagree about how the pieces are assembled.
+simstudy_bind <- function(reps) {
+  reps <- Filter(Negate(is.null), reps)
+  list(
+    params    = do.call(rbind, lapply(reps, `[[`, "params")),
+    occupancy = do.call(rbind, lapply(reps, `[[`, "occupancy"))
+  )
 }
 
 #' Aggregate per-element rows into per-block coverage, bias and RMSE.
@@ -537,4 +664,86 @@ simstudy_summarise <- function(rows) {
   res <- do.call(rbind, out)
   rownames(res) <- NULL
   res[order(res$scenario, res$block), ]
+}
+
+#' Aggregate per-species occupancy rows to one row per scenario.
+#'
+#' **Not aggregated by species index, deliberately.** Every replicate draws its
+#' own truth, so "species 3" in replicate 1 and "species 3" in replicate 2 are
+#' unrelated draws with different prevalences. Averaging down the species
+#' column would be averaging over an arbitrary label. What is meaningful is the
+#' distribution over all replicate-by-species pairs, which is what this
+#' returns: at R = 100 and S = 10 that is 1000 species-fits per cell, against
+#' the single fit the tier-2 table reports.
+#'
+#' `psi_cor_q05`/`q95` are the interval to quote. `share_ok` uses the same 0.30
+#' cut as the tier-2 assertion so the two are comparable. `cor_prev` is the
+#' correlation between a species' true prevalence and how well it was
+#' recovered, which is the quantitative form of "rare species are the hard
+#' ones" -- previously an eyeball reading of one ten-row table.
+simstudy_summarise_occupancy <- function(occ, cut = 0.30) {
+  if (is.null(occ) || nrow(occ) == 0L) return(NULL)
+  sp <- split(seq_len(nrow(occ)), occ$scenario)
+
+  qs <- function(x, p) as.numeric(stats::quantile(x, p, na.rm = TRUE))
+
+  out <- lapply(sp, function(ix) {
+    d <- occ[ix, , drop = FALSE]
+    data.frame(
+      scenario      = d$scenario[1],
+      R             = length(unique(d$replicate)),
+      n_species_fit = nrow(d),
+      occ_true      = mean(d$occ_true, na.rm = TRUE),
+      occ_est       = mean(d$occ_est, na.rm = TRUE),
+      psi_cor_mean  = mean(d$psi_cor, na.rm = TRUE),
+      psi_cor_q05   = qs(d$psi_cor, 0.05),
+      psi_cor_q50   = qs(d$psi_cor, 0.50),
+      psi_cor_q95   = qs(d$psi_cor, 0.95),
+      auc_mean      = mean(d$auc, na.rm = TRUE),
+      auc_q05       = qs(d$auc, 0.05),
+      auc_q95       = qs(d$auc, 0.95),
+      share_ok      = mean(d$psi_cor >= cut, na.rm = TRUE),
+      cor_prev      = suppressWarnings(
+                        stats::cor(d$occ_true, d$psi_cor,
+                                   use = "complete.obs")),
+      stringsAsFactors = FALSE
+    )
+  })
+  res <- do.call(rbind, out)
+  rownames(res) <- NULL
+  res[order(res$scenario), ]
+}
+
+#' Occupancy recovery banded by how common the species actually is.
+#'
+#' The headline table reports recovery averaged over species, which hides the
+#' thing that most affects a user: a species present at 5% of sites is much
+#' harder to place than one present at 60%. Banding by true prevalence turns
+#' that from an anecdote about one row into a curve with an interval on it,
+#' and it is what the validation article plots.
+simstudy_occupancy_by_prevalence <- function(occ,
+                                             breaks = c(0, .1, .2, .3, .5, 1)) {
+  if (is.null(occ) || nrow(occ) == 0L) return(NULL)
+  band <- cut(occ$occ_true, breaks = breaks, include.lowest = TRUE)
+  sp <- split(seq_len(nrow(occ)), list(occ$scenario, band), drop = TRUE)
+
+  qs <- function(x, p) as.numeric(stats::quantile(x, p, na.rm = TRUE))
+
+  out <- lapply(sp, function(ix) {
+    d <- occ[ix, , drop = FALSE]
+    data.frame(
+      scenario      = d$scenario[1],
+      prevalence    = as.character(band[ix][1]),
+      n_species_fit = nrow(d),
+      occ_true      = mean(d$occ_true, na.rm = TRUE),
+      psi_cor_mean  = mean(d$psi_cor, na.rm = TRUE),
+      psi_cor_q05   = qs(d$psi_cor, 0.05),
+      psi_cor_q95   = qs(d$psi_cor, 0.95),
+      auc_mean      = mean(d$auc, na.rm = TRUE),
+      stringsAsFactors = FALSE
+    )
+  })
+  res <- do.call(rbind, out)
+  rownames(res) <- NULL
+  res[order(res$scenario, res$occ_true), ]
 }

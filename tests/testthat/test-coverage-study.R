@@ -20,12 +20,18 @@ test_that("coverage is near nominal across the scenario grid", {
   outdir <- Sys.getenv("OCCJSDM_SIMSTUDY_OUT", tempdir())
 
   scenarios <- simstudy_scenarios()
-  rows <- do.call(rbind, lapply(scenarios, simstudy_scenario, R = R))
+  bundle <- simstudy_bind(lapply(scenarios, simstudy_scenario, R = R))
+  rows <- bundle$params
+  occ <- bundle$occupancy
   summary_tbl <- simstudy_summarise(rows)
+  occ_summary <- simstudy_summarise_occupancy(occ)
 
   dir.create(outdir, showWarnings = FALSE, recursive = TRUE)
   stamp <- format(Sys.time(), "%Y%m%d-%H%M%S")
-  saveRDS(list(rows = rows, summary = summary_tbl, R = R,
+  saveRDS(list(rows = rows, summary = summary_tbl,
+               occupancy = occ, occupancy_summary = occ_summary,
+               occupancy_by_prevalence = simstudy_occupancy_by_prevalence(occ),
+               R = R,
                when = Sys.time(), sessionInfo = utils::sessionInfo()),
           file.path(outdir, sprintf("simstudy-%s.rds", stamp)))
   utils::write.csv(summary_tbl,
