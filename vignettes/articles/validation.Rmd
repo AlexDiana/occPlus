@@ -954,22 +954,22 @@ print(plot_coverage_by_block())
     </p>
     <div class="scroller">
       <table>
-        <caption>Each variant differs from the reference in one respect only.</caption>
-        <thead>
-          <tr><th>Scenario</th><th>What changes</th><th>What it asks</th></tr>
-        </thead>
-        <tbody>
-          <tr><td class="name">spatial_isolated</td><td>traits off</td><td>Does the spatial term work with trait effects out of the way?</td></tr>
-          <tr><td class="name">traits_isolated</td><td>spatial off</td><td>Does the trait&times;environment term work without the spatial field competing?</td></tr>
-          <tr><td class="name">primers_3</td><td>2 &rarr; 3 primers</td><td>Does per-primer detection hold with more primers?</td></tr>
-          <tr><td class="name">low_information</td><td>40 sites, weak detection</td><td>The hard case: thin, realistic eDNA data.</td></tr>
-          <tr><td class="name">d_underfit</td><td>truth 4 axes, fit 2</td><td>Under-specifying the ordination &mdash; the common real mistake.</td></tr>
-          <tr><td class="name">d_overfit</td><td>truth 2 axes, fit 4</td><td>Over-specifying it.</td></tr>
-          <tr><td class="name">species_20</td><td>10 &rarr; 20 species</td><td>Does it hold as the community grows?</td></tr>
-          <tr><td class="name">occupancy</td><td>no PCR stage</td><td>The collapsed form: field replicates only.</td></tr>
-          <tr><td class="name">binary</td><td>no replicates</td><td>Pure JSDM, no detection model.</td></tr>
-        </tbody>
-      </table>
+  <caption>Each variant differs from the reference in one respect only.</caption>
+  <thead>
+    <tr><th>Scenario</th><th>What changes</th><th>What it asks</th></tr>
+  </thead>
+  <tbody>
+    <tr><td class="name">spatial_isolated</td><td>traits off</td><td>Does the spatial term work with trait effects out of the way?</td></tr>
+    <tr><td class="name">traits_isolated</td><td>spatial off</td><td>Does the trait&times;environment term work without the spatial field competing?</td></tr>
+    <tr><td class="name">primers_3</td><td>2 &rarr; 3 primers</td><td>Does per-primer detection hold with more primers?</td></tr>
+    <tr><td class="name">low_information</td><td>40 sites, weak detection</td><td>The hard case: thin, realistic eDNA data.</td></tr>
+    <tr><td class="name">d_underfit</td><td>truth 4 axes, fit 2</td><td>Under-specifying the ordination &mdash; the common real mistake.</td></tr>
+    <tr><td class="name">d_overfit</td><td>truth 2 axes, fit 4</td><td>Over-specifying it.</td></tr>
+    <tr><td class="name">species_20</td><td>10 &rarr; 20 species</td><td>Does it hold as the community grows?</td></tr>
+    <tr><td class="name">occupancy</td><td>no PCR stage</td><td>The collapsed form: field replicates only.</td></tr>
+    <tr><td class="name">binary</td><td>no replicates</td><td>Pure JSDM, no detection model.</td></tr>
+  </tbody>
+</table>
     </div>
     <figure class="fig">
 ```
@@ -996,7 +996,6 @@ print(plot_coverage_by_scenario())
       Every mark is one interval; the dark ones missed the truth. Both promise to miss
       five times.
     </p>
-
 ```
 
 ```{r tallies}
@@ -1050,7 +1049,7 @@ emit(sprintf('<div class="tally-set">%s%s</div>',
                 miss_worst, fmt(miss_worst / 5, 1)))))
 ```
 
-```{=html}
+````{=html}
 
     <p>
       The same measurement for every parameter, summarised across all ten scenarios.
@@ -1059,10 +1058,10 @@ emit(sprintf('<div class="tally-set">%s%s</div>',
     </p>
     <div class="scroller">
       <table>
-        <caption>Median across scenarios, with the range and the worst-performing cell.</caption>
-        <thead>
-          <tr><th>Parameter</th><th>median</th><th>lowest</th><th>highest</th><th>worst cell</th></tr>
-        </thead>
+  <caption>Median across scenarios, with the range and the worst-performing cell.</caption>
+  <thead>
+    <tr><th>Parameter</th><th>median</th><th>lowest</th><th>highest</th><th>worst cell</th></tr>
+  </thead>
 ```
 
 ```{r coverage-summary-table}
@@ -1093,7 +1092,7 @@ cat(html_table(cs,
 ```
 
 ```{=html}
-      </table>
+</table>
     </div>
     <p>
       <strong>Most of the model is well calibrated.</strong> <code>B</code>,
@@ -1125,7 +1124,7 @@ cat(html_table(cs,
         stranger, and the number should not be quoted as evidence for or against anything
         until the measurement is repaired.
       </p>
-```
+````
 
 ```{r resid-cor-degeneracy}
 dg <- vd$degeneracy
@@ -1263,7 +1262,6 @@ emit(sprintf('
           </p>
         </div>
       </div>
-
 ```
 
 ```{r tier3-runtime}
@@ -1302,7 +1300,6 @@ emit(sprintf('
 
 ```{=html}
   </section>
-
 ```
 
 ```{r provenance-footer}
