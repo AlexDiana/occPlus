@@ -157,6 +157,25 @@ simstudy_scenarios <- function() {
     # not help".
     mk("sites_300", n = 300L, seed_label = "base"),
 
+    # Does fitting MORE latent factors than the data contains help the species
+    # that need them? base with fit_d = 4 against its simulated d = 2, paired.
+    #
+    # `d_overfit` above already does this, but unpaired -- it draws its own
+    # truths, so a difference against base carries the variance of two
+    # simulated worlds. Measured that way on 10 August the aggregate looked
+    # like nothing (0.622 against 0.627), but split by how latent-driven each
+    # species is, the differences ran -0.018, -0.023, +0.026, +0.035 from the
+    # most environment-driven quarter to the most latent-driven. A clean sign
+    # flip in order across four bands is not what noise usually looks like,
+    # but each difference is only 1.5 to 2 SE and the comparison is unpaired.
+    #
+    # This cell makes it exact: identical truths to base, differing only in
+    # how many factors are fitted. Read it on the latent-share bands, not the
+    # aggregate -- the aggregate is where the effect hides, because the gain
+    # for latent-driven species and the loss for environment-driven ones are
+    # of similar size and cancel.
+    mk("fit_d4", fit_d = 4L, seed_label = "base"),
+
     # --- M ladder (PLAN.md 13) -----------------------------------------
     #
     # Not production cells: these answer whether group B items 4-6 are code
