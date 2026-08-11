@@ -1028,7 +1028,7 @@ if (nrow(poor) > 0) emit(sprintf('
     <figure class="fig">
 ```
 
-```{r fig-bias, fig.width = 8, fig.height = 5, dev = "png", dpi = 160}
+```{r fig-bias, fig.width = 10, fig.height = 5, dev = "png", dpi = 160}
 print(plot_by_block("bias"))
 ```
 
@@ -1046,7 +1046,7 @@ print(plot_by_block("bias"))
     <figure class="fig">
 ```
 
-```{r fig-rmse, fig.width = 8, fig.height = 5, dev = "png", dpi = 160}
+```{r fig-rmse, fig.width = 10, fig.height = 5, dev = "png", dpi = 160}
 print(plot_by_block("rmse"))
 ```
 
@@ -1077,7 +1077,7 @@ print(plot_by_block("rmse"))
     <figure class="fig">
 ```
 
-```{r fig-cov-block, fig.width = 8, fig.height = 5, dev = "png", dpi = 160}
+```{r fig-cov-block, fig.width = 10, fig.height = 5, dev = "png", dpi = 160}
 print(plot_coverage_by_block())
 ```
 
@@ -1150,7 +1150,7 @@ print(plot_coverage_by_block())
     <figure class="fig">
 ```
 
-```{r fig-cov-scen, fig.width = 8, fig.height = 5, dev = "png", dpi = 160}
+```{r fig-cov-scen, fig.width = 10, fig.height = 5, dev = "png", dpi = 160}
 print(plot_coverage_by_scenario())
 ```
 
@@ -1391,7 +1391,7 @@ emit(sprintf('
 ```{=html}
 ```
 
-```{r sites-comparison, fig.width = 8, fig.height = 9.5, dev = "png", dpi = 160}
+```{r sites-comparison, fig.width = 10, fig.height = 9.5, dev = "png", dpi = 160}
 ex <- vd$extra_cells[["sites_300"]]
 if (!is.null(ex)) {
   b <- vd$occupancy[vd$occupancy$scenario == vd$example_cell &
