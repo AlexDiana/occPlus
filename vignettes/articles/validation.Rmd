@@ -295,11 +295,13 @@ html[data-bs-theme="dark"] .occjsdm-report {
 }
 
 .occjsdm-report .wrap {
-  /* Widened from 45rem: the per-species and coverage tables (5-7 columns)
-     were readable but tight at 45rem, needing the .scroller fallback more
-     than the prose needed. Paragraphs keep their own 40rem cap below, so
-     text width is unaffected; only the tables get the extra room. */
-  max-width: 58rem;
+  /* Widened twice. 45rem -> 58rem because the 5-7 column tables were hitting
+     the .scroller fallback constantly; 58rem -> 74rem because the figures
+     are the widest thing here now and were being squeezed, and because at
+     58rem the page reads narrow against the whitespace around it.
+     Paragraphs keep their own cap below, so line length stays readable and
+     only the tables and figures take the extra room. */
+  max-width: 74rem;
   margin: 0 auto;
   padding: 3rem 1.5rem 4rem;
   display: flex;
@@ -347,14 +349,24 @@ html[data-bs-theme="dark"] .occjsdm-report {
 }
 
 .occjsdm-report h3 {
-  font-size: 0.95rem;
-  font-weight: 650;
-  margin: 0;
-  letter-spacing: 0.005em;
+  /* Was 0.95rem sans, i.e. SMALLER than the 17px body text and in a
+     different family from h1/h2 -- so subheadings read as bold paragraphs
+     rather than headings, and "Does a bigger survey help?" disappeared into
+     the prose around it. Now serif like the other headings and clearly
+     above body size, sitting between h2's 1.6rem and the text. */
+  font-family: var(--serif);
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.25;
+  margin: 0.6rem 0 0;
+  letter-spacing: -0.005em;
 }
 
 .occjsdm-report section { display: flex; flex-direction: column; gap: 1.1rem; }
-.occjsdm-report p { margin: 0; max-width: 40rem; }
+/* Prose keeps its own cap well inside .wrap: a 74rem-wide paragraph is
+   unreadable however wide the page is. 46rem is roughly 80 characters at
+   this size, which is the top of the comfortable range. */
+.occjsdm-report p { margin: 0; max-width: 46rem; }
 .occjsdm-report strong { font-weight: 650; }
 .occjsdm-report code {
   font-family: var(--mono);
