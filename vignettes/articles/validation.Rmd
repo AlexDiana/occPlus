@@ -649,11 +649,30 @@ cat(html_table(
       coin flip scores 0.5.
     </p>
     <p>
-      The last two columns concern the coefficients underneath. Each species has three
-      -- a baseline and two environmental effects. <b>drv_cov</b> is the share whose
-      stated range contains the true value, and <b>drv_err</b> is the average distance
-      from best guess to truth, on the coefficients&rsquo; own scale, so there is no fixed
-      good value.
+      The last two columns look underneath, at the machinery producing those
+      occupancy estimates. Where a species lives is set by just three numbers: a
+      <em>baseline</em>, saying how common it is overall, and one <em>slope</em> for
+      each of the two environmental covariates, saying how strongly it responds to
+      each. Get those three right and the map comes out right.
+    </p>
+    <p>
+      <b>drv_cov</b> asks whether the model&rsquo;s <em>uncertainty</em> about those
+      three numbers is honest. For each one the model reports not just a best guess
+      but a range it claims the true value sits inside 95% of the time.
+      <code>drv_cov</code> is the fraction of the three ranges that really did
+      contain the truth. With only three, it can take just four values -- 0, 0.33,
+      0.67 or 1 -- which is why it reads 1.000 so often. One species is far too
+      small a sample to measure a 95% rate against. It is here to catch a collapse
+      towards 0, which would mean the truth and the estimates had been lined up
+      wrongly; it is not a calibration figure. The honest version of that
+      measurement needs the whole grid, and appears further down.
+    </p>
+    <p>
+      <b>drv_err</b> asks whether the best guesses themselves are close: the average
+      gap between estimate and truth across the same three numbers. There is no
+      universal good value, because these are log-odds rather than probabilities and
+      a species with strong environmental responses simply has larger numbers to be
+      wrong about. Read it by comparing rows in this table, not against a target.
     </p>
 ```
 
