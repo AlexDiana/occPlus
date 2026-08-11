@@ -347,10 +347,12 @@ H.  **Reduce the repeated `arma::inv()` calls in the samplers. NOT DONE, but a m
 
     **That makes the fix-verification re-run cheaper to read, not redundant.** There is now a clean baseline measured on current code, so the next comparison isolates the fixes instead of confounding them with six commits of drift. Name the production grid explicitly -- a bare invocation takes every cell defined in `helper-simstudy.R`, not the ten production ones, which is hours of wasted compute and has happened once already:
 
-        ```
-        Rscript dev/simstudy/run_study.R --R=100 --cores=5 --caffeinate \
-          --scenarios=base,binary,d_overfit,d_underfit,low_information,occupancy,primers_3,spatial_isolated,species_20,traits_isolated
-        ```
+    ````         
+    ```
+    Rscript dev/simstudy/run_study.R --R=100 --cores=5 --caffeinate \
+      --scenarios=base,binary,d_overfit,d_underfit,low_information,occupancy,primers_3,spatial_isolated,species_20,traits_isolated
+    ```
+    ````
 
     (b) **Decide the replicate count for the paper.** R = 100 was chosen to *detect* defects and did so decisively. Asserting *nominal* coverage in print is a claim about the absence of a small deviation and wants R = 200-500 (`PLAN.md` §9). The runner takes `R` as an argument.
 
