@@ -357,7 +357,7 @@ html[data-bs-theme="dark"] .occjsdm-report {
      the prose around it. Now serif like the other headings and clearly
      above body size, sitting between h2's 1.6rem and the text. */
   font-family: var(--serif);
-  font-size: 1.4rem;
+  font-size: 1.55rem;
   font-weight: 600;
   line-height: 1.25;
   margin: 0.6rem 0 0;
@@ -365,10 +365,10 @@ html[data-bs-theme="dark"] .occjsdm-report {
 }
 
 .occjsdm-report section { display: flex; flex-direction: column; gap: 1.1rem; }
-/* Prose keeps its own cap well inside .wrap: a 74rem-wide paragraph is
-   unreadable however wide the page is. 46rem is roughly 80 characters at
-   this size, which is the top of the comfortable range. */
-.occjsdm-report p { margin: 0; max-width: 46rem; }
+/* Prose runs the full column width, matching the tables. A narrower measure
+   is easier to read in the abstract, but here it left the text visibly
+   inset from every table and figure beside it, which reads as a mistake. */
+.occjsdm-report p { margin: 0; max-width: none; }
 
 /* knitr wraps every chunk figure in a <p>, so the prose cap above was
    squeezing the generated plots to 46rem inside a 74rem column -- which is
@@ -479,10 +479,10 @@ html[data-bs-theme="dark"] .occjsdm-report {
 
 /* ---- tables ---- */
 .occjsdm-report .scroller { overflow-x: auto; }
-.occjsdm-report table { border-collapse: collapse; width: 100%; font-size: 1rem; }
+.occjsdm-report table { border-collapse: collapse; width: 100%; font-size: 1.05em; }
 .occjsdm-report caption {
   text-align: left;
-  font-size: 0.95rem;
+  font-size: 1em;
   color: var(--ink-faint);
   padding-bottom: 0.6rem;
 }
@@ -496,7 +496,7 @@ html[data-bs-theme="dark"] .occjsdm-report {
   vertical-align: top;
 }
 .occjsdm-report th {
-  font-size: 0.82rem;
+  font-size: 0.9em;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--ink-faint);
@@ -507,7 +507,7 @@ html[data-bs-theme="dark"] .occjsdm-report {
    header th.lbl. Both stay left-aligned; everything else centres. */
 .occjsdm-report th.lbl, .occjsdm-report td:not([class]) { text-align: left; }
 
-.occjsdm-report td.name { font-family: var(--mono); font-size: 0.82rem; white-space: nowrap; }
+.occjsdm-report td.name { font-family: var(--mono); font-size: 0.95em; white-space: nowrap; }
 .occjsdm-report td.num  { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 
 .occjsdm-report tr.flag td { background: var(--ground-sunk); }
@@ -1225,19 +1225,13 @@ emit(sprintf('<div class="tally-set">%s%s</div>',
                 miss_worst, fmt(miss_worst / 5, 1)))))
 ```
 
-````{=html}
+```{=html}
 
     <p>
       The same measurement for every parameter, summarised across all ten scenarios.
       Nominal is 0.95, and at 100 datasets the measurement itself carries a standard error
       of about 0.022, so differences smaller than that are noise.
     </p>
-    <div class="scroller">
-      <table>
-  <caption>Median across scenarios, with the range and the worst-performing cell.</caption>
-  <thead>
-    <tr><th>Parameter</th><th>median</th><th>lowest</th><th>highest</th><th>worst cell</th></tr>
-  </thead>
 ```
 
 ```{r coverage-summary-table}
@@ -1268,8 +1262,6 @@ cat(html_table(cs,
 ```
 
 ```{=html}
-</table>
-    </div>
     <p>
       <strong>Most of the model is well calibrated.</strong> <code>B</code>,
       <code>G</code>, <code>q</code> and <code>B0</code> all sit within noise of the
@@ -1300,7 +1292,7 @@ cat(html_table(cs,
         stranger, and the number should not be quoted as evidence for or against anything
         until the measurement is repaired.
       </p>
-````
+```
 
 ```{r resid-cor-degeneracy}
 dg <- vd$degeneracy
