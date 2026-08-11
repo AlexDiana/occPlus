@@ -92,7 +92,9 @@ html_table <- function(df, caption = NULL, digits = NULL,
     '<div class="scroller"><table>',
     if (!is.null(caption)) sprintf("<caption>%s</caption>", caption) else "",
     "<thead><tr>",
-    paste0(sprintf("<th>%s</th>", cols), collapse = ""),
+    paste0(vapply(seq_along(cols), function(j)
+      if (align_first_left && j == 1L) sprintf('<th class="lbl">%s</th>', cols[j])
+      else sprintf("<th>%s</th>", cols[j]), ""), collapse = ""),
     "</tr></thead><tbody>",
     paste0(body, collapse = ""),
     "</tbody></table></div>")
@@ -355,7 +357,7 @@ html[data-bs-theme="dark"] .occjsdm-report {
      the prose around it. Now serif like the other headings and clearly
      above body size, sitting between h2's 1.6rem and the text. */
   font-family: var(--serif);
-  font-size: 1.25rem;
+  font-size: 1.4rem;
   font-weight: 600;
   line-height: 1.25;
   margin: 0.6rem 0 0;
@@ -367,6 +369,14 @@ html[data-bs-theme="dark"] .occjsdm-report {
    unreadable however wide the page is. 46rem is roughly 80 characters at
    this size, which is the top of the comfortable range. */
 .occjsdm-report p { margin: 0; max-width: 46rem; }
+
+/* knitr wraps every chunk figure in a <p>, so the prose cap above was
+   squeezing the generated plots to 46rem inside a 74rem column -- which is
+   why they rendered small and hard against the left margin rather than
+   filling the space. Figures are not prose and take the full column. */
+.occjsdm-report p:has(img) { max-width: none; text-align: center; }
+.occjsdm-report img { max-width: 100%; height: auto; display: block;
+                      margin-left: auto; margin-right: auto; }
 .occjsdm-report strong { font-weight: 650; }
 .occjsdm-report code {
   font-family: var(--mono);
@@ -469,27 +479,34 @@ html[data-bs-theme="dark"] .occjsdm-report {
 
 /* ---- tables ---- */
 .occjsdm-report .scroller { overflow-x: auto; }
-.occjsdm-report table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+.occjsdm-report table { border-collapse: collapse; width: 100%; font-size: 1rem; }
 .occjsdm-report caption {
   text-align: left;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   color: var(--ink-faint);
   padding-bottom: 0.6rem;
 }
 .occjsdm-report th, .occjsdm-report td {
-  text-align: left;
-  padding: 0.55rem 0.9rem 0.55rem 0;
+  /* Centred, not left. Numbers left-aligned under a left-aligned header
+     read as ragged text rather than as a column of values. Label cells opt
+     back out below. */
+  text-align: center;
+  padding: 0.55rem 0.9rem;
   border-bottom: 1px solid var(--rule);
   vertical-align: top;
 }
 .occjsdm-report th {
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--ink-faint);
   font-weight: 600;
   border-bottom-color: var(--ink-faint);
 }
+/* The label column: html_table() emits it as a bare <td> and marks its
+   header th.lbl. Both stay left-aligned; everything else centres. */
+.occjsdm-report th.lbl, .occjsdm-report td:not([class]) { text-align: left; }
+
 .occjsdm-report td.name { font-family: var(--mono); font-size: 0.82rem; white-space: nowrap; }
 .occjsdm-report td.num  { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 
@@ -533,9 +550,10 @@ html[data-bs-theme="dark"] .occjsdm-report {
   padding: 0.5rem;
 }
 .occjsdm-report .fig figcaption {
-  font-size: 0.85rem;
-  color: var(--ink-faint);
-  max-width: 40rem;
+  font-size: 0.95rem;
+  color: var(--ink-soft);
+  max-width: 46rem;
+  margin: 0 auto;
 }
 
 .occjsdm-report footer {
