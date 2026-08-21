@@ -1114,3 +1114,36 @@ It is specific rather than general: in the same run `p` and `G` coverage improve
 `sites_300` is **not** paired with `base` despite sharing a `seed_label`. `draw_truth()`'s own draws match, but `simulateOccJSDMData()` consumes RNG in quantities that depend on `n`, so everything downstream of it diverges. Confirmed by comparing `occ_true`: identical for `fit_d4`, different for `sites_300`. The comparison is therefore distributional over R = 100 per arm, which at 8 SE is ample for the headline but means the band-level numbers carry more noise than `fit_d4`'s.
 
 Neither cell says anything about the multi-threaded configuration: both ran at one thread per fit, like every other result here.
+
+## 21. `q` at high K: the cost-of-identifiability hypothesis, tested and split (21 August 2026)
+
+Group B item 7: `q` coverage falls 0.945 -> 0.614 as K rises 3 -> 30 (`PLAN.md` 13.7). Alex sees no implementation defect in `sample_pq_cpp()`; the live hypothesis was cost of identifiability -- the informative `Beta(1, 20)` prior (mean 0.0476) holds the posterior a fixed offset from the truth, and sharpening intervals with K convert that offset into falling coverage.
+
+### 21.1 Step 0: both cheap signatures confirmed from the existing M-ladder run
+
+Re-analysed `simstudy-20260729-212525.rds` before fitting anything. Across the K ladder (K = 3, 10, 20, 30), `q`'s mean absolute bias stays between 0.0001 and 0.004 while mean interval width contracts from 0.0362 to 0.0088 -- sharpening around a nearly fixed estimate. And per-species error correlates negatively with distance from the prior mean, regression slope about -0.11 to -0.15, essentially flat across K: estimates are shrunk toward 0.0476 by a constant amount, not one that grows with data. Both signatures matched the hypothesis, so the discriminating arm was worth running.
+
+### 21.2 The arm
+
+Four cells, base settings, R = 30 each, one thread per fit, all sharing `seed_label = "qtest"` so every truth except `q` itself is bit-identical across cells (`draw_truth()` now honours an optional `scenario$q_range`; default unchanged). Near arm draws `q ~ runif(0.01, 0.05)` (truth mean 0.0298, hugging the prior mean); far arm draws `runif(0.15, 0.30)` (truth mean 0.2244). K = 3 vs K = 30 within each. Run `simstudy-20260821-135619.rds`, 120/120 replicates, 51 min, 0 failures, cpu/wall 4.0-4.4x throughout. At R = 30 the coverage SE is roughly 4%, so read nothing smaller than that.
+
+| cell | true q mean | coverage | width | bias |
+|------|------------|----------|-------|-------|
+| qnear_K3 | 0.030 | 0.948 | 0.0369 | -0.0001 |
+| qnear_K30 | 0.030 | 0.605 | 0.0089 | -0.0040 |
+| qfar_K3 | 0.224 | 0.683 | 0.1039 | -0.0365 |
+| qfar_K30 | 0.224 | 0.003 | 0.0235 | -0.0314 |
+
+### 21.3 What confirmed
+
+Prior distance matters, enormously, at fixed K. At K = 3 the two arms differ by 0.265 of coverage (0.948 vs 0.683), far beyond noise. At K = 30 the far arm collapses outright: 0.003 coverage, intervals of width 0.023 drawn tightly around estimates pulled 0.031 toward the prior mean. Anyone running a design whose true false-positive rates sit well above 0.05 with many PCR replicates will get confidently wrong `q` values. That part of the item is genuinely a known trade of the informative prior, exactly the cost-of-identifiability mechanism claimed, and it argues for documenting or revisiting the `Beta(1, 20)` default rather than hunting a sampler bug.
+
+### 21.4 What refuted
+
+The hypothesis' central prediction was that the NEAR arm would stay at or near nominal as K rises, since its truth sits almost on top of the prior mean. It did not: 0.948 -> 0.605, reproducing the original M-ladder degradation almost exactly (that run measured 0.945 -> 0.614 against the same truth range). Bias in this arm stays tiny (-0.0001 -> -0.0040) while width contracts four-fold. So there is a second, K-linked component that the prior-offset account does not explain.
+
+### 21.5 Where this leaves item 7
+
+Split into two findings. One is closed as a trade: prior-distance sensitivity, quantified above. The other is open and now looks like the SAME defect as group B item 3: flat bias plus monotonically shrinking intervals under more detection-stage data is precisely the signature `beta_theta` shows on the M and site axes, and `p`/`q` are updated through Polya-Gamma machinery just as `beta_theta` is. Item 3's pointer at the PG covariate-column update and this new evidence now point at the same neighbourhood of the sampler, which strengthens both. The item text has been rewritten accordingly; the decision on it belongs with the sampler investigation, not the prior-choice decision it was previously filed under.
+
+One secondary oddity, recorded rather than chased: the error-vs-prior-distance slope in the FAR arm falls in magnitude from -0.234 at K = 3 to -0.132 at K = 30, where pure prior shrinkage predicts a K-constant slope. Whatever produces it operates only once the data are strong enough to fight the prior, and it is not explained by either finding above.

@@ -284,7 +284,35 @@ simstudy_scenarios <- function() {
     # Same caveat as `binary`, stated rather than glossed: this changes
     # many things at once, not one. It is a second independent reading of
     # "B0 with nothing confounded against it", not a controlled contrast.
-    mk("continuous", model = "continuous"))
+    mk("continuous", model = "continuous"),
+
+    # --- q cost-of-identifiability arms (TODO group B item 7, PLAN.md 21)
+    #
+    # The M ladder found q coverage falling 0.945 -> 0.614 as K rises 3 ->
+    # 30. Alex sees no implementation defect in sample_pq_cpp(); the live
+    # hypothesis is cost of identifiability: the informative Beta(1, 20)
+    # prior (mean 0.0476) holds the posterior a fixed distance from the
+    # truth, and sharpening intervals with K turn that fixed offset into
+    # falling coverage.
+    #
+    # Step 0 confirmed both cheap signatures from the EXISTING M-ladder run:
+    # q's bias is flat and tiny across K while width contracts ~4x, and the
+    # per-species error correlates negatively with distance from the prior
+    # mean (slope ~ -0.14, flat in K). What remains is the discriminating
+    # test: does degradation scale with how far the truth sits from the
+    # prior mean?
+    #
+    # Four cells: base settings, K = 3 vs K = 30, q drawn near vs far from
+    # the prior mean. All four share seed_label "qtest", so p, theta0,
+    # theta_baseline and every JSDM parameter are paired bit-identically
+    # across cells; only the q truths differ (draw order is unchanged --
+    # same P*S uniforms). Prediction under the hypothesis: qnear stays at
+    # or near nominal coverage at both K; qfar degrades steeply with K,
+    # worse than the observed 0.945 -> 0.614.
+    mk("qnear_K3",  K = 3L,                        seed_label = "qtest"),
+    mk("qnear_K30", K = 30L,                       seed_label = "qtest"),
+    mk("qfar_K3",   K = 3L,  q_range = c(.15, .3), seed_label = "qtest"),
+    mk("qfar_K30",  K = 30L, q_range = c(.15, .3), seed_label = "qtest"))
 }
 
 # --- Seam 1: how the true parameters are chosen --------------------------
@@ -332,7 +360,14 @@ draw_truth <- function(scenario, seed) {
     params = list(
       p = matrix(stats::runif(P * S, scenario$p_range[1],
                               scenario$p_range[2]), P, S),
-      q = matrix(stats::runif(P * S, 0.01, 0.05), P, S),
+    # q_range is optional and defaults to the historical c(0.01, 0.05).
+    # Used by the q cost-of-identifiability arms (PLAN.md 21): those need a
+    # truth drawn well clear of the Beta(1, 20) prior mean of 0.0476, to test
+    # whether q's coverage loss with K scales with that distance.
+    q = matrix(stats::runif(P * S,
+                            if (!is.null(scenario$q_range)) scenario$q_range[1] else 0.01,
+                            if (!is.null(scenario$q_range)) scenario$q_range[2] else 0.05),
+               P, S),
       theta0 = stats::runif(S, 0.02, 0.1),
       theta_baseline = stats::runif(S, scenario$theta_baseline_range[1],
                                     scenario$theta_baseline_range[2])
