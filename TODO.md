@@ -250,11 +250,12 @@ Ten dead functions were moved to `deprecated/` on 30 July (*Fixed bugs* 37). Wha
     > - MCMC fitting with diagnostics, variance partitioning, ordination, and pairwise residual correlation outputs built in.
     > - occJSDM leverages the taxonomic breadth of eDNA datasets by using ordination (each site's position on the latent axes, and each species' loadings on those axes) to predict species occupancies. Thus, each species' predicted occupancy at a site is informed by the estimated occupancies of the other species at that site, thereby using co-occurrence structure. We also allow species to borrow strength from other species sharing similar traits, including inferred traits, in contrast to the classical approach of having rare species borrow strength from abundant species, as is used in multi-species occupancy models.
     >
-    > Current limitations, all three being worked on:
+    > Current limitations, all four being worked on:
     >
     > - **Spatial field.** The Gaussian-process range parameter is not currently recovered, which biases the spatial term of any fit that uses it. We suggest leaving the spatial field off (`useSpatField = FALSE`) in this release.
     > - **Residual species correlations.** These are currently biased toward the extremes, by up to 0.6 in our simulations. Read `returnResidualCorrelationMatrix()` and `plotResidualCorrelationMatrix()` for the sign and structure of co-occurrence rather than for calibrated magnitudes.
     > - **Collection-covariate slopes.** Credible intervals on the Stage 1 collection covariates (`returnCollectionCovariates()`, `plotCollectionCovariates()`) are narrower than they should be: about 77% coverage against a nominal 95% in simulation, and it worsens as replication increases.
+    > - **False-positive rate `q` with many PCR replicates.** Intervals on the Stage 2 false-positive rates (`plotFPTPStage2Rates()`) are calibrated only if the true rates sit near the prior's centre (about 0.05). With true rates well above that and many PCR replicates (K of order 30), coverage collapses almost to zero as the posterior sharpens around estimates pulled toward the prior. Keep K moderate, or check your design against this before trusting `q`.
     >
     > Vignettes and articles included on data simulation, model fitting/interpretation, and model performance.
 
